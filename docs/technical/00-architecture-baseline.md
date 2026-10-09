@@ -49,3 +49,6 @@
 ## ۵. خروجی پذیرش Technical Gate
 
 Technical زمانی برای Code در Sprint 01 قابل پذیرش است که: انتخاب واقعی پشته یا قرارداد محیط تست تصمیم‌گیری شده باشد؛ مدل حداقلی هویت/نقش/رضایت و Audit نوشته و تست‌پذیر باشد؛ خطاها fail-closed طراحی شوند؛ APIهای داخل Sprint نسخه‌دار و دارای آزمون قرارداد باشند؛ و تغییرات به تصمیم‌های Business قابل ردیابی باشند. **تا آن زمان Tech فقط DRAFT است؛ کدنویسی و Production با این سند تجویز نمی‌شوند.**
+
+## تکمیل مرز Sprint 01 — TRN-TECH-003/004 (۲۰۲۶-۱۰-۰۹)
+[قرارداد داخلی هویت/مجوز/رضایت/ممیزی](02-sprint-01-internal-interface-and-security-contract.md) به‌صورت **test-only, fail-closed** با actor/subject/scope و ارزیابی consent مبتنی بر purpose/evidence نسخه‌دار و append-only audit پیشنهاد شد. [بررسی گیت و پیشنهاد پشته](03-technical-gate-and-stack-proposal.md) وضعیت **NOT CODE-READY** را ثبت می‌کند؛ Python/FastAPI/PostgreSQL/React **فقط گزینه فنی پیشنهادی** است، نه Tech Stack پذیرفته‌شده. مرز API/storage و قرارداد واقعی IdP هنوز بازند؛ هیچ داده سلامت، سرویس مالی یا درمان واقعی با این تکمیل مجاز نشده است.

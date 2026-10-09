@@ -24,3 +24,6 @@
 **Sprint Candidate 01: `TRN-SP-01`** — [برنامه اولیه](../sprints/01-identity-privacy-audit-foundation.md). خروجی پایه فنی غیرحساس با داده ساختگی و عدم اتصال خارجی؛ قبل از Code باید Technical Gate و آزمون‌های دقیق پذیرفته شوند.
 
 **قاعده Refinement:** فقط ابهام‌هایی را برای تصمیم جدید بالا بیاورید که فوراً قرارداد Sprint را مسدود می‌کنند؛ برای سایر موارد `Blocked by real legal/financial/clinical evidence` کافی است. دیگر زنجیره پرسش‌های تک‌تصمیمی Business ادامه داده نمی‌شود.
+
+## Refinement فنی گام بعد — TRN-TECH-003/004 (۲۰۲۶-۱۰-۰۹)
+برای `TRN-EP-01/02/12`، [قرارداد داخلی Sprint 01](../technical/02-sprint-01-internal-interface-and-security-contract.md) سناریوهای منفی/امنیتی `ID-01…08`, `C-01…06`, `A-01…05`, `B-01` را تعریف کرده است. [Technical Gate](../technical/03-technical-gate-and-stack-proposal.md) هنوز **NOT CODE-READY** است؛ Stack/transport/storage/CI و Code Authorization مسدودند. سایر Epicها به مجوز و قرارداد واقعی گره خورده‌اند و هیچ پرداخت، داده سلامت یا AI واقعی از Backlog قابل فعال‌سازی نیست.

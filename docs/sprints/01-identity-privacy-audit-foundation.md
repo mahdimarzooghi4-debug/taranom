@@ -31,3 +31,11 @@
 4. پیاده‌سازی در شاخه Sprint و Draft PR مستقل، تست→Code→Code Review→CI؛ بدون ادعای Stage یا انتشار.
 
 **تا گیت‌ها احراز نشوند، این سند Sprint Planning است نه انجام Sprint/Code.**
+
+## خروجی Contract Refinement — ۲۰۲۶-۱۰-۰۹
+- **SP01-01**: [پیشنهاد پشته و بررسی گیت](../technical/03-technical-gate-and-stack-proposal.md): Python/FastAPI/PostgreSQL/React صرفاً candidate؛ انتخاب نهایی و CI/build contract OPEN.
+- **SP01-02**: [AccessRequest/AccessDecision مفهومی و سناریوهای ID-01…08](../technical/02-sprint-01-internal-interface-and-security-contract.md)؛ deny-by-default، actor/subject isolation، عدم اعتبار role کلاینت.
+- **SP01-03**: ارزیابی evidence نسخه‌دار و scope/purpose با C-01…06؛ رضایت پژوهشی مستقل، ممنوعیت conflation با رضایت/تعهد هزینه.
+- **SP01-04**: append-only AuditRecord و atomicity mutation/audit با A-01…05؛ schema تراکنش واقعی پس از Stack.
+- **SP01-05**: synthetic-only B-01؛ قطع مسیر mock در Production، unit/contract/security suite آینده.
+- **وضعیت: Sprint Candidate / Planning Only و NOT CODE-READY.** در هیچ‌یک از موارد بالا کد، تست سبز یا Code Authorization واقعی ایجاد نشده است.

@@ -25,3 +25,8 @@
 3. هر گردش پولیِ آینده نیازمند invariant مانده غیرمنفی، transactionality، idempotency و ledger غیرقابل‌دستکاری با ممیزی مستقل است؛ اکنون پیاده‌سازی و فرمول مالی آن **BLOCKED** است.
 4. هر سناریوی داده پزشکی فقط با منابع مجاز/رضایت واقعی یا داده کاملاً ساختگی آزمایش شود. سرویس اضطراری، بیمه‌گر، بانک و درمان واقعی شبیه‌سازی عملیاتی نشود.
 5. **Sprint DoD:** تست واحد/قرارداد/امنیت و static analysis سبز، Code Review مستقل، شواهد عدم خروج از محدوده، و پذیرش در گیت مربوط. **این سند هیچ‌یک را پاس‌شده نمی‌نامد.**
+
+## گیت جزئی Sprint 01 — TRN-TECH-003/004 (۲۰۲۶-۱۰-۰۹)
+- T-01 و T-03 و Audit اکنون [قرارداد و ماتریس ۲۰ سناریوی آزمون پیشنهادی](02-sprint-01-internal-interface-and-security-contract.md) دارند؛ **هنوز اجرا نشده‌اند** و قراردادهای stack-specific و role/actor واقعی OPEN می‌مانند.
+- [Tech Gate Review](03-technical-gate-and-stack-proposal.md) نتیجه را **PARTIAL / NOT CODE-READY** اعلام می‌کند: Stack باید تصمیم/ثبت شود؛ سپس schema/versioned interfaces، پاسخ خطا، transaction/audit atomicity، synthetic fixtures و تست security تحت CI مشخص شوند.
+- هر mismatch، stale/missing evidence، درخواست sponsor به PHI/Wallet، رضایت پژوهشی ضمنی و replay باید fail-closed باشد. Synthetic harness نباید وارد Production شود. **Code Authorization، Stage و QA واقعی صادر نشده‌اند**.
