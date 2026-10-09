@@ -12,3 +12,5 @@ The app intentionally renders every member section in an explicitly unavailable 
 CI presently installs exact top-level npm package versions; **transitive dependency lockfile is not yet committed** and remains a reproducibility gate until generated and verified. No Stage/QA Gate, Production, or member launch.
 
 Mandatory product member Web App is TRN-EP-13. This code implements the layout and safe baseline only; no Backend BFF or Production member authentication exists.
+
+Privacy hardening: no third-party remote font, analytics or content dependencies. The UI uses local/system font fallbacks so loading the unauthenticated shell sends no data to external domains.

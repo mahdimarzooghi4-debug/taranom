@@ -97,6 +97,18 @@ test('all nine member routes are shell-only and unknown routes render safe 404',
   await expect(page.getByRole('status')).toHaveCount(0);
 });
 
+test('privacy: shell never requests external fonts, analytics or remote integrations', async ({ page }) => {
+  const offsite: string[] = [];
+  page.on('request', req => {
+    const url = new URL(req.url());
+    if (url.protocol !== 'data:' && url.origin !== 'http://127.0.0.1:4173') offsite.push(req.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'سوابق سلامت' }).click();
+  await expect(page.getByRole('status')).toContainText('متصل نیست');
+  expect(offsite).toEqual([]);
+});
+
 test('WEB-12: no synthetic member identity provider can be enabled by query flags', async ({ page }) => {
   await page.goto('/member?demo=true&role=member&authenticated=true');
   await expect(page.getByRole('status')).toContainText('متصل نیست');
