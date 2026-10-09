@@ -55,3 +55,10 @@
 
 ## خروجی بررسی قرارداد V0 و گیت اجرایی — TRN-TECH-009/010 (۲۰۲۶-۱۰-۰۹)
 [قرارداد V0](../technical/08-sprint-01-versioned-internal-contract-freeze-candidate.md) برای `SP01-01…05` مرز test-only .NET، `AccessPolicy/ConsentHistory/AuditAppend`، نسخه‌گذاری و خطای امن را تعیین می‌کند؛ [گزارش بازبینی](../technical/09-sprint-01-db-ci-review-and-admission-record.md) تمام ریسک‌های P0 و شواهد لازم قبل از اجرای کد را مشخص می‌کند. **Contract V1، کدنویسی، CI، DB migration و Code Authorization هنوز انجام نشده‌اند**؛ آزمایش فقط پس از اجازه کدنویسی در PR Draft مستقل ممکن است.
+
+## Sprint 01 Code Authorization — 2026-10-09
+
+The owner explicitly authorized **only** synthetic C#/.NET identity/access, separate consent, append-only audit and automated tests, with **a new Draft code PR, CI, and no Merge/Stage/Production**. This supersedes the prior planning-only gate solely for the named Code slice. Technical documents retain their earlier historical review status.
+- New branch `sprint-01-dotnet-identity-consent-audit` stacked on `docs/technical-foundation-01`.
+- Test harness and fixtures never count as real identity/consent and must not be included in a production application.
+- Mandatory member Web App requirement is recorded in the backlog as `TRN-EP-13` but its code is explicitly **out of scope** of Sprint 01.

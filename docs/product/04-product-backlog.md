@@ -36,3 +36,11 @@
 
 ## بسته نهایی‌سازی فنی Sprint 01 — TRN-TECH-009/010 (۲۰۲۶-۱۰-۰۹)
 [Internal contract freeze candidate](../technical/08-sprint-01-versioned-internal-contract-freeze-candidate.md) و [admission review](../technical/09-sprint-01-db-ci-review-and-admission-record.md) گیت‌های `TRN-EP-01/02/12` را مشخص می‌کنند: تأیید V1 قراردادهای تستی، تأیید/قفل پشته، اجرای ۲۸ آزمون طرح‌شده و CI exact-head پس از **مجوز صریح Code**. هیچ داده شخص حقیقی، AI Python، بیمه، درمان، وجه یا endpoint بیرونی در Sprint 01 وارد اجرا نمی‌شود.
+
+## TRN-EP-13 — Member Web Application / وب‌اپ عضو (MANDATORY)
+
+**Owner clarification (2026-10-09):** a dedicated **member-facing Web App** is required; a backend-only or admin-only product is insufficient. [Delivery note](../sprints/02-member-web-app-delivery-note.md).
+- Candidate UI foundation: React/TypeScript, Persian RTL, responsive and accessible; this is a *technical candidate*, not a production-deployed product.
+- Expected journeys depend on accepted contracts: authenticated member workspace, membership and noncashable wallet read views, lawful consent and health data access, care coordination, nondiagnostic safety information, cost disclosure and choice tracking, insurance/billing dispute follow-up.
+- Clinical, wallet, financial and insurer data must be sourced from lawful backend owners with actual integrations; **no hardcoded fake balance/coverage/treatment** as live data.
+- Member Web App implementation is a **separate future Sprint with separate Code Authorization**; Sprint 01 remains strictly synthetic .NET identity/consent/audit.

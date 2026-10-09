@@ -1,0 +1,48 @@
+name: Sprint 01 .NET Synthetic Foundation
+
+on:
+  push:
+    branches:
+      - sprint-01-dotnet-identity-consent-audit
+  pull_request:
+    branches:
+      - docs/technical-foundation-01
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-foundation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_sprint01
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_sprint01"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint01;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+      - name: Verify .NET version and build foundation
+        run: |
+          dotnet --info
+          dotnet restore tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj
+          dotnet build tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-restore --configuration Release
+      - name: Run synthetic-only .NET and real PostgreSQL security tests
+        run: dotnet run --project tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-build --configuration Release
+      - name: Verify no real service adapters or AI in the Sprint 01 code
+        run: |
+          test ! -d src/Taranom.AI
+          test ! -d src/Taranom.Clinical
+          test ! -d src/Taranom.Payments
