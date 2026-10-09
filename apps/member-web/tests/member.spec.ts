@@ -11,7 +11,8 @@ test('WEB-01: direct member URL does not show an authenticated member or private
 test('WEB-04: no login or successful identity is fabricated', async ({ page }) => {
   await page.goto('/member/membership');
   await expect(page.getByRole('heading', { level: 1, name: 'عضویت من' })).toBeVisible();
-  await expect(page.getByRole('status')).toContainText('احراز هویت');
+  await expect(page.getByRole('status')).toContainText('متصل نیست');
+  await expect(page.getByText(/فقط پس از اتصال به سرویس معتبر و احراز هویت/)).toBeVisible();
   await expect(page.getByRole('button', { name: /ورود|احراز هویت/ })).toHaveCount(0);
 });
 
