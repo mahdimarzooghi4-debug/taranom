@@ -1,6 +1,6 @@
 # TRN-DEC — رجیستر تصمیم‌های باز
 
-- وضعیت: **MIXED — TRN-DEC-006، TRN-DEC-018 و TRN-DEC-020 در حدود مصوب ACCEPTED؛ TRN-DEC-015، TRN-DEC-019، TRN-DEC-021، TRN-DEC-022 و TRN-DEC-024 PARTIAL؛ سایر تصمیم‌ها OPEN**
+- وضعیت: **MIXED — TRN-DEC-006، TRN-DEC-018 و TRN-DEC-020 در حدود مصوب ACCEPTED؛ TRN-DEC-015، TRN-DEC-019، TRN-DEC-021، TRN-DEC-022 و TRN-DEC-024 PARTIAL؛ TRN-DEC-025 ACCEPTED در محدوده قاعده سقف مصرف؛ سایر تصمیم‌ها OPEN**
 - مرجع قطعی: «طرح نامه جامع ترنم (2)(4).pdf» (۷۶ صفحه PDF، تیر ۱۴۰۵). نسخه قبلی SUPERSEDED است.
 - قاعده: تصمیم پس از تأیید صریح صاحب اختیار، ثبت دلیل، شواهد و پیامدها به ACCEPTED تغییر می‌کند.
 - برچسب‌ها: BLOCKER = پیش‌نیاز ساخت/فعال‌سازی بخش حساس؛ IMPORTANT = پیش‌نیاز طراحی دقیق؛ RESEARCH = راستی‌آزمایی.
@@ -31,7 +31,8 @@
 | TRN-DEC-022 | PARTIAL — unified model + single wallet ACCEPTED; accounting proof OPEN | مدل سود سه صندوق **در مدل واحد تأمین اعتبار از شش درآمد ترنم ادغام می‌شود** و **برای هر عضو فقط یک کیف پول درمانی** وجود دارد؛ افزایش مستقل و مضاعف از سه صندوق مجاز نیست. نگاشت حسابداری سود و درآمد و اثبات عدم دوباره‌شماری هنوز باز است | TRN-BIZ-005؛ تکمیل TRN-BUS-005 و قرارداد مالی/حسابرسی |
 | TRN-DEC-023 | BLOCKER — backed credit and coverage | تعهد اعتبار انباشته چگونه در ترازنامه/تعهدات منعکس و با موجودی قابل پرداخت پشتیبانی می‌شود؟ چرا در صفحه ۶۱ «حق عضویت» با «پوشش درمانی» جمع شده است؟ | بررسی و اصلاح صورت‌های مالی/پوشش درمان با مسئول مالی، قرارداد مجاز و شواهد؛ TRN-BUS-005 |
 | TRN-DEC-024 | PARTIAL — contracted-provider-only payment ACCEPTED; financial execution OPEN | طبق TRN-BIZ-008/009 سهم کیف پول ترنم **فقط مستقیم به ارائه‌دهنده دارای قرارداد معتبر با ترنم** پرداخت می‌شود؛ پرداخت به عضو یا مرکز غیرطرف‌قرارداد مسیر مصوب نیست. جزئیات احراز قرارداد و مجوز، صورتحساب، بیمه‌های پایه و تکمیلی، مبلغ، زمان و کانال تسویه و منع پرداخت مضاعف هنوز OPEN هستند | TRN-BIZ-008/009؛ کنترل قرارداد/مجوز و قرارداد مالی/بیمه پیش از اجرا |
-| TRN-DEC-025 | BLOCKER — coverage amount and caps | آیا سهم ترنم از مانده هزینه درمانی پس از سهم بیمه پایه و تکمیلی **تا سقف اعتبار قابل‌مصرف کیف پول** تعیین می‌شود، یا علاوه بر آن **سقف مستقل برای هر خدمت** هم وجود دارد؟ | تصمیم صریح درباره حد سهم و روش محاسبه؛ تصویب قرارداد مالی/بیمه/ارائه‌دهنده و پشتوانه پرداخت |
+| TRN-DEC-025 | ACCEPTED — no separate per-service cap; execution controls OPEN | **پس از تعیین سهم بیمه پایه و تکمیلی، باقیمانده هزینه درمانی مجاز تا سقف اعتبار قابل‌مصرف همان کیف پول عضو از سهم ترنم پرداخت می‌شود؛ برای هر خدمت سقف مستقل اضافه تعریف نمی‌شود** (TRN-BIZ-010). فرمول شناسایی اعتبار قابل‌مصرف، تأیید هزینه و صورتحساب، پشتوانه و تسویه واقعی نیازمند قرارداد مستقل است | TRN-BIZ-010؛ ثبت و ارزیابی مالی/حقوقی و کنترل عدم پرداخت مضاعف قبل از اجرا |
+| TRN-DEC-026 | BLOCKER — uncovered treatment balance | **اگر هزینه درمان مجاز پس از سهم بیمه‌ها از اعتبار قابل‌مصرف کیف پول عضو بیشتر باشد، مسئول پرداخت مابقی به ارائه‌دهنده طرف قرارداد چه کسی است؟** آیا عضو مبلغ باقی‌مانده را می‌پردازد یا راه دیگری باید جداگانه مصوب شود؟ | تصمیم صریح مالک محصول و قرارداد مالی/درمانی درباره مازاد و عدم ایجاد تعهد بدون پشتوانه |
 
 ## مصوبات صریح ۲۰۲۶-۱۰-۰۸
 - TRN-DEC-006: تعداد و عنوان کانال‌های درآمدی، دقیقاً شش مورد. این تأیید شامل نرخ، محاسبه، حق عضویت و شناسایی درآمد نیست.
@@ -41,9 +42,10 @@
 - TRN-DEC-022: **ادغام سه صندوق در مدل واحد شش‌منبعی و فقط یک کیف پول برای هر عضو** پذیرفته شد؛ صحت نگاشت حسابداری و منع دوباره‌شماری هنوز باید اثبات شود (TRN-BIZ-005).
 - TRN-DEC-015 (بخش زمان‌بندی): **انباشت از روز عضویت و ممنوعیت مصرف تا سپری‌شدن سه ماه** پذیرفته شد (TRN-BIZ-006).
 - TRN-DEC-015/024 (دامنه خدمات): **تمام خدمات درمانی مجاز**، از جمله ویزیت، دارو، آزمایش، تصویربرداری، بستری و جراحی مصوب است (TRN-BIZ-007)؛ مصداق و مدارک مجاز همچنان OPEN.
-- TRN-DEC-024: **پرداخت مستقیم فقط به ارائه‌دهنده طرف قرارداد معتبر ترنم** مصوب است (TRN-BIZ-008 و TRN-BIZ-009)؛ صرف داشتن مجوز برای پرداخت از کیف پول کافی نیست. احراز قرارداد واقعی، محاسبه سهم بیمه‌ها و روش تسویه باز است.
+- TRN-DEC-024: **پرداخت مستقیم فقط به ارائه‌دهنده طرف قرارداد معتبر ترنم** مصوب است (TRN-BIZ-008 و TRN-BIZ-009)؛ احراز قرارداد واقعی، محاسبه سهم بیمه‌ها و روش تسویه باز است.
+- TRN-DEC-025: **پس از سهم بیمه پایه و تکمیلی، باقیمانده هزینه درمانی مجاز تا حد اعتبار قابل مصرف کیف پول عضو و بدون سقف مستقل هر خدمت** پرداخت می‌شود (TRN-BIZ-010)؛ مسئولیت باقیمانده خارج از پوشش در TRN-DEC-026 باز است.
 - ماهیت رسمی: **ترنم تعاونی نیست**؛ مثال قبلی صرفاً برای فهم بود (TRN-BIZ-004).
-- قراردادهای مرجع: `docs/decisions/TRN-BIZ-001-core-paradigm.md`، `docs/decisions/TRN-BIZ-002-member-treatment-benefit.md` و `docs/decisions/TRN-BIZ-003-individual-treatment-credit.md` و `docs/decisions/TRN-BIZ-004-noncooperative-six-income-sources.md` و `docs/decisions/TRN-BIZ-005-single-treatment-wallet.md` و `docs/decisions/TRN-BIZ-006-accrual-and-three-month-wait.md` و `docs/decisions/TRN-BIZ-007-all-permitted-medical-services.md` و `docs/decisions/TRN-BIZ-008-direct-provider-payment.md` و `docs/decisions/TRN-BIZ-009-contracted-provider-only.md`.
+- قراردادهای مرجع: `docs/decisions/TRN-BIZ-001-core-paradigm.md`، `docs/decisions/TRN-BIZ-002-member-treatment-benefit.md` و `docs/decisions/TRN-BIZ-003-individual-treatment-credit.md` و `docs/decisions/TRN-BIZ-004-noncooperative-six-income-sources.md` و `docs/decisions/TRN-BIZ-005-single-treatment-wallet.md` و `docs/decisions/TRN-BIZ-006-accrual-and-three-month-wait.md` و `docs/decisions/TRN-BIZ-007-all-permitted-medical-services.md` و `docs/decisions/TRN-BIZ-008-direct-provider-payment.md` و `docs/decisions/TRN-BIZ-009-contracted-provider-only.md` و `docs/decisions/TRN-BIZ-010-wallet-balance-only-treatment-share.md`.
 - ممیزی محاسبات منبع و شکاف‌های شش درآمد/اعتبار: `docs/business/05-six-revenue-member-credit-reconciliation.md` (SOURCE AUDIT، نه تصمیم مالی).
 - چرخه انباشت تا مصرف **یک کیف پول درمانی**: `docs/business/06-member-wallet-accrual-redemption-contract.md` (DRAFT)؛ قاعده زمان‌بندی TRN-BIZ-006، دامنه درمان TRN-BIZ-007 و **پرداخت مستقیم به طرف قرارداد مطابق TRN-BIZ-008/009** ACCEPTED هستند؛ اجرای مالی/درمانی و جزئیات تسویه OPEN.
 
