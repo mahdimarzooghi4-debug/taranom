@@ -69,3 +69,6 @@ The owner explicitly authorized **only** synthetic C#/.NET identity/access, sepa
 - Added a deliberately failing audit-trigger integration test to prove protected consent mutation rolls back on audit failure; added append-only evidence SQL refusal and invalid-purpose tests.
 - CI explicitly verifies absence of deployable API, AI, Clinical and Payment code projects.
 - The **Member Web App remains an obligatory separate Epic**, not hidden in Sprint 01 or treated as implemented. See [TRN-EP-13](../product/04-product-backlog.md).
+
+## Code Review findings — CR-01…CR-04 (۲۰۲۶-۱۰-۰۹)
+[گزارش بازبینی](../reviews/TRN-SP-01-security-code-review.md) شامل رفع خطاهای جداسازی tenant در رضایت، خطای مثبت کاذب در آزمون‌ها، جداسازی نقش محدود PostgreSQL و تفکیک stale-version از replay است. **هر دو CI کد SHA `9f002fc2c442f2d0366552cf845ff3cf7f3db67c` موفق‌اند**؛ اما **Code Review مستقل هنوز تأیید نشده است**، همه سناریوهای قراردادی تحت پوشش آزمون کامل نیستند و Stage/QA/Release/Production یا Merge انجام نشده است. وب‌اپ عضو در `TRN-EP-13` الزامی و خارج از Sprint 01 باقی می‌ماند.
