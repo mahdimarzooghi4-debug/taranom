@@ -85,8 +85,7 @@ await using (var cn = await dataSource.OpenConnectionAsync())
 {
     await using var install = new NpgsqlCommand("""
         CREATE OR REPLACE FUNCTION synthetic_block_audit_inserts() RETURNS trigger
-        LANGUAGE plpgsql AS $
-        BEGIN RAISE EXCEPTION 'SYNTHETIC_AUDIT_UNAVAILABLE'; END; $;
+        LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''SYNTHETIC_AUDIT_UNAVAILABLE''; END;';
         DROP TRIGGER IF EXISTS synthetic_test_audit_failure ON synthetic_audit;
         CREATE TRIGGER synthetic_test_audit_failure
             BEFORE INSERT ON synthetic_audit
