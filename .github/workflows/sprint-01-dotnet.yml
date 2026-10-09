@@ -39,8 +39,22 @@ jobs:
           dotnet --info
           dotnet restore tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj
           dotnet build tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-restore --configuration Release
+          dotnet restore tests/Taranom.ContractTests/Taranom.ContractTests.csproj
+          dotnet build tests/Taranom.ContractTests/Taranom.ContractTests.csproj --no-restore --configuration Release
       - name: Run synthetic-only .NET and real PostgreSQL security tests
         run: dotnet run --project tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-build --configuration Release
+      - name: Run named xUnit contract tests with machine-readable XML
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.ContractTests/Taranom.ContractTests.csproj --no-build --configuration Release -- -xml TestResults/sprint01-contract-tests.xml
+          test -s TestResults/sprint01-contract-tests.xml
+      - name: Upload xUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint01-contract-tests
+          path: TestResults/sprint01-contract-tests.xml
+          if-no-files-found: warn
       - name: Verify no real service adapters or AI in the Sprint 01 code
         run: |
           test ! -d src/Taranom.AI
@@ -49,4 +63,4 @@ jobs:
           test ! -d src/Taranom.Api
           # The project contains no deployable API; only the contract library and smoke harness.
           test "$(find src -name '*.csproj' | wc -l)" -eq 1
-          test "$(find tests -name '*.csproj' | wc -l)" -eq 1
+          test "$(find tests -name '*.csproj' | wc -l)" -eq 2
