@@ -19,12 +19,13 @@ public sealed class SyntheticConsentStore
 
     private const string SchemaSql = """
         CREATE TABLE IF NOT EXISTS synthetic_consent_stream (
-            subject_ref text NOT NULL, purpose text NOT NULL, scope_ref text NOT NULL,
+            tenant_ref text NOT NULL, subject_ref text NOT NULL, purpose text NOT NULL, scope_ref text NOT NULL,
             version integer NOT NULL DEFAULT 0 CHECK (version >= 0),
-            PRIMARY KEY (subject_ref, purpose, scope_ref)
+            PRIMARY KEY (tenant_ref, subject_ref, purpose, scope_ref)
         );
         CREATE TABLE IF NOT EXISTS synthetic_audit (
             audit_ref uuid PRIMARY KEY,
+            tenant_ref text NOT NULL,
             actor_ref text NOT NULL,
             action_code text NOT NULL,
             decision_code text NOT NULL,
@@ -32,18 +33,18 @@ public sealed class SyntheticConsentStore
             occurred_at timestamptz NOT NULL DEFAULT now()
         );
         CREATE TABLE IF NOT EXISTS synthetic_consent_evidence (
-            subject_ref text NOT NULL, purpose text NOT NULL, scope_ref text NOT NULL,
+            tenant_ref text NOT NULL, subject_ref text NOT NULL, purpose text NOT NULL, scope_ref text NOT NULL,
             version integer NOT NULL CHECK (version > 0),
             granted boolean NOT NULL, actor_ref text NOT NULL,
             audit_ref uuid NOT NULL REFERENCES synthetic_audit(audit_ref),
             previous_version integer NOT NULL CHECK (previous_version >= 0),
-            PRIMARY KEY (subject_ref, purpose, scope_ref, version)
+            PRIMARY KEY (tenant_ref, subject_ref, purpose, scope_ref, version)
         );
         CREATE TABLE IF NOT EXISTS synthetic_request_replay (
-            subject_ref text NOT NULL, purpose text NOT NULL, scope_ref text NOT NULL,
+            tenant_ref text NOT NULL, subject_ref text NOT NULL, purpose text NOT NULL, scope_ref text NOT NULL,
             actor_ref text NOT NULL, operation text NOT NULL, request_ref text NOT NULL,
             input_hash text NOT NULL, resulting_version integer NOT NULL,
-            PRIMARY KEY (subject_ref, purpose, scope_ref, actor_ref, operation, request_ref)
+            PRIMARY KEY (tenant_ref, subject_ref, purpose, scope_ref, actor_ref, operation, request_ref)
         );
         CREATE OR REPLACE FUNCTION synthetic_reject_audit_change() RETURNS trigger
         LANGUAGE plpgsql AS $$
@@ -87,23 +88,23 @@ public sealed class SyntheticConsentStore
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
         await ExecuteAsync(connection, transaction, """
-            INSERT INTO synthetic_consent_stream(subject_ref,purpose,scope_ref,version)
-            VALUES (@subject,@purpose,@scope,0) ON CONFLICT DO NOTHING
-            """, ct, ("subject", subject), ("purpose", purposeCode), ("scope", scope));
+            INSERT INTO synthetic_consent_stream(tenant_ref,subject_ref,purpose,scope_ref,version)
+            VALUES (@tenant,@subject,@purpose,@scope,0) ON CONFLICT DO NOTHING
+            """, ct, ("tenant", tenant), ("subject", subject), ("purpose", purposeCode), ("scope", scope));
 
         var versionObj = await ScalarAsync(connection, transaction, """
             SELECT version FROM synthetic_consent_stream
-            WHERE subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
+            WHERE tenant_ref=@tenant AND subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
             FOR UPDATE
-            """, ct, ("subject", subject), ("purpose", purposeCode), ("scope", scope));
+            """, ct, ("tenant", tenant), ("subject", subject), ("purpose", purposeCode), ("scope", scope));
         var current = Convert.ToInt32(versionObj);
 
         await using (var lookup = NewCommand(connection, transaction, """
             SELECT input_hash, resulting_version FROM synthetic_request_replay
-            WHERE subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
+            WHERE tenant_ref=@tenant AND subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
               AND actor_ref=@actor AND operation=@operation AND request_ref=@request
             """,
-            ("subject", subject), ("purpose", purposeCode), ("scope", scope),
+            ("tenant", tenant), ("subject", subject), ("purpose", purposeCode), ("scope", scope),
             ("actor", principal.Actor), ("operation", operation), ("request", requestRef)))
         await using (var reader = await lookup.ExecuteReaderAsync(ct))
         {
@@ -123,27 +124,27 @@ public sealed class SyntheticConsentStore
         var next = checked(current + 1);
         var auditRef = Guid.NewGuid();
         await ExecuteAsync(connection, transaction, """
-            INSERT INTO synthetic_audit(audit_ref,actor_ref,action_code,decision_code,correlation_ref)
-            VALUES (@audit,@actor,@action,'RECORDED',@correlation)
-            """, ct, ("audit", auditRef), ("actor", principal.Actor),
+            INSERT INTO synthetic_audit(audit_ref,tenant_ref,actor_ref,action_code,decision_code,correlation_ref)
+            VALUES (@audit,@tenant,@actor,@action,'RECORDED',@correlation)
+            """, ct, ("audit", auditRef), ("tenant", tenant), ("actor", principal.Actor),
             ("action", operation), ("correlation", requestRef));
         await ExecuteAsync(connection, transaction, """
             INSERT INTO synthetic_consent_evidence
-                (subject_ref,purpose,scope_ref,version,granted,actor_ref,audit_ref,previous_version)
-            VALUES (@subject,@purpose,@scope,@version,@granted,@actor,@audit,@previous)
-            """, ct, ("subject", subject), ("purpose", purposeCode), ("scope", scope),
+                (tenant_ref,subject_ref,purpose,scope_ref,version,granted,actor_ref,audit_ref,previous_version)
+            VALUES (@tenant,@subject,@purpose,@scope,@version,@granted,@actor,@audit,@previous)
+            """, ct, ("tenant", tenant), ("subject", subject), ("purpose", purposeCode), ("scope", scope),
             ("version", next), ("granted", grant), ("actor", principal.Actor),
             ("audit", auditRef), ("previous", current));
         await ExecuteAsync(connection, transaction, """
             UPDATE synthetic_consent_stream SET version=@next
-            WHERE subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
-            """, ct, ("next", next), ("subject", subject),
+            WHERE tenant_ref=@tenant AND subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
+            """, ct, ("next", next), ("tenant", tenant), ("subject", subject),
             ("purpose", purposeCode), ("scope", scope));
         await ExecuteAsync(connection, transaction, """
             INSERT INTO synthetic_request_replay
-                (subject_ref,purpose,scope_ref,actor_ref,operation,request_ref,input_hash,resulting_version)
-            VALUES (@subject,@purpose,@scope,@actor,@operation,@request,@hash,@next)
-            """, ct, ("subject", subject), ("purpose", purposeCode), ("scope", scope),
+                (tenant_ref,subject_ref,purpose,scope_ref,actor_ref,operation,request_ref,input_hash,resulting_version)
+            VALUES (@tenant,@subject,@purpose,@scope,@actor,@operation,@request,@hash,@next)
+            """, ct, ("tenant", tenant), ("subject", subject), ("purpose", purposeCode), ("scope", scope),
             ("actor", principal.Actor), ("operation", operation),
             ("request", requestRef), ("hash", hash), ("next", next));
         await transaction.CommitAsync(ct);
@@ -160,9 +161,9 @@ public sealed class SyntheticConsentStore
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var command = NewCommand(connection, null, """
             SELECT granted FROM synthetic_consent_evidence
-            WHERE subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
+            WHERE tenant_ref=@tenant AND subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
             ORDER BY version DESC LIMIT 1
-            """, ("subject", subject), ("purpose", purpose.ToString()), ("scope", scope));
+            """, ("tenant", tenant), ("subject", subject), ("purpose", purpose.ToString()), ("scope", scope));
         var value = await command.ExecuteScalarAsync(ct);
         return value is bool granted && granted;
     }
