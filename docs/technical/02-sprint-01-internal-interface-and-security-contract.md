@@ -75,3 +75,6 @@
 ## ۶. خروجی و معیار بسته‌شدن قرارداد
 
 این سند زمانی READY FOR CODE REVIEW فنی است که: mapping دقیق actor/resource/action و شناسه امن، سیاست خطا و همزمانی، قرارداد واقعی transport و schema/versioning، شکل ذخیره‌سازی/audit و تست‌های fail-closed با Stack منتخب در PR مستقل Sprint تعیین و بازبینی شوند. **انتخاب IdP، داده سلامت واقعی، رضایت قانونی، صورت‌حساب یا خدمت پزشکی خارج از Slice است.**
+
+## تعیین زبان اجرای آینده Sprint 01 — TRN-TECH-005 (۲۰۲۶-۱۰-۰۹)
+[تصمیم معماری ترکیبی](04-hybrid-dotnet-python-architecture-decision.md) اجرای ownerهای **Identity & Access، Consent & Privacy، Audit & Operations** این Slice را در **هسته C#/.NET** قرار می‌دهد، نه Python/FastAPI. ۲۰ سناریوی `ID-01…08`، `C-01…06`، `A-01…05` و `B-01` بدون تغییر رفتار می‌مانند، اما transport، schema، atomicity و harness تست باید برای Stack نسخه‌دار .NET طراحی و بازبینی شوند. **هیچ Python AI worker یا AI runtime در Sprint 01 وارد اجرا نمی‌شود**. Production IdP، رضایت حقوقی، داده سلامت، gateway یا هر endpoint واقعی همچنان خارج از دامنه و BLOCKED است.

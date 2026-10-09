@@ -44,3 +44,10 @@
 - تا آن زمان PR #1 و PR #2 **Draft/Open/unmerged**. این سند اجازه تغییر Production، داده/پرداخت واقعی، AI بالینی یا bypass گیت ندارد.
 
 **نتیجه:** طراحی فنی مشخص‌تر و آماده review است؛ **Technical Gate هنوز APPROVED نیست**. تصمیم بعدی، یک انتخاب فنی واقعی (پشته) است، نه سؤال تجاری جدید.
+
+## مصوبه مؤخر مالک محصول درباره پشته ترکیبی — TRN-TECH-005 (۲۰۲۶-۱۰-۰۹)
+[سند تصمیم معماری](04-hybrid-dotnet-python-architecture-decision.md) **جهت‌گیری ترکیبی C#/.NET برای هسته عملیاتی و Python برای AI داخلی** را جایگزین نامزدی قبلی Python/FastAPI برای کل Backend کرد. بخش «پشته پیشنهادی، نه مصوب» در ابتدای این سند **تصویر تاریخیِ قبل از این مصوبه** است و از این پس پیشنهاد Backend اصلی Python محسوب نمی‌شود.
+- **ACCEPTED (Architecture direction):** C#/.NET operational core + Python internal AI computation، سیاست‌ها و تغییر داده حساس تنها از مالک .NET، خروجی Python صرفاً مشروط به مجوز، lineage و gate انسانی.
+- **OPEN (Concrete Stack):** .NET SDK/runtime versions، انتخاب ORM/migration/tests و database، نسخه Python/AI dependencies، frontend، internal boundary transport، CI/hosting/IdP/model family.
+- **Sprint 01:** فقط هویت/رضایت/ممیزی مصنوعی در C#/.NET؛ Python AI خارج از Slice. قرارداد `TRN-TECH-003` و موارد fail-closed پابرجا است.
+- **Technical Gate STATUS: PARTIAL / NOT CODE-READY.** تصمیم معماری به‌تنهایی Code Authorization، CI موفق، Code Review یا Release Approval نمی‌شود.

@@ -30,3 +30,8 @@
 - T-01 و T-03 و Audit اکنون [قرارداد و ماتریس ۲۰ سناریوی آزمون پیشنهادی](02-sprint-01-internal-interface-and-security-contract.md) دارند؛ **هنوز اجرا نشده‌اند** و قراردادهای stack-specific و role/actor واقعی OPEN می‌مانند.
 - [Tech Gate Review](03-technical-gate-and-stack-proposal.md) نتیجه را **PARTIAL / NOT CODE-READY** اعلام می‌کند: Stack باید تصمیم/ثبت شود؛ سپس schema/versioned interfaces، پاسخ خطا، transaction/audit atomicity، synthetic fixtures و تست security تحت CI مشخص شوند.
 - هر mismatch، stale/missing evidence، درخواست sponsor به PHI/Wallet، رضایت پژوهشی ضمنی و replay باید fail-closed باشد. Synthetic harness نباید وارد Production شود. **Code Authorization، Stage و QA واقعی صادر نشده‌اند**.
+
+## گیت فنی جدید برای معماری ترکیبی — TRN-TECH-005 (۲۰۲۶-۱۰-۰۹)
+- [جهت‌گیری مصوب معماری](04-hybrid-dotnet-python-architecture-decision.md): هسته عملیاتی `C#/.NET`، مؤلفه AI داخلی `Python`. گیت T-01/T-03 و Audit برای Sprint 01 به **نسخه .NET قرارداد تستی، مدل transaction و suite قابل اجرا** تبدیل می‌شوند؛ زبان به‌تنهایی امنیت و atomicity را اثبات نمی‌کند.
+- گیت T-07 در Sprint 01 **اجرایی نیست**؛ قرارداد AI آینده باید کمینه‌سازی/قانونی‌بودن dataset، کنترل خطا/نسخه، fail-closed و جلوگیری از mutation مستقیم Python به حق عضو/بیمه/بالین را آزمون کند.
+- **OPEN قبل از Code:** .NET SDK و نسخه‌ها، persistence/ORM، transport/API/versioning، CI و review تست‌های امنیتی. هیچ IdP یا داده سلامت واقعی، endpoint بیرونی AI یا استنتاج خودکار مصوب نشده است.

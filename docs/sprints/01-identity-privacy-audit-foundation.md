@@ -39,3 +39,10 @@
 - **SP01-04**: append-only AuditRecord و atomicity mutation/audit با A-01…05؛ schema تراکنش واقعی پس از Stack.
 - **SP01-05**: synthetic-only B-01؛ قطع مسیر mock در Production، unit/contract/security suite آینده.
 - **وضعیت: Sprint Candidate / Planning Only و NOT CODE-READY.** در هیچ‌یک از موارد بالا کد، تست سبز یا Code Authorization واقعی ایجاد نشده است.
+
+## هم‌راستاسازی Sprint 01 با معماری ترکیبی — TRN-TECH-005 (۲۰۲۶-۱۰-۰۹)
+- [جهت‌گیری مصوب](../technical/04-hybrid-dotnet-python-architecture-decision.md): **C#/.NET برای Skeleton و ownerهای Identity/Consent/Audit این Sprint**. پیشنهاد قدیمی Python/FastAPI در `TRN-TECH-004` تاریخی/منسوخ برای Backend اصلی است.
+- `SP01-01`: ساختار .NET، تست و migration/CI پس از تصمیم جداگانه نسخه SDK/پایگاه داده/ابزار؛ فعلاً **Technical Planning Only**.
+- `SP01-02…05`: اجرای آینده سناریوهای `TRN-TECH-003` در هسته .NET با synthetic-only، deny-by-default، append-only audit و rollback atomicity.
+- مؤلفه **Python AI، مدل/Training/Inference و هر اتصال واقعی** خارج از Sprint 01 باقی می‌ماند و تنها contract boundary آینده در Technical ثبت می‌شود.
+- **گیت Code هنوز OPEN**: قرارداد نسخه‌دار و تست، پشته اجرایی/نسخه‌ها، CI و Review فنی مستقل، سپس اجازه صریح Code؛ هیچ Stage/QA/Production یا Merge مجاز نشده است.

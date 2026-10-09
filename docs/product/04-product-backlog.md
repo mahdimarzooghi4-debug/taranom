@@ -27,3 +27,6 @@
 
 ## Refinement فنی گام بعد — TRN-TECH-003/004 (۲۰۲۶-۱۰-۰۹)
 برای `TRN-EP-01/02/12`، [قرارداد داخلی Sprint 01](../technical/02-sprint-01-internal-interface-and-security-contract.md) سناریوهای منفی/امنیتی `ID-01…08`, `C-01…06`, `A-01…05`, `B-01` را تعریف کرده است. [Technical Gate](../technical/03-technical-gate-and-stack-proposal.md) هنوز **NOT CODE-READY** است؛ Stack/transport/storage/CI و Code Authorization مسدودند. سایر Epicها به مجوز و قرارداد واقعی گره خورده‌اند و هیچ پرداخت، داده سلامت یا AI واقعی از Backlog قابل فعال‌سازی نیست.
+
+## مالکیت فناوری پس از TRN-TECH-005 (۲۰۲۶-۱۰-۰۹)
+[مصوبه معماری ترکیبی](../technical/04-hybrid-dotnet-python-architecture-decision.md) برای `TRN-EP-01…10/12` جهت‌گیری **هسته عملیاتی C#/.NET** را پذیرفته است؛ `TRN-EP-11` فقط دارای **مؤلفه محاسباتی Python داخلی** با حاکمیت/مجوز و Human Promotion متعلق به هسته است. این نگاشت **به‌معنای آمادگی کدنویسی Epicهای حساس نیست**: همه مجوزها، قراردادهای واقعی، منابع معتبر، backend integration و safety gates مستقل باقی‌اند. `TRN-SP-01` فقط پایه .NET با داده ساختگی است؛ AI Python هنوز وارد Sprint نمی‌شود.

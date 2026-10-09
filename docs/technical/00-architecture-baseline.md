@@ -52,3 +52,6 @@ Technical زمانی برای Code در Sprint 01 قابل پذیرش است ک�
 
 ## تکمیل مرز Sprint 01 — TRN-TECH-003/004 (۲۰۲۶-۱۰-۰۹)
 [قرارداد داخلی هویت/مجوز/رضایت/ممیزی](02-sprint-01-internal-interface-and-security-contract.md) به‌صورت **test-only, fail-closed** با actor/subject/scope و ارزیابی consent مبتنی بر purpose/evidence نسخه‌دار و append-only audit پیشنهاد شد. [بررسی گیت و پیشنهاد پشته](03-technical-gate-and-stack-proposal.md) وضعیت **NOT CODE-READY** را ثبت می‌کند؛ Python/FastAPI/PostgreSQL/React **فقط گزینه فنی پیشنهادی** است، نه Tech Stack پذیرفته‌شده. مرز API/storage و قرارداد واقعی IdP هنوز بازند؛ هیچ داده سلامت، سرویس مالی یا درمان واقعی با این تکمیل مجاز نشده است.
+
+## تصمیم مؤخر معماری ترکیبی — TRN-TECH-005 (۲۰۲۶-۱۰-۰۹)
+**نظر مالک محصول بر مدل ترکیبی پذیرفته شد**؛ [سند حاکم](04-hybrid-dotnet-python-architecture-decision.md). `C#/.NET` **جهت‌گیری معماری هسته عملیاتی و حاکمیت** است؛ `Python` **مختص AI داخلی/محاسبات مجاز و کنترل‌شده**. عبارت‌های پیشین این سند درباره «انتخاب‌نشدن زبان Backend» و پیشنهاد Backend سراسری Python وضعیت **تاریخی پیش از TRN-TECH-005** دارند. مرجع policy، مجوز، مالی، درمانی و human promotion نزد مالک دامنه عملیاتی می‌ماند؛ Python هرگز به‌صورت مستقیم داده عملیاتی/کیف پول را تغییر نمی‌دهد. **نسخه‌ها، Frontend، DB، runtime IPC، schema و زیرساخت نهایی هنوز OPEN و Code Authorization صادر نشده است**.
