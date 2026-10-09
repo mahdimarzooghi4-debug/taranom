@@ -33,3 +33,6 @@
 
 ## گیت‌های فنی صریح برای TRN-SP-01 — TRN-TECH-006/007/008 (۲۰۲۶-۱۰-۰۹)
 پشته نسخه‌دار [TRN-TECH-006](../technical/05-sprint-01-reproducible-stack-candidate.md)، آزمون‌های [TRN-TECH-007](../technical/06-sprint-01-dotnet-contracts-and-test-acceptance.md) و [گیت Technical](../technical/07-sprint-01-technical-gate-review.md) پشتوانه آینده `TRN-EP-01/02/12` هستند. **نسخه‌ها هنوز تأیید نهایی/آزموده نشده‌اند**؛ هزینه تست/امنیت و Code Authorization پیش‌شرط‌اند، نه بهانه‌ای برای شروع گردش مالی یا داده سلامت واقعی. سایر Epicها تحت قراردادهای تخصصی مربوطه BLOCKED می‌مانند.
+
+## بسته نهایی‌سازی فنی Sprint 01 — TRN-TECH-009/010 (۲۰۲۶-۱۰-۰۹)
+[Internal contract freeze candidate](../technical/08-sprint-01-versioned-internal-contract-freeze-candidate.md) و [admission review](../technical/09-sprint-01-db-ci-review-and-admission-record.md) گیت‌های `TRN-EP-01/02/12` را مشخص می‌کنند: تأیید V1 قراردادهای تستی، تأیید/قفل پشته، اجرای ۲۸ آزمون طرح‌شده و CI exact-head پس از **مجوز صریح Code**. هیچ داده شخص حقیقی، AI Python، بیمه، درمان، وجه یا endpoint بیرونی در Sprint 01 وارد اجرا نمی‌شود.

@@ -75,3 +75,6 @@ No actual YAML workflow, database schema, production endpoints or secret definit
 - Actual versioned service contract/DTO, null/error/version/idempotency definitions after review; prototype solely with synthetic fixtures.
 - Test container digest/credentials, migration plan and DB-level immutability proof.
 - Code Authorization, CI and independent Code Review evidence. **No Stage/QA/Release/Production**.
+
+## V0 Contract Freeze Candidate — TRN-TECH-009 (۲۰۲۶-۱۰-۰۹)
+[Contract candidate](08-sprint-01-versioned-internal-contract-freeze-candidate.md) مرزهای هویت/اجازه، رضایت نسخه‌دار و ممیزی را به شکل typed .NET **test-only** با خطای deny-by-default، ثبت اتمیک consent+audit، DB-enforced append-only و idempotency scoped در PostgreSQL تعریف می‌کند. هیچ REST route/public payload/IdP واقعی مصوب نیست. [Review/admission record](09-sprint-01-db-ci-review-and-admission-record.md) خطرهای بحرانی و دروازه Code را مشخص می‌کند؛ **V1 و Code Authorization هنوز نیازمند review و approval هستند**.

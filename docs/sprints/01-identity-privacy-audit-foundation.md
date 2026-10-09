@@ -52,3 +52,6 @@
 - **SP01-02/03/04**: [قرارداد .NET و سناریوهای امنیتی](../technical/06-sprint-01-dotnet-contracts-and-test-acceptance.md) با ۲۰ مورد اصلی و ۸ مورد تکمیلی پیشنهادی؛ rollback اتمیک و append-only باید در DB واقعی اثبات شوند.
 - **SP01-05**: CI شامل locked restore، static analysis، unit/contract/security، PostgreSQL migration/concurrency، synthetic-only isolation؛ [Gate](../technical/07-sprint-01-technical-gate-review.md) همچنان **NOT CODE-READY** است.
 - فقط بعد از تأیید قرارداد/نسخه‌ها و **دستور صریح Code Authorization**، پیاده‌سازی در PR جدید Draft آغاز شود؛ هیچ Python AI، Frontend، بیمه/پول/هویت/درمان واقعی در Sprint 01 فعال نیست.
+
+## خروجی بررسی قرارداد V0 و گیت اجرایی — TRN-TECH-009/010 (۲۰۲۶-۱۰-۰۹)
+[قرارداد V0](../technical/08-sprint-01-versioned-internal-contract-freeze-candidate.md) برای `SP01-01…05` مرز test-only .NET، `AccessPolicy/ConsentHistory/AuditAppend`، نسخه‌گذاری و خطای امن را تعیین می‌کند؛ [گزارش بازبینی](../technical/09-sprint-01-db-ci-review-and-admission-record.md) تمام ریسک‌های P0 و شواهد لازم قبل از اجرای کد را مشخص می‌کند. **Contract V1، کدنویسی، CI، DB migration و Code Authorization هنوز انجام نشده‌اند**؛ آزمایش فقط پس از اجازه کدنویسی در PR Draft مستقل ممکن است.

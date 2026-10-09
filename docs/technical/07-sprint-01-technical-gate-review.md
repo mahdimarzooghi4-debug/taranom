@@ -29,3 +29,9 @@
 ## Next package
 
 After concrete toolchain and DTO review: approve technical candidate if compatible, explicitly authorize **Sprint 01 Code** only, and implement .NET synthetic-only identity, consent and audit with real PostgreSQL tests in a **new Draft Code PR stacked on PR #2**. CI must be green; any failure is fixed before extending scope. Neither PR #1 nor PR #2 can be merged without direct owner instruction. No real identity/clinical/financial/AI or Stage/Production.
+
+## نتیجه بازبینی جدید — TRN-TECH-009/010 (۲۰۲۶-۱۰-۰۹)
+- [Contract freeze candidate](08-sprint-01-versioned-internal-contract-freeze-candidate.md): typed .NET `V0` فقط برای synthetic-only identity/consent/audit، ورژن‌گذاری، اتمیک‌بودن و idempotency test.
+- [Review record](09-sprint-01-db-ci-review-and-admission-record.md): ریسک‌های client-role forging، leakage PHI، consent implicit، رقابت نسخه، mutation+audit partial failure، replay و test-harness در Production طبقه‌بندی شدند.
+- Releaseها/محدوده وابستگی اصلی بررسی شده‌اند؛ **در محیط فعلی `dotnet`/`docker`/`psql` موجود نیست و هیچ restore/build/CI/test اجرا نشده است**.
+- وضعیت **TECHNICAL DESIGN REVIEWED WITH OPEN GATES / NOT CODE-READY**؛ Code Authorization لازم است و PRها Draft/Open/unmerged می‌مانند.

@@ -64,3 +64,6 @@ The proposed layout is not a microservice deployment and does not make one modul
 ## Not decided
 
 No actual package installation, image digest, database credentials, test runner wiring, UI framework approval, external IdP, identity proofing, financial contract, clinical approval, hosting/GPU, Python model, service-to-service transport or Stage/Production. Business PR #1 and Technical PR #2 remain Draft/Open.
+
+## بررسی تازه انتشار و سازگاری — TRN-TECH-010 (۲۰۲۶-۱۰-۰۹)
+[Review record](09-sprint-01-db-ci-review-and-admission-record.md): SDK `10.0.401` و runtime `10.0.12` در مرجع رسمی .NET 10، EF Core `10.0.12` و Npgsql EF `10.0.3` در NuGet، PostgreSQL `18.6` و xunit.v3 `4.0.1` در منابع رسمی دیده شدند. Npgsql EF `10.0.3` محدوده وابستگی EF `>=10.0.4, <11.0.0` دارد؛ **EF `10.0.12` در بازه است**. بررسی مستقل محیط اجرایی نشان داد `dotnet`، `docker` و `psql` در PATH نصب/در دسترس نیستند؛ **هیچ build، migration، تست یا بسته CI پاس نشده است**. Stack همچنان CANDIDATE و منوط به approval و اجرا است.
