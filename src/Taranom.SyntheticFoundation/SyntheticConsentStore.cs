@@ -70,6 +70,16 @@ public sealed class SyntheticConsentStore
     }
 
 
+
+    // These are opaque test references, not reversible identity data or real anonymization.
+    // Domain-separated SHA-256 avoids persisting caller-supplied actor/tenant/request labels
+    // in the append-only audit. This does not make operational/test tables suitable for PHI.
+    internal static string AuditRef(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes("taranom.synthetic.audit.v1|" + value));
+        return "test:sha256-" + Convert.ToHexString(bytes);
+    }
+
     // Synthetic-only audited access: persist allowlisted decision metadata before ALLOW.
     // Never write raw request values, PHI, invoice content or unknown actions to Audit.
     internal async Task<AccessDecision> EvaluateAccessAsync(
@@ -87,7 +97,7 @@ public sealed class SyntheticConsentStore
                 INSERT INTO synthetic_audit
                     (audit_ref, tenant_ref, actor_ref, action_code, decision_code, correlation_ref)
                 VALUES (@audit, @tenant, @actor, 'ACCESS_POLICY_TEST', @decision, 'test:access-policy')
-                """, ("audit", Guid.NewGuid()), ("tenant", tenantRef), ("actor", actorRef),
+                """, ("audit", Guid.NewGuid()), ("tenant", AuditRef(tenantRef)), ("actor", AuditRef(actorRef)),
                      ("decision", decision.Allowed ? "ALLOW" : "DENY"));
             await command.ExecuteNonQueryAsync(ct);
         }
@@ -155,8 +165,8 @@ public sealed class SyntheticConsentStore
         await ExecuteAsync(connection, transaction, """
             INSERT INTO synthetic_audit(audit_ref,tenant_ref,actor_ref,action_code,decision_code,correlation_ref)
             VALUES (@audit,@tenant,@actor,@action,'RECORDED',@correlation)
-            """, ct, ("audit", auditRef), ("tenant", tenant), ("actor", principal.Actor),
-            ("action", operation), ("correlation", requestRef));
+            """, ct, ("audit", auditRef), ("tenant", AuditRef(tenant)), ("actor", AuditRef(principal.Actor)),
+            ("action", operation), ("correlation", AuditRef(requestRef)));
         await ExecuteAsync(connection, transaction, """
             INSERT INTO synthetic_consent_evidence
                 (tenant_ref,subject_ref,purpose,scope_ref,version,granted,actor_ref,audit_ref,previous_version)
@@ -215,7 +225,7 @@ public sealed class SyntheticConsentStore
         await using var command = NewCommand(connection, null, """
             SELECT count(*) FROM synthetic_audit
             WHERE tenant_ref=@tenant AND action_code='ACCESS_POLICY_TEST' AND decision_code=@decision
-            """, ("tenant", tenant), ("decision", decision));
+            """, ("tenant", AuditRef(tenant)), ("decision", decision));
         return Convert.ToInt32(await command.ExecuteScalarAsync(ct));
     }
 

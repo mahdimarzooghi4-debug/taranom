@@ -175,6 +175,55 @@ public sealed class ConsentContractTests
     }
 
     [Fact]
+    public async Task X08_CanarySecretsNeverAppearAsPlaintextAuditMetadataOrDenial()
+    {
+        var ctx = await SetupAsync();
+        await using var _ = ctx.DataSource;
+        // These are dummy canaries, not actual credentials or medical data.
+        var canaryActor = "test:CANARY_FAKE_TOKEN_" + Guid.NewGuid().ToString("N");
+        var canaryRequest = "test:CANARY_FAKE_NOTE_" + Guid.NewGuid().ToString("N");
+        var canaryTenant = "test:CANARY_FAKE_TENANT_" + Guid.NewGuid().ToString("N");
+        var subject = "test:member-canary-" + Guid.NewGuid().ToString("N");
+        var actor = new SyntheticPrincipal(canaryActor, subject, canaryTenant, "MEMBER_TEST", true);
+        var token = TestContext.Current.CancellationToken;
+        var allowed = await ctx.Store.EvaluateAccessAsync(actor, subject, canaryTenant,
+            "READ_OWN_TEST_CONSENT", ct: token);
+        Assert.True(allowed.Allowed);
+        var grant = await ctx.Store.ChangeAsync(actor, subject, canaryTenant,
+            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, canaryRequest, true, ct: token);
+        Assert.Equal(1, grant.Version);
+        var forbidden = await ctx.Store.EvaluateAccessAsync(actor, subject, canaryTenant,
+            "test:CANARY_FAKE_SECRET_ACTION", ct: token);
+        Assert.False(forbidden.Allowed);
+        Assert.Equal("ACTION_DENIED", forbidden.Reason);
+        Assert.DoesNotContain("CANARY", forbidden.ToString(), StringComparison.Ordinal);
+
+        await using var connection = await ctx.DataSource.OpenConnectionAsync(token);
+        await using var query = new NpgsqlCommand("""
+            SELECT actor_ref, tenant_ref, correlation_ref, action_code, decision_code
+            FROM synthetic_audit WHERE tenant_ref=@tenant
+            """, connection);
+        query.Parameters.AddWithValue("tenant", SyntheticConsentStore.AuditRef(canaryTenant));
+        await using var reader = await query.ExecuteReaderAsync(token);
+        var rows = 0;
+        while (await reader.ReadAsync(token))
+        {
+            rows++;
+            var actorStored = reader.GetString(0);
+            var tenantStored = reader.GetString(1);
+            var correlationStored = reader.GetString(2);
+            Assert.StartsWith("test:sha256-", actorStored);
+            Assert.Equal(SyntheticConsentStore.AuditRef(canaryTenant), tenantStored);
+            Assert.DoesNotContain("CANARY", actorStored, StringComparison.Ordinal);
+            Assert.DoesNotContain("CANARY", tenantStored, StringComparison.Ordinal);
+            Assert.DoesNotContain("CANARY", correlationStored, StringComparison.Ordinal);
+            Assert.DoesNotContain("CANARY", reader.GetString(3), StringComparison.Ordinal);
+            Assert.DoesNotContain("CANARY", reader.GetString(4), StringComparison.Ordinal);
+        }
+        Assert.Equal(3, rows);
+    }
+
+    [Fact]
     public async Task A04_AccessAllowAndDenyAreAuditedByTenant()
     {
         var ctx = await SetupAsync();
