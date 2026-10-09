@@ -64,3 +64,11 @@ These are **code and test fixes**, not evidence that security has been independe
 - Machine-readable xUnit-style case coverage, all original contract cases, full audit read projection and scoping, real provider integrations, database migrations/recovery, secrets/supply-chain pinning, live health-data consent, Stage/QA/Release/Production remain unimplemented/unverified. No inference to full security certification is allowed.
 - **Member Web App** stays mandatory in `TRN-EP-13`, with its own future authorized Sprint; React/TypeScript UI is not part of this change.
 - **Verdict:** CR-05 fixed and actual tests green on reviewed code SHA, **formal independent Code Review is still pending**, PR #1/#2/#3 remain Draft/Open/unmerged.
+
+## 7. CR-06 — named xUnit contract suite and reproducible XML evidence (2026-10-09)
+
+- **Resolved verification gap:** the original custom smoke executable lacked independent, machine-readable per-case results. Added `tests/Taranom.ContractTests` (xunit.v3 `4.0.1`) with separately discovered access and PostgreSQL consent tests, including synthetic purpose separation, tenant/subject isolation, idempotency and concurrent-version safety.
+- **Reviewed code SHA:** `027b955b9ec192895e5e8721e9f9014e9b7b50f7`; [PR CI 37955941964](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37955941964) and [Push CI 37955936020](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37955936020) both `SUCCESS`.
+- **Test accounting:** **24 discovered, 24 passed, 0 failures/0 errors/0 skipped** in [XML report](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37955941964/artifacts/11627991665); existing smoke tests executed in addition. Added cancellation-aware async tests and analyzer-compliant assertion without suppressing warnings.
+- **Precise case/gap matrix:** [TRN-SP-01 acceptance ledger](TRN-SP-01-acceptance-coverage-and-ci-evidence.md). The counts **do not prove completion of every original 20 + 8 requirement**: `A-04, B-01, C-06, X-06` remain partial, `X-08` requires automated token/PHI leak tests, plus independent review remains pending.
+- **Result:** CR-06 machine-readable test evidence implemented; **Code Review formal independent approval PENDING**, PR remains Draft/Open; no Stage/QA Gate/Production, no member web-app code.
