@@ -83,7 +83,12 @@ var countAfterGrant = await store.AuditCountAsync();
 var replay = await store.ChangeAsync(alice, subject, tenant, care, scope, 0, "test:request-care", true);
 Check(replay.Replayed && replay.Version == 1, "A-05 exact replay no duplicate");
 Check(await store.AuditCountAsync() == countAfterGrant, "A-05 audit not duplicated");
-await ExpectDenial(async () => { await store.ChangeAsync(alice, subject, tenant, care, scope, 0, "test:request-care", false); }, "IDEMPOTENCY_CONFLICT", "X-02 conflicting replay");
+// A new operation with an old version must fail as stale, not be mistaken for replay.
+await ExpectDenial(async () => { await store.ChangeAsync(alice, subject, tenant, care, scope, 0, "test:request-care", false); },
+    "VERSION_CONFLICT", "X-02 stale opposite operation rejected");
+// Same operation/request id with different normalized input must conflict.
+await ExpectDenial(async () => { await store.ChangeAsync(alice, subject, tenant, care, scope, 1, "test:request-care", true); },
+    "IDEMPOTENCY_CONFLICT", "X-02 changed-input replay explicitly rejected");
 var withdrawn = await store.ChangeAsync(alice, subject, tenant, care, scope, 1, "test:request-withdraw", false);
 Check(withdrawn.Version == 2, "C-04 withdrawal adds history");
 Check(!await store.EvaluateAsync(alice, subject, tenant, care, scope), "C-04 post-withdrawal deny");
