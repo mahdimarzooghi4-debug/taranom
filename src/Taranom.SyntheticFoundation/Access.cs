@@ -25,9 +25,9 @@ public readonly record struct AccessDecision(bool Allowed, string Reason)
     public static AccessDecision Denied(string reason) => new(false, reason);
 }
 
-public static class SyntheticAccessPolicy
+internal static class SyntheticAccessPolicy
 {
-    public static AccessDecision Evaluate(
+    internal static AccessDecision Evaluate(
         SyntheticPrincipal? principal, string? subject, string? tenant, string? action)
     {
         if (principal is null || !principal.Trusted)

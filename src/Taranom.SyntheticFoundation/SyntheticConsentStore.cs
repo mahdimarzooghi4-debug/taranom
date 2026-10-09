@@ -69,12 +69,41 @@ public sealed class SyntheticConsentStore
         await command.ExecuteNonQueryAsync(ct);
     }
 
+
+    // Synthetic-only audited access: persist allowlisted decision metadata before ALLOW.
+    // Never write raw request values, PHI, invoice content or unknown actions to Audit.
+    internal async Task<AccessDecision> EvaluateAccessAsync(
+        SyntheticPrincipal? principal, string? subject, string? tenant, string? action,
+        CancellationToken ct = default)
+    {
+        var decision = SyntheticAccessPolicy.Evaluate(principal, subject, tenant, action);
+        var actorRef = SyntheticAccessPolicy.IsSynthetic(principal?.Actor)
+            ? principal!.Actor : "test:untrusted";
+        var tenantRef = SyntheticAccessPolicy.IsSynthetic(tenant) ? tenant! : "test:unknown";
+        try
+        {
+            await using var connection = await dataSource.OpenConnectionAsync(ct);
+            await using var command = NewCommand(connection, null, """
+                INSERT INTO synthetic_audit
+                    (audit_ref, tenant_ref, actor_ref, action_code, decision_code, correlation_ref)
+                VALUES (@audit, @tenant, @actor, 'ACCESS_POLICY_TEST', @decision, 'test:access-policy')
+                """, ("audit", Guid.NewGuid()), ("tenant", tenantRef), ("actor", actorRef),
+                     ("decision", decision.Allowed ? "ALLOW" : "DENY"));
+            await command.ExecuteNonQueryAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return AccessDecision.Denied("AUDIT_UNAVAILABLE");
+        }
+        return decision;
+    }
+
     public async Task<ConsentMutationResult> ChangeAsync(
         SyntheticPrincipal principal, string subject, string tenant, SyntheticPurpose purpose,
         string scope, int expectedVersion, string requestRef, bool grant,
         CancellationToken ct = default)
     {
-        var access = SyntheticAccessPolicy.Evaluate(principal, subject, tenant, "CHANGE_OWN_TEST_CONSENT");
+        var access = await EvaluateAccessAsync(principal, subject, tenant, "CHANGE_OWN_TEST_CONSENT", ct);
         if (!access.Allowed || !SyntheticAccessPolicy.IsSynthetic(scope) ||
             !SyntheticAccessPolicy.IsSynthetic(requestRef) || expectedVersion < 0)
             throw new InvalidOperationException("DENY");
@@ -155,7 +184,7 @@ public sealed class SyntheticConsentStore
         string subject, string tenant, SyntheticPurpose purpose, string scope,
         CancellationToken ct = default)
     {
-        if (!SyntheticAccessPolicy.Evaluate(principal, subject, tenant, "READ_OWN_TEST_CONSENT").Allowed ||
+        if (!(await EvaluateAccessAsync(principal, subject, tenant, "READ_OWN_TEST_CONSENT", ct)).Allowed ||
             !SyntheticAccessPolicy.IsSynthetic(scope) || !Enum.IsDefined(purpose))
             return false;
         await using var connection = await dataSource.OpenConnectionAsync(ct);
@@ -168,10 +197,25 @@ public sealed class SyntheticConsentStore
         return value is bool granted && granted;
     }
 
-    public async Task<int> AuditCountAsync(CancellationToken ct = default)
+    // Test-only counts; these are not a public audit projection.
+    internal async Task<int> DomainAuditCountAsync(CancellationToken ct = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var command = new NpgsqlCommand("SELECT count(*) FROM synthetic_audit", connection);
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*) FROM synthetic_audit WHERE action_code IN ('GRANT_TEST','WITHDRAW_TEST')",
+            connection);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(ct));
+    }
+
+    internal async Task<int> AccessAuditCountAsync(string tenant, string decision, CancellationToken ct = default)
+    {
+        if (!SyntheticAccessPolicy.IsSynthetic(tenant) || decision is not ("ALLOW" or "DENY"))
+            throw new InvalidOperationException("INVALID_TEST_AUDIT_FILTER");
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var command = NewCommand(connection, null, """
+            SELECT count(*) FROM synthetic_audit
+            WHERE tenant_ref=@tenant AND action_code='ACCESS_POLICY_TEST' AND decision_code=@decision
+            """, ("tenant", tenant), ("decision", decision));
         return Convert.ToInt32(await command.ExecuteScalarAsync(ct));
     }
 

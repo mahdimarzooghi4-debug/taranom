@@ -91,6 +91,21 @@ var store = new SyntheticConsentStore(dataSource);
 var subject = "test:member-alice";
 var tenant = "test:tenant-A";
 var scope = "test:private";
+// Every policy decision returned through the store is audited, including DENY.
+var beforeAllows = await store.AccessAuditCountAsync(tenant, "ALLOW");
+var beforeDenies = await store.AccessAuditCountAsync(tenant, "DENY");
+Check((await store.EvaluateAccessAsync(alice, subject, tenant, "READ_OWN_TEST_PROFILE")).Allowed,
+    "A-04 audited scoped ALLOW");
+Check(!(await store.EvaluateAccessAsync(sponsor, subject, tenant, "READ_OWN_TEST_PROFILE")).Allowed,
+    "A-04 audited sponsor DENY");
+Check(!(await store.EvaluateAccessAsync(null, subject, tenant, "READ_OWN_TEST_PROFILE")).Allowed,
+    "A-04 audited anonymous DENY");
+Check(!(await store.EvaluateAccessAsync(alice, "test:member-bob", tenant, "READ_OWN_TEST_PROFILE")).Allowed,
+    "A-04 audited wrong-subject DENY");
+Check(await store.AccessAuditCountAsync(tenant, "ALLOW") == beforeAllows + 1,
+    "A-04 ALLOW audit persisted before response");
+Check(await store.AccessAuditCountAsync(tenant, "DENY") == beforeDenies + 3,
+    "A-04 DENY audit persisted before response");
 var research = SyntheticPurpose.SecondaryAiResearchTest;
 var care = SyntheticPurpose.CareCommunicationTest;
 Check(!await store.EvaluateAsync(alice, subject, tenant, research, scope), "C-05 missing research consent deny");
@@ -119,10 +134,10 @@ Check(tenantBWithdraw.Version == 2 &&
 Check(await store.EvaluateAsync(alice, subject, tenant, care, scope),
     "ID-05 original tenant consent unaffected by cross-tenant withdrawal");
 
-var countAfterGrant = await store.AuditCountAsync();
+var countAfterGrant = await store.DomainAuditCountAsync();
 var replay = await store.ChangeAsync(alice, subject, tenant, care, scope, 0, "test:request-care", true);
 Check(replay.Replayed && replay.Version == 1, "A-05 exact replay no duplicate");
-Check(await store.AuditCountAsync() == countAfterGrant, "A-05 audit not duplicated");
+Check(await store.DomainAuditCountAsync() == countAfterGrant, "A-05 audit not duplicated");
 // A new operation with an old version must fail as stale, not be mistaken for replay.
 await ExpectDenial(async () => { await store.ChangeAsync(alice, subject, tenant, care, scope, 0, "test:request-care", false); },
     "VERSION_CONFLICT", "X-02 stale opposite operation rejected");
@@ -180,12 +195,12 @@ await using (var cn = await dataSource.OpenConnectionAsync())
 }
 
 // Failure injection: if audit persistence fails, the consent mutation and stream version must roll back.
-var priorAuditCount = await store.AuditCountAsync();
+var priorAuditCount = await store.DomainAuditCountAsync();
 await using (var cn = await adminDataSource.OpenConnectionAsync())
 {
     await using var install = new NpgsqlCommand("""
         CREATE OR REPLACE FUNCTION synthetic_block_audit_inserts() RETURNS trigger
-        LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''SYNTHETIC_AUDIT_UNAVAILABLE''; END;';
+        LANGUAGE plpgsql AS 'BEGIN IF NEW.action_code IN (''GRANT_TEST'',''WITHDRAW_TEST'') THEN RAISE EXCEPTION ''SYNTHETIC_AUDIT_UNAVAILABLE''; END IF; RETURN NEW; END;';
         DROP TRIGGER IF EXISTS synthetic_test_audit_failure ON synthetic_audit;
         CREATE TRIGGER synthetic_test_audit_failure
             BEFORE INSERT ON synthetic_audit
@@ -209,7 +224,7 @@ finally
         """, cn);
     await cleanup.ExecuteNonQueryAsync();
 }
-Check(await store.AuditCountAsync() == priorAuditCount, "A-03 audit failure creates no audit row");
+Check(await store.DomainAuditCountAsync() == priorAuditCount, "A-03 audit failure creates no audit row");
 Check(await store.EvaluateAsync(alice, subject, tenant, care, scope),
     "A-03 audit failure did not change consent state");
 var afterFailure = await store.ChangeAsync(alice, subject, tenant, care, scope, 3, "test:post-audit-failure", false);
@@ -235,6 +250,42 @@ await using (var cn = await dataSource.OpenConnectionAsync())
     await using var sql = new NpgsqlCommand("DELETE FROM synthetic_consent_evidence", cn);
     await ExpectSqlState(async () => { await sql.ExecuteNonQueryAsync(); }, "42501",
         "A-02 runtime role has no consent history DELETE privilege");
+}
+
+// Deny even an otherwise-allowed read if its audit insert is unavailable.
+await using (var cn = await adminDataSource.OpenConnectionAsync())
+{
+    await using var install = new NpgsqlCommand("""
+        CREATE OR REPLACE FUNCTION synthetic_block_policy_audit() RETURNS trigger
+        LANGUAGE plpgsql AS 'BEGIN IF NEW.action_code = ''ACCESS_POLICY_TEST'' THEN RAISE EXCEPTION ''SYNTHETIC_POLICY_AUDIT_UNAVAILABLE''; END IF; RETURN NEW; END;';
+        DROP TRIGGER IF EXISTS synthetic_test_policy_audit_failure ON synthetic_audit;
+        CREATE TRIGGER synthetic_test_policy_audit_failure
+            BEFORE INSERT ON synthetic_audit
+            FOR EACH ROW EXECUTE FUNCTION synthetic_block_policy_audit();
+        """, cn);
+    await install.ExecuteNonQueryAsync();
+}
+try
+{
+    var accessDenied = await store.EvaluateAccessAsync(alice, subject, tenant, "READ_OWN_TEST_PROFILE");
+    Check(!accessDenied.Allowed && accessDenied.Reason == "AUDIT_UNAVAILABLE",
+        "A-04 unavailable audit denies otherwise allowed policy access");
+    Check(!await store.EvaluateAsync(alice, subject, tenant, care, scope),
+        "A-04 consent read fails closed when audit is unavailable");
+    await ExpectDenial(async () =>
+    {
+        await store.ChangeAsync(alice, subject, tenant, care, scope, 4,
+            "test:blocked-policy-audit", true);
+    }, "DENY", "A-04 mutation rejected when access audit unavailable");
+}
+finally
+{
+    await using var cn = await adminDataSource.OpenConnectionAsync();
+    await using var cleanup = new NpgsqlCommand("""
+        DROP TRIGGER IF EXISTS synthetic_test_policy_audit_failure ON synthetic_audit;
+        DROP FUNCTION IF EXISTS synthetic_block_policy_audit();
+        """, cn);
+    await cleanup.ExecuteNonQueryAsync();
 }
 
 Console.WriteLine("PASS synthetic-only Sprint 01 checks completed");
