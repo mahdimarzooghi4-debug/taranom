@@ -44,3 +44,5 @@ Business → Technical → Scrum / Product Backlog → Sprint → Code → Code 
 - **چرخه کیف پول تا مصرف درمانی:** [TRN-BUS-006 — قرارداد Business پیش‌نویس](docs/business/06-member-wallet-accrual-redemption-contract.md)؛ اصل **انباشت از روز عضویت و امکان مصرف درمانی پس از سه ماه** مطابق [TRN-BIZ-006](docs/decisions/TRN-BIZ-006-accrual-and-three-month-wait.md) در Business **ACCEPTED** شده است. فرمول تخصیص شش درآمد، تعریف دقیق مرز زمانی، تسویه و پشتوانه اعتبار همچنان بازند.
 
 - **مصوبه TRN-BIZ-011:** اگر اعتبار قابل‌مصرف کیف پول برای هزینه درمانی باقیمانده کافی نباشد، **عضو کسری را مستقیماً به مرکز طرف قرارداد پرداخت می‌کند**. [متن تصمیم](docs/decisions/TRN-BIZ-011-member-pays-uncovered-treatment-remainder.md). روش وصول و اجرای مالی هنوز تعیین نشده است.
+
+- **مصوبه TRN-BIZ-012 — پس از عدم تمدید:** اعتبار درمانی **قبلاً انباشته‌شده** در همان کیف پول عضو **محفوظ و قابل مصرف برای درمان باقی می‌ماند**؛ انباشت اعتبار **جدید طی دوره عدم تمدید متوقف می‌شود**. [متن تصمیم](docs/decisions/TRN-BIZ-012-preserve-wallet-on-nonrenewal.md). چگونگی ازسرگیری انباشت پس از تمدید مجدد و انتساب سود دیرثبت‌شده مربوط به دوران عضویت هنوز باز است.
