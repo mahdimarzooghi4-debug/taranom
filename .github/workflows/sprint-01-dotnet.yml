@@ -30,8 +30,10 @@ jobs:
     env:
       TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint01;Username=postgres;Password=only_synthetic_ci;Pooling=false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '10.0.401'
       - name: Verify .NET version and build foundation
@@ -41,16 +43,16 @@ jobs:
           dotnet build tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-restore --configuration Release
           dotnet restore tests/Taranom.ContractTests/Taranom.ContractTests.csproj
           dotnet build tests/Taranom.ContractTests/Taranom.ContractTests.csproj --no-restore --configuration Release
-      - name: Run synthetic-only .NET and real PostgreSQL security tests
-        run: dotnet run --project tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-build --configuration Release
-      - name: Run named xUnit contract tests with machine-readable XML
+      - name: Run independent xUnit contract tests FIRST (self-bootstrap PostgreSQL)
         run: |
           mkdir -p TestResults
           dotnet run --project tests/Taranom.ContractTests/Taranom.ContractTests.csproj --no-build --configuration Release -- -xml TestResults/sprint01-contract-tests.xml
           test -s TestResults/sprint01-contract-tests.xml
+      - name: Run synthetic .NET smoke and PostgreSQL failure-injection tests
+        run: dotnet run --project tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-build --configuration Release
       - name: Upload xUnit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sprint01-contract-tests
           path: TestResults/sprint01-contract-tests.xml

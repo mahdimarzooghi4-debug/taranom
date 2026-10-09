@@ -7,9 +7,41 @@ namespace Taranom.ContractTests;
 // Actual PostgreSQL integration tests; independently named cases with isolated test: prefixes.
 public sealed class ConsentContractTests
 {
+    // xUnit can run first or independently: one guarded schema/role bootstrap per process,
+    // without relying on another test executable to prepare the database.
+    private static readonly Lazy<Task> Fixture = new(InitializeFixtureAsync);
+
+    private static async Task InitializeFixtureAsync()
+    {
+        var connection = Environment.GetEnvironmentVariable("TARANOM_TEST_PG")
+            ?? throw new InvalidOperationException("Missing isolated PostgreSQL test connection");
+        var ct = TestContext.Current.CancellationToken;
+        await using var admin = NpgsqlDataSource.Create(connection);
+        var schema = new SyntheticConsentStore(admin);
+        await schema.InitializeTestSchemaAsync(ct);
+        await using var cn = await admin.OpenConnectionAsync(ct);
+        await using var command = new NpgsqlCommand("""
+            DO $role$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'taranom_sprint01_runtime') THEN
+                    CREATE ROLE taranom_sprint01_runtime LOGIN PASSWORD 'only_ephemeral_synthetic_test';
+                END IF;
+            END;
+            $role$;
+            GRANT USAGE ON SCHEMA public TO taranom_sprint01_runtime;
+            REVOKE ALL ON synthetic_audit, synthetic_consent_evidence,
+                synthetic_consent_stream, synthetic_request_replay FROM PUBLIC;
+            GRANT SELECT, INSERT, UPDATE ON synthetic_consent_stream TO taranom_sprint01_runtime;
+            GRANT SELECT, INSERT ON synthetic_consent_evidence, synthetic_request_replay,
+                synthetic_audit TO taranom_sprint01_runtime;
+            """, cn);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task<(NpgsqlDataSource DataSource, SyntheticConsentStore Store,
         SyntheticPrincipal Principal, string Subject, string Tenant, string Scope)> SetupAsync()
     {
+        await Fixture.Value.WaitAsync(TestContext.Current.CancellationToken);
         var connection = Environment.GetEnvironmentVariable("TARANOM_TEST_PG")
             ?? throw new InvalidOperationException("Missing isolated PostgreSQL CI test connection");
         var unique = Guid.NewGuid().ToString("N");
