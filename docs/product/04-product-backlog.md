@@ -44,3 +44,7 @@
 - Expected journeys depend on accepted contracts: authenticated member workspace, membership and noncashable wallet read views, lawful consent and health data access, care coordination, nondiagnostic safety information, cost disclosure and choice tracking, insurance/billing dispute follow-up.
 - Clinical, wallet, financial and insurer data must be sourced from lawful backend owners with actual integrations; **no hardcoded fake balance/coverage/treatment** as live data.
 - Member Web App implementation is a **separate future Sprint with separate Code Authorization**; Sprint 01 remains strictly synthetic .NET identity/consent/audit.
+
+## TRN-SP-02 PLANNING CANDIDATE — Mandatory member-facing Web App (2026-10-09)
+
+The owner-mandated `TRN-EP-13` now has [Sprint 02 planning](../sprints/03-member-web-app-sprint-02-planning.md) and a [security/read-model contract candidate](../technical/10-member-web-app-interface-contract-candidate.md). Proposed first slice: React/TypeScript Persian RTL responsive member shell, protected-layout contracts, safe unavailable states and browser tests — **planning only, not Code-authorized**. Real member account, wallet, insurance, clinical and care read models must be supplied by lawful authoritative .NET owners; a synthetic Sprint 01 identity is not a real member login. The first official national release still requires comprehensive readiness. This documentation-only PR must remain Draft/Open and unmerged.
