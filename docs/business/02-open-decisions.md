@@ -1,6 +1,6 @@
 # TRN-DEC — رجیستر تصمیم‌های باز
 
-- وضعیت: **MIXED — TRN-DEC-006، TRN-DEC-018 و TRN-DEC-020 در حدود مصوب ACCEPTED؛ TRN-DEC-019، TRN-DEC-021 و TRN-DEC-022 PARTIAL؛ سایر تصمیم‌ها OPEN**
+- وضعیت: **MIXED — TRN-DEC-006، TRN-DEC-018 و TRN-DEC-020 در حدود مصوب ACCEPTED؛ TRN-DEC-015، TRN-DEC-019، TRN-DEC-021 و TRN-DEC-022 PARTIAL؛ سایر تصمیم‌ها OPEN**
 - مرجع قطعی: «طرح نامه جامع ترنم (2)(4).pdf» (۷۶ صفحه PDF، تیر ۱۴۰۵). نسخه قبلی SUPERSEDED است.
 - قاعده: تصمیم پس از تأیید صریح صاحب اختیار، ثبت دلیل، شواهد و پیامدها به ACCEPTED تغییر می‌کند.
 - برچسب‌ها: BLOCKER = پیش‌نیاز ساخت/فعال‌سازی بخش حساس؛ IMPORTANT = پیش‌نیاز طراحی دقیق؛ RESEARCH = راستی‌آزمایی.
@@ -21,7 +21,7 @@
 | TRN-DEC-012 | IMPORTANT | ۲۴ ماه طرح چگونه به گیت‌های واقعی Business/Technical/QA نگاشت می‌شود؟ | زمان‌بندی وابسته به آمادگی نه صرف تاریخ |
 | TRN-DEC-013 | RESEARCH | اعتبار آمار، هزینه‌ها و ادعاهای رقابتی سال ۱۴۰۵ چقدر است؟ | منابع و نسخه‌های راستی‌آزمایی‌شده |
 | TRN-DEC-014 | IMPORTANT | نخستین استان/مرکز/شریک پایلوت و مسئول پاسخ‌گویی حوادث بالینی کدام است؟ | پایلوت قابل اجرا با توافق کتبی |
-| TRN-DEC-015 | BLOCKER — wallet use and waiting policy | در PDF صفحات ۵۳ و ۵۹–۶۰ «محاسبه اعتبار از روز اول» و «انتظار ۳ ماهه برای مصرف» به‌عنوان فرض مالی آمده است؛ آیا و چگونه برای **یک کیف پول درمانی** پذیرفته می‌شود؟ مصارف درمانی مجاز، سقف، اصلاح/استرداد و خروج از عضویت چیست؟ | TRN-BUS-006 (DRAFT)؛ قرارداد Business/حقوقی معتبر قبل از اجرای مصرف |
+| TRN-DEC-015 | PARTIAL — accrual from joining + 3-month wait ACCEPTED; other uses OPEN | تصمیم صریح TRN-BIZ-006: اعتبار **از روز عضویت انباشته می‌شود** و **تا سپری‌شدن سه ماه از عضویت قابل مصرف نیست**؛ پس از آن صرفاً برای درمان، با رعایت سایر شرایطی که باید تصویب شوند، قابل استفاده است. تعریف دقیق مرز زمانی، تمدید/وقفه عضویت، مصارف مجاز، سقف، استرداد و تسویه OPEN هستند | TRN-BIZ-006 و TRN-BUS-006؛ تکمیل قرارداد حقوقی/Business قبل از عملیات |
 | TRN-DEC-016 | IMPORTANT | توالی پنج‌ساله خدمات در جدول ۹-۴ با MVP و فازهای استقرار ۲۴ماهه چگونه تطبیق می‌یابد؟ | برنامه دو سطحی با وابستگی و خروجی مصوب |
 | TRN-DEC-017 | BLOCKER | سفارش‌دهنده/طراح درج‌شده در صفحه ۵ چه رابطه حقوقی و اختیارات عملیاتی مشخصی با بهره‌بردار خواهند داشت؟ | اسناد اختیار، مالکیت محصول و مسئولیت اجرایی |
 | TRN-DEC-018 | ACCEPTED — core proposition | پارادایم «ما نه‌تنها پول نمی‌گیریم، بلکه پول هم می‌دهیم» با منفعت اختصاصیِ صرفاً درمانی؛ **ترنم تعاونی نیست** | TRN-BIZ-001 تا TRN-BIZ-004 |
@@ -38,10 +38,11 @@
 - TRN-DEC-020: اعتبار درمانی اختصاصی هر عضو انباشته می‌شود.
 - TRN-DEC-021: مشارکت **تمام شش منبع درآمد ترنم** در تأمین اعتبار پذیرفته شد؛ فرمول و سهم هنوز بازند.
 - TRN-DEC-022: **ادغام سه صندوق در مدل واحد شش‌منبعی و فقط یک کیف پول برای هر عضو** پذیرفته شد؛ صحت نگاشت حسابداری و منع دوباره‌شماری هنوز باید اثبات شود (TRN-BIZ-005).
+- TRN-DEC-015 (بخش زمان‌بندی): **انباشت از روز عضویت و ممنوعیت مصرف تا سپری‌شدن سه ماه** با تأیید مستقیم مالک محصول پذیرفته شد (TRN-BIZ-006)؛ شروط دیگر OPEN.
 - ماهیت رسمی: **ترنم تعاونی نیست**؛ مثال قبلی صرفاً برای فهم بود (TRN-BIZ-004).
-- قراردادهای مرجع: `docs/decisions/TRN-BIZ-001-core-paradigm.md`، `docs/decisions/TRN-BIZ-002-member-treatment-benefit.md` و `docs/decisions/TRN-BIZ-003-individual-treatment-credit.md` و `docs/decisions/TRN-BIZ-004-noncooperative-six-income-sources.md` و `docs/decisions/TRN-BIZ-005-single-treatment-wallet.md`.
+- قراردادهای مرجع: `docs/decisions/TRN-BIZ-001-core-paradigm.md`، `docs/decisions/TRN-BIZ-002-member-treatment-benefit.md` و `docs/decisions/TRN-BIZ-003-individual-treatment-credit.md` و `docs/decisions/TRN-BIZ-004-noncooperative-six-income-sources.md` و `docs/decisions/TRN-BIZ-005-single-treatment-wallet.md` و `docs/decisions/TRN-BIZ-006-accrual-and-three-month-wait.md`.
 - ممیزی محاسبات منبع و شکاف‌های شش درآمد/اعتبار: `docs/business/05-six-revenue-member-credit-reconciliation.md` (SOURCE AUDIT، نه تصمیم مالی).
-- چرخه پیشنهادی انباشت تا مصرف **یک کیف پول درمانی**، تفکیک تصمیم مصوب از فرض ۳ ماه PDF و موارد باز: `docs/business/06-member-wallet-accrual-redemption-contract.md` (DRAFT).
+- چرخه انباشت تا مصرف **یک کیف پول درمانی**: `docs/business/06-member-wallet-accrual-redemption-contract.md` (DRAFT)؛ قاعده «انباشت از روز عضویت، مصرف درمانی پس از سه ماه» در `TRN-BIZ-006` **ACCEPTED** است، باقی سازوکار مالی/درمانی باز است.
 
 ## اصول ثبت
 - هر آیتم باز اجازه تعریف مقدار حدسی در API/DB/محاسبات نمی‌دهد.
