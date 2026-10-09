@@ -72,3 +72,7 @@ The owner explicitly authorized **only** synthetic C#/.NET identity/access, sepa
 
 ## Code Review findings — CR-01…CR-04 (۲۰۲۶-۱۰-۰۹)
 [گزارش بازبینی](../reviews/TRN-SP-01-security-code-review.md) شامل رفع خطاهای جداسازی tenant در رضایت، خطای مثبت کاذب در آزمون‌ها، جداسازی نقش محدود PostgreSQL و تفکیک stale-version از replay است. **هر دو CI کد SHA `9f002fc2c442f2d0366552cf845ff3cf7f3db67c` موفق‌اند**؛ اما **Code Review مستقل هنوز تأیید نشده است**، همه سناریوهای قراردادی تحت پوشش آزمون کامل نیستند و Stage/QA/Release/Production یا Merge انجام نشده است. وب‌اپ عضو در `TRN-EP-13` الزامی و خارج از Sprint 01 باقی می‌ماند.
+
+## Security follow-up CR-05 — audited synthetic access (2026-10-09)
+
+[Updated review](../reviews/TRN-SP-01-security-code-review.md) records `CR-05`: synthetic .NET access policy decisions are now durably logged as `ACCESS_POLICY_TEST` before returning ALLOW/DENY; test-only consent read/write paths fail closed if this audit write is unavailable. Real PostgreSQL fault injection and allow/deny verification passed for `c50044f9bab90c27311fda5912f5b0334da82ab8` in [PR CI](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37954557243) and [push CI](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37954549116). This is not full contractual coverage or independent Code Review approval. Web App `TRN-EP-13` remains mandatory and not yet coded. No merge, Stage, QA or Production.

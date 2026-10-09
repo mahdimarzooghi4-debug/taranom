@@ -48,3 +48,19 @@ These are **code and test fixes**, not evidence that security has been independe
 - **Code Review: independent approval PENDING**, with residual follow-ups recorded; do not merge PR #1, #2 or #3.
 - If another code slice is explicitly authorized, prioritize audited access decisions, complete deny-path/audit coverage, formal test runner and multi-tenant DB controls. Do not add real member app, clinical, financial, insurance or AI behavior under the Sprint 01 authorization.
 - Stage / QA Gate / Release Approval / Production: **NOT PERFORMED**.
+
+## 6. CR-05 — audited access decisions and audit-outage fail-closed proof (2026-10-09)
+
+- **Severity before fix: HIGH.** The public synthetic policy evaluation previously returned an ALLOW/DENY without a durable access-decision audit. Reads of synthetic consent similarly did not establish an access-decision audit before attempting the read.
+- **Code remediation:** `SyntheticAccessPolicy` made assembly-internal; `SyntheticConsentStore.EvaluateAccessAsync` is the test-only audited access boundary. It writes an allowlisted `ACCESS_POLICY_TEST` row with **decision ALLOW or DENY**, synthetic opaque actor/tenant references and a fixed synthetic correlation marker **before the policy decision is returned**. It does not persist input actions, medical data, untrusted request bodies or real member identifiers. Consent read and mutation methods call this audited access path.
+- **Failure semantics:** unsuccessful access-audit write results in `AUDIT_UNAVAILABLE` (DENY), not an unlogged ALLOW. Reads of synthetic consent then return false; synthetic consent mutation is rejected. The existing mutation+domain-audit database transaction remains independently atomic, with the failure-injection test restricted to domain audit inserts.
+- **Real tests:** tests assert persisted ALLOW and DENY records (including anonymous, sponsor and cross-subject denial), read rejection when audit is unavailable, denial of mutation under the same injected failure, and preservation of mutation rollback proof.
+- **Reviewed code SHA:** `c50044f9bab90c27311fda5912f5b0334da82ab8`. Both exact-SHA GitHub Actions succeeded: [PR CI 37954557243](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37954557243) and [Push CI 37954549116](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37954549116).
+
+### What remains explicitly open
+
+- **Not independent approval:** this is the same implementation assistant's code review/fix; a separate human or otherwise independent authorized reviewer has not approved the PR.
+- Access-policy audit is **not** an exhaustive event-by-event legal audit of every rejected business input, failed database read, or consent-purpose decision; there is no production identity verification and no real patient record flow. The test-only static policy remains callable *internally* by the friend smoke test for raw policy unit checks; **the auditable store path is the sole operational entry in the synthetic fixture**.
+- Machine-readable xUnit-style case coverage, all original contract cases, full audit read projection and scoping, real provider integrations, database migrations/recovery, secrets/supply-chain pinning, live health-data consent, Stage/QA/Release/Production remain unimplemented/unverified. No inference to full security certification is allowed.
+- **Member Web App** stays mandatory in `TRN-EP-13`, with its own future authorized Sprint; React/TypeScript UI is not part of this change.
+- **Verdict:** CR-05 fixed and actual tests green on reviewed code SHA, **formal independent Code Review is still pending**, PR #1/#2/#3 remain Draft/Open/unmerged.
