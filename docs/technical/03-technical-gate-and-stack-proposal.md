@@ -51,3 +51,6 @@
 - **OPEN (Concrete Stack):** .NET SDK/runtime versions، انتخاب ORM/migration/tests و database، نسخه Python/AI dependencies، frontend، internal boundary transport، CI/hosting/IdP/model family.
 - **Sprint 01:** فقط هویت/رضایت/ممیزی مصنوعی در C#/.NET؛ Python AI خارج از Slice. قرارداد `TRN-TECH-003` و موارد fail-closed پابرجا است.
 - **Technical Gate STATUS: PARTIAL / NOT CODE-READY.** تصمیم معماری به‌تنهایی Code Authorization، CI موفق، Code Review یا Release Approval نمی‌شود.
+
+## تکمیل گیت با TRN-TECH-006/007/008 (۲۰۲۶-۱۰-۰۹)
+پشته نسخه‌دار پیشنهادی برای `Sprint 01` اکنون در [TRN-TECH-006](05-sprint-01-reproducible-stack-candidate.md) و قراردادها/برنامه آزمون در [TRN-TECH-007](06-sprint-01-dotnet-contracts-and-test-acceptance.md) آمده است. [Ledger پذیرش](07-sprint-01-technical-gate-review.md) نشان می‌دهد **نسخه‌ها release-verified اما build/test-unverified** هستند. انتخاب قبلی Python/FastAPI برای Backend کل سامانه منسوخ است؛ هیچ Code، CI سبز یا ورود به Stage نتیجه نشده است. وضعیت رسمی: **PARTIAL / NOT CODE-READY** تا review و مجوز صریح.

@@ -46,3 +46,9 @@
 - `SP01-02…05`: اجرای آینده سناریوهای `TRN-TECH-003` در هسته .NET با synthetic-only، deny-by-default، append-only audit و rollback atomicity.
 - مؤلفه **Python AI، مدل/Training/Inference و هر اتصال واقعی** خارج از Sprint 01 باقی می‌ماند و تنها contract boundary آینده در Technical ثبت می‌شود.
 - **گیت Code هنوز OPEN**: قرارداد نسخه‌دار و تست، پشته اجرایی/نسخه‌ها، CI و Review فنی مستقل، سپس اجازه صریح Code؛ هیچ Stage/QA/Production یا Merge مجاز نشده است.
+
+## Candidate execution baseline — TRN-TECH-006/007/008 (۲۰۲۶-۱۰-۰۹)
+- **SP01-01**: [پشته .NET 10 کاندید](../technical/05-sprint-01-reproducible-stack-candidate.md) با SDK `10.0.401`، EF `10.0.12`، Npgsql provider `10.0.3`، PostgreSQL `18.6` و xUnit `4.0.1`؛ Release verification انجام شده ولی اجرای build/restore هنوز خیر.
+- **SP01-02/03/04**: [قرارداد .NET و سناریوهای امنیتی](../technical/06-sprint-01-dotnet-contracts-and-test-acceptance.md) با ۲۰ مورد اصلی و ۸ مورد تکمیلی پیشنهادی؛ rollback اتمیک و append-only باید در DB واقعی اثبات شوند.
+- **SP01-05**: CI شامل locked restore، static analysis، unit/contract/security، PostgreSQL migration/concurrency، synthetic-only isolation؛ [Gate](../technical/07-sprint-01-technical-gate-review.md) همچنان **NOT CODE-READY** است.
+- فقط بعد از تأیید قرارداد/نسخه‌ها و **دستور صریح Code Authorization**، پیاده‌سازی در PR جدید Draft آغاز شود؛ هیچ Python AI، Frontend، بیمه/پول/هویت/درمان واقعی در Sprint 01 فعال نیست.

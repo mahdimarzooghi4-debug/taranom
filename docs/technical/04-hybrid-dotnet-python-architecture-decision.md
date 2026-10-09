@@ -40,3 +40,6 @@
 ## ممنوعیت‌ها و عدم‌قطعیت‌ها
 
 این تصمیم **انتخاب نهایی نسخه/کتابخانه/ابر/DB/IdP/مدل AI، صدور مجوز پزشکی/مالی، قرارداد با بیمه‌گر، ورود به Code/Stage/QA/Release/Production یا Merge نیست**. PR Business #1 و Technical #2 باید **Draft/Open** بمانند. هدف عرضه رسمی جامع و سراسری پس از آمادگی واقعی پابرجاست.
+
+## بسته قابل بازتولید Sprint 01 — TRN-TECH-006/007/008 (۲۰۲۶-۱۰-۰۹)
+[پشته کاندید با نسخه‌های انتشار معتبر](05-sprint-01-reproducible-stack-candidate.md) شامل SDK `10.0.401`، runtime/EF `10.0.12`، provider `Npgsql EF 10.0.3`، PostgreSQL `18.6` و `xunit.v3 4.0.1` برای **هسته مصنوعی .NET** است؛ این‌ها **کاندید فنی و نه Code Stack تصویب‌شده/آزموده‌شده** هستند. [قرارداد داخلی و ۲۰+۸ سناریوی پیشنهادی](06-sprint-01-dotnet-contracts-and-test-acceptance.md) و [گیت بازبینی](07-sprint-01-technical-gate-review.md) نیز تدوین شدند. Python AI/Frontend و سرویس‌های بیرونی خارج از Sprint 01 هستند؛ **Code Authorization صادر نشده**.

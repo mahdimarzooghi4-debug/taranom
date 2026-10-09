@@ -30,3 +30,6 @@
 
 ## مالکیت فناوری پس از TRN-TECH-005 (۲۰۲۶-۱۰-۰۹)
 [مصوبه معماری ترکیبی](../technical/04-hybrid-dotnet-python-architecture-decision.md) برای `TRN-EP-01…10/12` جهت‌گیری **هسته عملیاتی C#/.NET** را پذیرفته است؛ `TRN-EP-11` فقط دارای **مؤلفه محاسباتی Python داخلی** با حاکمیت/مجوز و Human Promotion متعلق به هسته است. این نگاشت **به‌معنای آمادگی کدنویسی Epicهای حساس نیست**: همه مجوزها، قراردادهای واقعی، منابع معتبر، backend integration و safety gates مستقل باقی‌اند. `TRN-SP-01` فقط پایه .NET با داده ساختگی است؛ AI Python هنوز وارد Sprint نمی‌شود.
+
+## گیت‌های فنی صریح برای TRN-SP-01 — TRN-TECH-006/007/008 (۲۰۲۶-۱۰-۰۹)
+پشته نسخه‌دار [TRN-TECH-006](../technical/05-sprint-01-reproducible-stack-candidate.md)، آزمون‌های [TRN-TECH-007](../technical/06-sprint-01-dotnet-contracts-and-test-acceptance.md) و [گیت Technical](../technical/07-sprint-01-technical-gate-review.md) پشتوانه آینده `TRN-EP-01/02/12` هستند. **نسخه‌ها هنوز تأیید نهایی/آزموده نشده‌اند**؛ هزینه تست/امنیت و Code Authorization پیش‌شرط‌اند، نه بهانه‌ای برای شروع گردش مالی یا داده سلامت واقعی. سایر Epicها تحت قراردادهای تخصصی مربوطه BLOCKED می‌مانند.

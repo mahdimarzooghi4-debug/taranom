@@ -78,3 +78,6 @@
 
 ## تعیین زبان اجرای آینده Sprint 01 — TRN-TECH-005 (۲۰۲۶-۱۰-۰۹)
 [تصمیم معماری ترکیبی](04-hybrid-dotnet-python-architecture-decision.md) اجرای ownerهای **Identity & Access، Consent & Privacy، Audit & Operations** این Slice را در **هسته C#/.NET** قرار می‌دهد، نه Python/FastAPI. ۲۰ سناریوی `ID-01…08`، `C-01…06`، `A-01…05` و `B-01` بدون تغییر رفتار می‌مانند، اما transport، schema، atomicity و harness تست باید برای Stack نسخه‌دار .NET طراحی و بازبینی شوند. **هیچ Python AI worker یا AI runtime در Sprint 01 وارد اجرا نمی‌شود**. Production IdP، رضایت حقوقی، داده سلامت، gateway یا هر endpoint واقعی همچنان خارج از دامنه و BLOCKED است.
+
+## تکمیل آزمون‌پذیری روی .NET — TRN-TECH-007 (۲۰۲۶-۱۰-۰۹)
+[قرارداد داخلی .NET و الزامات PostgreSQL](06-sprint-01-dotnet-contracts-and-test-acceptance.md) ۲۰ سناریوی `ID-01…08 / C-01…06 / A-01…05 / B-01` را حفظ می‌کند و ۸ سناریوی مکمل `X-01…08` برای رقابت همزمان، replay, Audit atomicity و دورماندن Harness از Production **پیشنهاد** می‌کند. هنوز هیچ REST public contract، DTO نهایی، SQL schema یا آزمون اجراشده‌ای وجود ندارد. [پشته کاندید](05-sprint-01-reproducible-stack-candidate.md) بدون انتخاب قطعی و Code Authorization است.

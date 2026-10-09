@@ -35,3 +35,8 @@
 - [جهت‌گیری مصوب معماری](04-hybrid-dotnet-python-architecture-decision.md): هسته عملیاتی `C#/.NET`، مؤلفه AI داخلی `Python`. گیت T-01/T-03 و Audit برای Sprint 01 به **نسخه .NET قرارداد تستی، مدل transaction و suite قابل اجرا** تبدیل می‌شوند؛ زبان به‌تنهایی امنیت و atomicity را اثبات نمی‌کند.
 - گیت T-07 در Sprint 01 **اجرایی نیست**؛ قرارداد AI آینده باید کمینه‌سازی/قانونی‌بودن dataset، کنترل خطا/نسخه، fail-closed و جلوگیری از mutation مستقیم Python به حق عضو/بیمه/بالین را آزمون کند.
 - **OPEN قبل از Code:** .NET SDK و نسخه‌ها، persistence/ORM، transport/API/versioning، CI و review تست‌های امنیتی. هیچ IdP یا داده سلامت واقعی، endpoint بیرونی AI یا استنتاج خودکار مصوب نشده است.
+
+## شواهد پیشنهادی Sprint 01 — TRN-TECH-006/007/008 (۲۰۲۶-۱۰-۰۹)
+- [Version matrix](05-sprint-01-reproducible-stack-candidate.md): release-verified candidate SDK/EF/Npgsql/PostgreSQL/xUnit؛ بدون شواهد restore/build/test.
+- [Acceptance plan](06-sprint-01-dotnet-contracts-and-test-acceptance.md): ۲۰ آزمون مصوبِ طراحی + ۸ آزمون پیشنهادی اضافی برای امنیت/رقابت/rollback، با PostgreSQL واقعی تستی و عدم اعتماد به InMemory به‌جای DB constraint.
+- [Gate ledger](07-sprint-01-technical-gate-review.md): Technical **NOT CODE-READY**؛ DTO/schema و Code Authorization/CI هنوز OPEN. هیچ اتصال/داده واقعی و Stage/Release فعال نیست.
