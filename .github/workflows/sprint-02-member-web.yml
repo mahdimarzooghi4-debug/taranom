@@ -32,6 +32,9 @@ jobs:
           name: sprint02-member-dependency-lock
           path: apps/member-web/package-lock.json
           if-no-files-found: error
+      - name: Emit generated npm dependency lock for source control
+        run: |
+          node -e "const fs=require('fs'); process.stdout.write('TARANOM_NPM_LOCK_BEGIN='+JSON.stringify(JSON.parse(fs.readFileSync('package-lock.json','utf8')))+'=TARANOM_NPM_LOCK_END\\n')"
       - name: Typecheck and production build
         run: |
           npm run typecheck
