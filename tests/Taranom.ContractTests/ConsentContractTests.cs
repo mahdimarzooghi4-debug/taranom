@@ -175,6 +175,42 @@ public sealed class ConsentContractTests
     }
 
     [Fact]
+    public async Task A01_OnlyOwnTenantAndActorAuditCanBeRead()
+    {
+        var ctx = await SetupAsync();
+        await using var _ = ctx.DataSource;
+        var token = TestContext.Current.CancellationToken;
+        await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:audit-own-grant",
+            true, ct: token);
+        var own = await ctx.Store.ReadOwnAuditAsync(ctx.Principal, ctx.Subject, ctx.Tenant, ct: token);
+        Assert.Contains(own, x => x.Action == "GRANT_TEST" && x.Decision == "RECORDED");
+        Assert.All(own, x => Assert.Contains(x.Action, new[]
+            { "ACCESS_POLICY_TEST", "GRANT_TEST", "WITHDRAW_TEST" }));
+
+        var stranger = new SyntheticPrincipal("test:auditor-stranger",
+            "test:member-stranger", ctx.Tenant, "MEMBER_TEST", true);
+        var foreign = await ctx.Store.ReadOwnAuditAsync(stranger, stranger.Member,
+            ctx.Tenant, ct: token);
+        Assert.DoesNotContain(foreign, x => x.Action == "GRANT_TEST");
+        var denied = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ctx.Store.ReadOwnAuditAsync(stranger, ctx.Subject, ctx.Tenant, ct: token));
+        Assert.Equal("DENY", denied.Message);
+
+        var sponsor = new SyntheticPrincipal("test:audit-sponsor",
+            ctx.Subject, ctx.Tenant, "SPONSOR_TEST", true);
+        denied = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ctx.Store.ReadOwnAuditAsync(sponsor, ctx.Subject, ctx.Tenant, ct: token));
+        Assert.Equal("DENY", denied.Message);
+
+        var otherTenant = new SyntheticPrincipal(ctx.Principal.Actor,
+            ctx.Subject, "test:unrelated-tenant", "MEMBER_TEST", true);
+        var isolated = await ctx.Store.ReadOwnAuditAsync(otherTenant, ctx.Subject,
+            otherTenant.Tenant, ct: token);
+        Assert.DoesNotContain(isolated, x => x.Action == "GRANT_TEST");
+    }
+
+    [Fact]
     public async Task X08_CanarySecretsNeverAppearAsPlaintextAuditMetadataOrDenial()
     {
         var ctx = await SetupAsync();

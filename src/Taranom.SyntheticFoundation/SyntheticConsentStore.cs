@@ -207,6 +207,32 @@ public sealed class SyntheticConsentStore
         return value is bool granted && granted;
     }
 
+    // Audited, nonpublic synthetic-only read projection. A principal can only read its own
+    // pseudonymous actor audit rows within its own tenant; no raw request or PHI is projected.
+    internal async Task<IReadOnlyList<SyntheticAuditView>> ReadOwnAuditAsync(
+        SyntheticPrincipal? principal, string? subject, string? tenant,
+        CancellationToken ct = default)
+    {
+        var access = await EvaluateAccessAsync(principal, subject, tenant, "READ_OWN_TEST_CONSENT", ct);
+        if (!access.Allowed || principal is null || !SyntheticAccessPolicy.IsSynthetic(principal.Actor) ||
+            !SyntheticAccessPolicy.IsSynthetic(tenant))
+            throw new InvalidOperationException("DENY");
+
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var command = NewCommand(connection, null, """
+            SELECT audit_ref, action_code, decision_code, occurred_at
+            FROM synthetic_audit
+            WHERE tenant_ref = @tenant AND actor_ref = @actor
+            ORDER BY occurred_at, audit_ref
+            """, ("tenant", AuditRef(tenant!)), ("actor", AuditRef(principal.Actor)));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var items = new List<SyntheticAuditView>();
+        while (await reader.ReadAsync(ct))
+            items.Add(new SyntheticAuditView(reader.GetGuid(0), reader.GetString(1),
+                reader.GetString(2), reader.GetFieldValue<DateTimeOffset>(3)));
+        return items;
+    }
+
     // Test-only counts; these are not a public audit projection.
     internal async Task<int> DomainAuditCountAsync(CancellationToken ct = default)
     {
@@ -254,3 +280,6 @@ public sealed class SyntheticConsentStore
         return await command.ExecuteScalarAsync(ct);
     }
 }
+
+// Test-only projection; no actor/tenant identifiers, untrusted labels or payload content.
+internal sealed record SyntheticAuditView(Guid AuditRef, string Action, string Decision, DateTimeOffset OccurredAt);
