@@ -29,6 +29,17 @@ static async Task ExpectSqlError(Func<Task> action, string sqlState, string erro
     throw new Exception("TEST_FAILURE: expected PostgreSQL error " + sqlState + "/" + error + " for " + message);
 }
 
+static async Task ExpectSqlState(Func<Task> action, string sqlState, string message)
+{
+    try { await action(); }
+    catch (PostgresException ex) when (ex.SqlState == sqlState)
+    {
+        Console.WriteLine("PASS " + message);
+        return;
+    }
+    throw new Exception("TEST_FAILURE: expected PostgreSQL SQLSTATE " + sqlState + " for " + message);
+}
+
 var alice = new SyntheticPrincipal("test:actor-alice", "test:member-alice", "test:tenant-A", "MEMBER_TEST", true);
 var other = new SyntheticPrincipal("test:actor-bob", "test:member-bob", "test:tenant-A", "MEMBER_TEST", true);
 var sponsor = new SyntheticPrincipal("test:actor-sponsor", "test:member-alice", "test:tenant-A", "SPONSOR_TEST", true);
@@ -45,9 +56,38 @@ Check(!SyntheticAccessPolicy.Evaluate(other, "test:member-alice", "test:tenant-A
 
 var connectionString = Environment.GetEnvironmentVariable("TARANOM_TEST_PG")
     ?? throw new InvalidOperationException("TARANOM_TEST_PG must point only to isolated synthetic PostgreSQL");
-await using var dataSource = NpgsqlDataSource.Create(connectionString);
+await using var adminDataSource = NpgsqlDataSource.Create(connectionString);
+var schemaOwner = new SyntheticConsentStore(adminDataSource);
+await schemaOwner.InitializeTestSchemaAsync();
+// Privilege separation is real even for synthetic fixtures: the application uses a
+// non-owner PostgreSQL role. This hard-coded credential exists only in this ephemeral
+// CI test database; no production application, password or provider is created.
+await using (var adminCn = await adminDataSource.OpenConnectionAsync())
+{
+    await using var grant = new NpgsqlCommand("""
+        DO $role$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'taranom_sprint01_runtime') THEN
+                CREATE ROLE taranom_sprint01_runtime LOGIN PASSWORD 'only_ephemeral_synthetic_test';
+            END IF;
+        END;
+        $role$;
+        GRANT USAGE ON SCHEMA public TO taranom_sprint01_runtime;
+        REVOKE ALL ON synthetic_audit, synthetic_consent_evidence,
+            synthetic_consent_stream, synthetic_request_replay FROM PUBLIC;
+        GRANT SELECT, INSERT, UPDATE ON synthetic_consent_stream TO taranom_sprint01_runtime;
+        GRANT SELECT, INSERT ON synthetic_consent_evidence, synthetic_request_replay,
+            synthetic_audit TO taranom_sprint01_runtime;
+        """, adminCn);
+    await grant.ExecuteNonQueryAsync();
+}
+var runtimeConnection = new NpgsqlConnectionStringBuilder(connectionString)
+{
+    Username = "taranom_sprint01_runtime",
+    Password = "only_ephemeral_synthetic_test"
+};
+await using var dataSource = NpgsqlDataSource.Create(runtimeConnection.ConnectionString);
 var store = new SyntheticConsentStore(dataSource);
-await store.InitializeTestSchemaAsync();
 var subject = "test:member-alice";
 var tenant = "test:tenant-A";
 var scope = "test:private";
@@ -107,20 +147,41 @@ var outcomes = await Task.WhenAll(new[] { win1, win2 }.Select(async x =>
 Check(outcomes.Count(x => x) == 1, "X-01 concurrent version race exactly one winner");
 Check(await store.EvaluateAsync(alice, subject, tenant, care, scope), "X-05 fresh consent state visible");
 
+await using (var cn = await adminDataSource.OpenConnectionAsync())
+{
+    await using var sql = new NpgsqlCommand("UPDATE synthetic_audit SET decision_code='ALTERED'", cn);
+    await ExpectSqlError(async () => { await sql.ExecuteNonQueryAsync(); }, "P0001", "AUDIT_APPEND_ONLY",
+        "A-02 X-04 DB audit trigger blocks owner update");
+}
+// Separately prove that the synthetic application role cannot bypass the trigger.
 await using (var cn = await dataSource.OpenConnectionAsync())
 {
     await using var sql = new NpgsqlCommand("UPDATE synthetic_audit SET decision_code='ALTERED'", cn);
-    await ExpectSqlError(async () => { await sql.ExecuteNonQueryAsync(); }, "P0001", "AUDIT_APPEND_ONLY", "A-02 X-04 DB audit update prevented");
+    await ExpectSqlState(async () => { await sql.ExecuteNonQueryAsync(); }, "42501",
+        "A-02 runtime PostgreSQL role has no audit UPDATE permission");
+}
+await using (var cn = await dataSource.OpenConnectionAsync())
+{
+    await using var sql = new NpgsqlCommand("DROP TRIGGER synthetic_audit_immutable ON synthetic_audit", cn);
+    await ExpectSqlState(async () => { await sql.ExecuteNonQueryAsync(); }, "42501",
+        "A-02 runtime role cannot disable the append-only trigger");
+}
+await using (var cn = await adminDataSource.OpenConnectionAsync())
+{
+    await using var sql = new NpgsqlCommand("DELETE FROM synthetic_audit", cn);
+    await ExpectSqlError(async () => { await sql.ExecuteNonQueryAsync(); }, "P0001", "AUDIT_APPEND_ONLY",
+        "A-02 X-04 DB audit delete trigger prevents owner mutation");
 }
 await using (var cn = await dataSource.OpenConnectionAsync())
 {
     await using var sql = new NpgsqlCommand("DELETE FROM synthetic_audit", cn);
-    await ExpectSqlError(async () => { await sql.ExecuteNonQueryAsync(); }, "P0001", "AUDIT_APPEND_ONLY", "A-02 X-04 DB audit delete prevented");
+    await ExpectSqlState(async () => { await sql.ExecuteNonQueryAsync(); }, "42501",
+        "A-02 runtime PostgreSQL role has no audit DELETE permission");
 }
 
 // Failure injection: if audit persistence fails, the consent mutation and stream version must roll back.
 var priorAuditCount = await store.AuditCountAsync();
-await using (var cn = await dataSource.OpenConnectionAsync())
+await using (var cn = await adminDataSource.OpenConnectionAsync())
 {
     await using var install = new NpgsqlCommand("""
         CREATE OR REPLACE FUNCTION synthetic_block_audit_inserts() RETURNS trigger
@@ -141,7 +202,7 @@ try
 }
 finally
 {
-    await using var cn = await dataSource.OpenConnectionAsync();
+    await using var cn = await adminDataSource.OpenConnectionAsync();
     await using var cleanup = new NpgsqlCommand("""
         DROP TRIGGER IF EXISTS synthetic_test_audit_failure ON synthetic_audit;
         DROP FUNCTION IF EXISTS synthetic_block_audit_inserts();
@@ -163,10 +224,17 @@ await ExpectDenial(async () =>
 }, "INVALID_PURPOSE", "C-05 unknown purpose cannot grant");
 
 // Evidence history, like audit records, is insert-only even when accessed through SQL.
+await using (var cn = await adminDataSource.OpenConnectionAsync())
+{
+    await using var sql = new NpgsqlCommand("DELETE FROM synthetic_consent_evidence", cn);
+    await ExpectSqlError(async () => { await sql.ExecuteNonQueryAsync(); }, "P0001", "AUDIT_APPEND_ONLY",
+        "A-02 consent evidence protected even against table owner");
+}
 await using (var cn = await dataSource.OpenConnectionAsync())
 {
     await using var sql = new NpgsqlCommand("DELETE FROM synthetic_consent_evidence", cn);
-    await ExpectSqlError(async () => { await sql.ExecuteNonQueryAsync(); }, "P0001", "AUDIT_APPEND_ONLY", "A-02 DB consent history delete rejected");
+    await ExpectSqlState(async () => { await sql.ExecuteNonQueryAsync(); }, "42501",
+        "A-02 runtime role has no consent history DELETE privilege");
 }
 
 Console.WriteLine("PASS synthetic-only Sprint 01 checks completed");
