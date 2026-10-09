@@ -54,3 +54,5 @@ Business → Technical → Scrum / Product Backlog → Sprint → Code → Code 
 - **مدت انتظار دقیق:** سه ماه تقویمی نیست؛ پس از **۹۰ روز کامل (۹۰ دوره ۲۴ساعته)** از مبدأ معتبر عضویت، مصرف درمانی می‌تواند با احراز شروط دیگر ممکن شود. [TRN-BIZ-015](docs/decisions/TRN-BIZ-015-ninety-full-day-waiting-period.md). **مبدأ، تأیید و فعال‌سازی رسمی عضویت است نه صرف ساخت حساب** ([TRN-BIZ-016](docs/decisions/TRN-BIZ-016-official-membership-activation-starts-wait.md)).
 
 - **مصوبه TRN-BIZ-016 — رویداد شروع شمارش ۹۰ روز:** **لحظه تأیید و فعال‌سازی رسمی عضویت توسط ترنم**، مبدأ دوره انتظار مصرف درمانی است؛ ایجاد حساب کاربری به‌تنهایی آن را آغاز نمی‌کند. [سند تصمیم](docs/decisions/TRN-BIZ-016-official-membership-activation-starts-wait.md). مسئول و سازوکار فعال‌سازی هنوز در TRN-DEC-031 باز است.
+
+- **TRN-BIZ-017 — جهت‌گیری فعال‌سازی خودکار مشروط:** اصل فعال‌سازی رسمی عضویت **پس از احراز خودکار همه شرایط مصوب** پذیرفته شده، اما **خودِ شروط، کنترل‌ها و سازوکار اجرایی هنوز تأیید نشده‌اند**. [ثبت تصمیم](docs/decisions/TRN-BIZ-017-conditional-automatic-membership-activation.md). پرسش بعدی درباره الزام احراز هویت معتبر است (TRN-DEC-032) و وابستگی فعال‌سازی به حق عضویت هنوز باز است.
