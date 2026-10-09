@@ -40,7 +40,7 @@ internal static class SyntheticAccessPolicy
         if (!string.Equals(principal.Member, subject, StringComparison.Ordinal) ||
             !string.Equals(principal.Tenant, tenant, StringComparison.Ordinal))
             return AccessDecision.Denied("SUBJECT_SCOPE_CONFLICT");
-        if (action is not ("READ_OWN_TEST_PROFILE" or "READ_OWN_TEST_CONSENT" or "CHANGE_OWN_TEST_CONSENT"))
+        if (action is not ("READ_OWN_TEST_PROFILE" or "READ_OWN_TEST_CONSENT" or "CHANGE_OWN_TEST_CONSENT" or "READ_OWN_TEST_AUDIT"))
             return AccessDecision.Denied("ACTION_DENIED");
         return new AccessDecision(true, "EXPLICIT_SYNTHETIC_ALLOW");
     }

@@ -50,6 +50,19 @@ public sealed class AccessPolicyTests
             "test:member-a", "test:tenant-a", "UNREVIEWED_FINANCE_ACTION").Reason);
 
     [Fact]
+    public void A01_ExplicitAuditReadActionIsScoped()
+    {
+        Assert.True(SyntheticAccessPolicy.Evaluate(Alice(), "test:member-a",
+            "test:tenant-a", "READ_OWN_TEST_AUDIT").Allowed);
+        Assert.False(SyntheticAccessPolicy.Evaluate(Alice(role: "SPONSOR_TEST"),
+            "test:member-a", "test:tenant-a", "READ_OWN_TEST_AUDIT").Allowed);
+        Assert.False(SyntheticAccessPolicy.Evaluate(Alice(), "test:member-b",
+            "test:tenant-a", "READ_OWN_TEST_AUDIT").Allowed);
+        Assert.False(SyntheticAccessPolicy.Evaluate(Alice(), "test:member-a",
+            "test:tenant-a", "READ_ANY_TEST_AUDIT").Allowed);
+    }
+
+    [Fact]
     public void X06_OnlyExplicitSyntheticOriginCanGrant() =>
         Assert.False(SyntheticAccessPolicy.Evaluate(Alice(trusted: false),
             "test:member-a", "test:tenant-a", "CHANGE_OWN_TEST_CONSENT").Allowed);

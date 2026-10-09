@@ -207,30 +207,52 @@ public sealed class SyntheticConsentStore
         return value is bool granted && granted;
     }
 
-    // Audited, nonpublic synthetic-only read projection. A principal can only read its own
-    // pseudonymous actor audit rows within its own tenant; no raw request or PHI is projected.
-    internal async Task<IReadOnlyList<SyntheticAuditView>> ReadOwnAuditAsync(
+
+    // Synthetic-only, nonpublic projection. Explicit logged permission plus keyset bounds.
+    internal async Task<SyntheticAuditPage> ReadOwnAuditAsync(
         SyntheticPrincipal? principal, string? subject, string? tenant,
-        CancellationToken ct = default)
+        int pageSize = 25, SyntheticAuditCursor? after = null, CancellationToken ct = default)
     {
-        var access = await EvaluateAccessAsync(principal, subject, tenant, "READ_OWN_TEST_CONSENT", ct);
-        if (!access.Allowed || principal is null || !SyntheticAccessPolicy.IsSynthetic(principal.Actor) ||
+        var decision = await EvaluateAccessAsync(principal, subject, tenant, "READ_OWN_TEST_AUDIT", ct);
+        if (!decision.Allowed || principal is null ||
+            !SyntheticAccessPolicy.IsSynthetic(principal.Actor) ||
             !SyntheticAccessPolicy.IsSynthetic(tenant))
             throw new InvalidOperationException("DENY");
+        if (pageSize is < 1 or > 100)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "INVALID_TEST_PAGE_SIZE");
+        if (after is not null && (after.AuditRef == Guid.Empty || after.OccurredAt.Offset != TimeSpan.Zero))
+            throw new InvalidOperationException("INVALID_TEST_AUDIT_CURSOR");
 
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var command = NewCommand(connection, null, """
+        const string firstSql = """
             SELECT audit_ref, action_code, decision_code, occurred_at
-            FROM synthetic_audit
-            WHERE tenant_ref = @tenant AND actor_ref = @actor
-            ORDER BY occurred_at, audit_ref
-            """, ("tenant", AuditRef(tenant!)), ("actor", AuditRef(principal.Actor)));
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        var items = new List<SyntheticAuditView>();
+            FROM synthetic_audit WHERE tenant_ref=@tenant AND actor_ref=@actor
+            ORDER BY occurred_at, audit_ref LIMIT @take
+            """;
+        const string nextSql = """
+            SELECT audit_ref, action_code, decision_code, occurred_at
+            FROM synthetic_audit WHERE tenant_ref=@tenant AND actor_ref=@actor
+              AND (occurred_at > @afterTime OR
+                   (occurred_at = @afterTime AND audit_ref > @afterId))
+            ORDER BY occurred_at, audit_ref LIMIT @take
+            """;
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var cmd = after is null
+            ? NewCommand(connection, null, firstSql,
+                ("tenant", AuditRef(tenant!)), ("actor", AuditRef(principal.Actor)),
+                ("take", pageSize + 1))
+            : NewCommand(connection, null, nextSql,
+                ("tenant", AuditRef(tenant!)), ("actor", AuditRef(principal.Actor)),
+                ("take", pageSize + 1), ("afterTime", after.OccurredAt.UtcDateTime),
+                ("afterId", after.AuditRef));
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var records = new List<SyntheticAuditView>(pageSize + 1);
         while (await reader.ReadAsync(ct))
-            items.Add(new SyntheticAuditView(reader.GetGuid(0), reader.GetString(1),
+            records.Add(new SyntheticAuditView(reader.GetGuid(0), reader.GetString(1),
                 reader.GetString(2), reader.GetFieldValue<DateTimeOffset>(3)));
-        return items;
+        if (records.Count <= pageSize) return new SyntheticAuditPage(records, null);
+        records.RemoveAt(pageSize);
+        var last = records[^1];
+        return new SyntheticAuditPage(records, new SyntheticAuditCursor(last.OccurredAt, last.AuditRef));
     }
 
     // Test-only counts; these are not a public audit projection.
@@ -283,3 +305,5 @@ public sealed class SyntheticConsentStore
 
 // Test-only projection; no actor/tenant identifiers, untrusted labels or payload content.
 internal sealed record SyntheticAuditView(Guid AuditRef, string Action, string Decision, DateTimeOffset OccurredAt);
+internal sealed record SyntheticAuditCursor(DateTimeOffset OccurredAt, Guid AuditRef);
+internal sealed record SyntheticAuditPage(IReadOnlyList<SyntheticAuditView> Items, SyntheticAuditCursor? Next);

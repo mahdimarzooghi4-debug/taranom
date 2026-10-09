@@ -184,15 +184,15 @@ public sealed class ConsentContractTests
             SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:audit-own-grant",
             true, ct: token);
         var own = await ctx.Store.ReadOwnAuditAsync(ctx.Principal, ctx.Subject, ctx.Tenant, ct: token);
-        Assert.Contains(own, x => x.Action == "GRANT_TEST" && x.Decision == "RECORDED");
-        Assert.All(own, x => Assert.Contains(x.Action, new[]
+        Assert.Contains(own.Items, x => x.Action == "GRANT_TEST" && x.Decision == "RECORDED");
+        Assert.All(own.Items, x => Assert.Contains(x.Action, new[]
             { "ACCESS_POLICY_TEST", "GRANT_TEST", "WITHDRAW_TEST" }));
 
         var stranger = new SyntheticPrincipal("test:auditor-stranger",
             "test:member-stranger", ctx.Tenant, "MEMBER_TEST", true);
         var foreign = await ctx.Store.ReadOwnAuditAsync(stranger, stranger.Member,
             ctx.Tenant, ct: token);
-        Assert.DoesNotContain(foreign, x => x.Action == "GRANT_TEST");
+        Assert.DoesNotContain(foreign.Items, x => x.Action == "GRANT_TEST");
         var denied = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             ctx.Store.ReadOwnAuditAsync(stranger, ctx.Subject, ctx.Tenant, ct: token));
         Assert.Equal("DENY", denied.Message);
@@ -207,7 +207,36 @@ public sealed class ConsentContractTests
             ctx.Subject, "test:unrelated-tenant", "MEMBER_TEST", true);
         var isolated = await ctx.Store.ReadOwnAuditAsync(otherTenant, ctx.Subject,
             otherTenant.Tenant, ct: token);
-        Assert.DoesNotContain(isolated, x => x.Action == "GRANT_TEST");
+        Assert.DoesNotContain(isolated.Items, x => x.Action == "GRANT_TEST");
+    }
+
+    [Fact]
+    public async Task A01_BoundedKeysetAuditPagingAndInvalidCursor()
+    {
+        var c = await SetupAsync();
+        await using var _ = c.DataSource;
+        var ct = TestContext.Current.CancellationToken;
+        for (var i = 0; i < 7; i++)
+            Assert.True((await c.Store.EvaluateAccessAsync(c.Principal, c.Subject, c.Tenant,
+                "READ_OWN_TEST_PROFILE", ct: ct)).Allowed);
+        var first = await c.Store.ReadOwnAuditAsync(c.Principal, c.Subject, c.Tenant,
+            pageSize: 3, ct: ct);
+        Assert.Equal(3, first.Items.Count);
+        Assert.NotNull(first.Next);
+        var second = await c.Store.ReadOwnAuditAsync(c.Principal, c.Subject, c.Tenant,
+            pageSize: 3, after: first.Next, ct: ct);
+        Assert.Equal(3, second.Items.Count);
+        Assert.DoesNotContain(second.Items, x => first.Items.Any(y => x.AuditRef == y.AuditRef));
+        var invalid = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            c.Store.ReadOwnAuditAsync(c.Principal, c.Subject, c.Tenant, pageSize: 101, ct: ct));
+        Assert.Equal("pageSize", invalid.ParamName);
+        invalid = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            c.Store.ReadOwnAuditAsync(c.Principal, c.Subject, c.Tenant, pageSize: 0, ct: ct));
+        Assert.Equal("pageSize", invalid.ParamName);
+        var cursorError = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            c.Store.ReadOwnAuditAsync(c.Principal, c.Subject, c.Tenant,
+                after: new SyntheticAuditCursor(DateTimeOffset.UtcNow, Guid.Empty), ct: ct));
+        Assert.Equal("INVALID_TEST_AUDIT_CURSOR", cursorError.Message);
     }
 
     [Fact]
