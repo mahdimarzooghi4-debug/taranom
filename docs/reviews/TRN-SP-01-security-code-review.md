@@ -72,3 +72,25 @@ These are **code and test fixes**, not evidence that security has been independe
 - **Test accounting:** **24 discovered, 24 passed, 0 failures/0 errors/0 skipped** in [XML report](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37955941964/artifacts/11627991665); existing smoke tests executed in addition. Added cancellation-aware async tests and analyzer-compliant assertion without suppressing warnings.
 - **Precise case/gap matrix:** [TRN-SP-01 acceptance ledger](TRN-SP-01-acceptance-coverage-and-ci-evidence.md). The counts **do not prove completion of every original 20 + 8 requirement**: `A-04, B-01, C-06, X-06` remain partial, `X-08` requires automated token/PHI leak tests, plus independent review remains pending.
 - **Result:** CR-06 machine-readable test evidence implemented; **Code Review formal independent approval PENDING**, PR remains Draft/Open; no Stage/QA Gate/Production, no member web-app code.
+
+## 8. CR-07 — opaque synthetic audit references and X-08 canary test (2026-10-09)
+
+- **Source issue:** append-only synthetic audit previously stored caller-supplied `test:` actor, tenant and request-correlation labels as plaintext. Even though the domain is synthetic, those caller labels could contain fake sensitive-looking strings, invalidating the claimed `X-08` audit-minimization guard.
+- **Fix:** both policy allow/deny and grant/withdraw audit rows store deterministic domain-separated SHA-256-based **opaque test references** for actor and tenant; domain audit correlation uses the same treatment. Scoped count queries transform the tenant filter through the same function. Raw caller labels and raw request bodies are not inserted into these audit fields.
+- **Test:** named xUnit `X08_CanarySecretsNeverAppearAsPlaintextAuditMetadataOrDenial` injects *fake canary token/note labels* and an unknown action. It inspects the actual PostgreSQL audit metadata and denial output for absence of the canary and expects four correctly categorized audit events (policy ALLOW, mutation ALLOW, domain GRANT, policy DENY).
+- **Limitation:** deterministic hashes are pseudonymous references and may allow correlation/dictionary attacks. They are **not legal anonymization**, and this test does not inspect every operating-system/application log or all other synthetic database tables. No true medical/secret data may be used in this test-only Sprint.
+
+## 9. CR-08 — own-actor/tenant-scoped audit projection (2026-10-09)
+
+- **Source issue:** synthetic audit had only privileged test count queries, not a restricted contract for viewing minimal audit evidence.
+- **Fix:** a **nonpublic, internal test-only** `ReadOwnAuditAsync` calls the durable audited access decision first, then queries only audit events matching the **authorized synthetic principal's opaque actor reference and tenant reference**. The read projection contains event reference, allowlisted action/decision and timestamp; it does not project actor/tenant identifiers, correlation, input payload or PHI.
+- **Test:** `A01_OnlyOwnTenantAndActorAuditCanBeRead` confirms own grant activity is visible, another actor in the same tenant cannot see it, cross-subject and sponsor requests are denied, and the same actor reference in another tenant cannot retrieve the prior tenant's grant.
+- **Limitation:** this is *not* a legal member-data subject-access response, public audit API or actual medical/finance audit reporting. Retention, independent auditor authority, page bounds and service-level access remain **OPEN**.
+
+### Final exact-code-SHA evidence for CR-07/08
+
+- **Reviewed code SHA:** `ee3d9aea0f17d9b2a197ef680a6aed7398133d36` after the prior X-08 test assertion correction (`d31f095d3b84381cbf2ab8bcce96ec7dd4ca8e6f`).
+- [PR CI 37957674164](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37957674164), [Push CI 37957667981](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37957667981): **COMPLETED/SUCCESS for the exact same code SHA**.
+- [xUnit XML artifact 11629205229](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37957674164/artifacts/11629205229): **26 discovered / 26 passed / 0 failed / 0 errors / 0 skipped**. Real PostgreSQL Smoke tests continue in addition.
+- Earlier X-08 assertion initially expected 3 rows, while the correct flow produced 4; the failure was fixed and confirmed green. No failures have been concealed.
+- **Independent human Code Review remains PENDING.** CR-07 and CR-08 improve test-only scoped controls; they do not complete all original contract cases or certify a Production identity/consent system. Keep PR #1, #2, #3 Draft/Open/unmerged. No Stage/QA/Release/Production.

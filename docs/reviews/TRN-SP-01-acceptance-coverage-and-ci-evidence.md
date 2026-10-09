@@ -38,3 +38,13 @@
 5. **Member Web App:** mandatory `TRN-EP-13`, not implemented and **not authorized in Sprint 01**. The next member frontend Sprint requires its own Code authorization and actual read-model contracts; no fake wallet/insurer/provider data.
 
 **Do not Merge #1/#2/#3, mark Ready for Review, enter Stage/QA/Release or deploy Production.**
+
+## Security closure supplement — CR-07/08 (2026-10-09)
+
+- **Updated exact code SHA:** `ee3d9aea0f17d9b2a197ef680a6aed7398133d36`; [PR CI 37957674164](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37957674164), [Push CI 37957667981](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37957667981) both successful.
+- **Machine-readable test evidence:** [XML artifact 11629205229](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/37957674164/artifacts/11629205229) with **26 passed / 0 failed / 0 error / 0 skipped**; original Smoke tests still pass. Previous table's 24-case count describes an earlier code SHA and is preserved as history.
+- `X-08`: **partially closed for allowlisted synthetic PostgreSQL audit metadata and fixed denial messages**, including fake canary injection. Broader structured log capture, secret-scanner coverage, non-audit tables and real PHI handling are still outside proven scope.
+- `A-01`: **more complete for synthetic own-actor/own-tenant reads** through a nonpublic, access-checked projected read; real clinical audit reporting, pagination/retention and legal requestor roles remain OPEN.
+- `A-04`: existing policy-audit fail-closed behavior plus canary metadata test; still no complete test of arbitrary application/server error-log redaction.
+- `B-01, C-06, X-06`: unchanged partial evidence; real adapters, financial or clinical operations and actual Production noninclusion remain unverified.
+- No independent human approval of Code Review and no Member Web App implementation yet. `TRN-EP-13` remains **mandatory**, separately authorized later. No Merge/Stage/QA/Release/Production.
