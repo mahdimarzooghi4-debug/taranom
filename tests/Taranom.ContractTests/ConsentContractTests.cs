@@ -220,7 +220,8 @@ public sealed class ConsentContractTests
             Assert.DoesNotContain("CANARY", reader.GetString(3), StringComparison.Ordinal);
             Assert.DoesNotContain("CANARY", reader.GetString(4), StringComparison.Ordinal);
         }
-        Assert.Equal(3, rows);
+        // One explicit ALLOW, one mutation-authorization ALLOW, one domain GRANT and one DENY.
+        Assert.Equal(4, rows);
     }
 
     [Fact]
