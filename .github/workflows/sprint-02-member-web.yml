@@ -25,16 +25,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install exact direct dependencies
-        run: npm install --no-audit --no-fund --ignore-scripts
-      - name: Preserve npm transitive lockfile for review
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: sprint02-member-dependency-lock
-          path: apps/member-web/package-lock.json
-          if-no-files-found: error
-      - name: Emit generated npm dependency lock for source control
-        run: |
-          node -e "const fs=require('fs'); process.stdout.write('TARANOM_NPM_LOCK_BEGIN='+JSON.stringify(JSON.parse(fs.readFileSync('package-lock.json','utf8')))+'=TARANOM_NPM_LOCK_END\\n')"
+        run: npm ci --no-audit --no-fund --ignore-scripts
       - name: Typecheck and production build
         run: |
           npm run typecheck
