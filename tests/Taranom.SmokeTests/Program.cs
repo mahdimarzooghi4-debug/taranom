@@ -78,4 +78,57 @@ await using (var cn = await dataSource.OpenConnectionAsync())
     await using var sql = new NpgsqlCommand("DELETE FROM synthetic_audit", cn);
     await ExpectError(async () => { await sql.ExecuteNonQueryAsync(); }, "A-02 X-04 DB audit delete prevented");
 }
+
+// Failure injection: if audit persistence fails, the consent mutation and stream version must roll back.
+var priorAuditCount = await store.AuditCountAsync();
+await using (var cn = await dataSource.OpenConnectionAsync())
+{
+    await using var install = new NpgsqlCommand("""
+        CREATE OR REPLACE FUNCTION synthetic_block_audit_inserts() RETURNS trigger
+        LANGUAGE plpgsql AS $
+        BEGIN RAISE EXCEPTION 'SYNTHETIC_AUDIT_UNAVAILABLE'; END; $;
+        DROP TRIGGER IF EXISTS synthetic_test_audit_failure ON synthetic_audit;
+        CREATE TRIGGER synthetic_test_audit_failure
+            BEFORE INSERT ON synthetic_audit
+            FOR EACH ROW EXECUTE FUNCTION synthetic_block_audit_inserts();
+        """, cn);
+    await install.ExecuteNonQueryAsync();
+}
+try
+{
+    await ExpectError(async () =>
+    {
+        await store.ChangeAsync(alice, subject, tenant, care, scope, 3, "test:audit-failure", false);
+    }, "A-03 X-03 failed audit insertion rejects whole consent command");
+}
+finally
+{
+    await using var cn = await dataSource.OpenConnectionAsync();
+    await using var cleanup = new NpgsqlCommand("""
+        DROP TRIGGER IF EXISTS synthetic_test_audit_failure ON synthetic_audit;
+        DROP FUNCTION IF EXISTS synthetic_block_audit_inserts();
+        """, cn);
+    await cleanup.ExecuteNonQueryAsync();
+}
+Check(await store.AuditCountAsync() == priorAuditCount, "A-03 audit failure creates no audit row");
+Check(await store.EvaluateAsync(alice, subject, tenant, care, scope),
+    "A-03 audit failure did not change consent state");
+var afterFailure = await store.ChangeAsync(alice, subject, tenant, care, scope, 3, "test:post-audit-failure", false);
+Check(afterFailure.Version == 4, "A-03 failed transaction did not advance version");
+Check(!await store.EvaluateAsync(alice, subject, tenant, care, scope), "C-04 post-withdrawal still denied");
+Check(!await store.EvaluateAsync(alice, subject, tenant, (SyntheticPurpose)12345, scope),
+    "C-05 unknown consent purpose denied");
+await ExpectError(async () =>
+{
+    await store.ChangeAsync(alice, subject, tenant, (SyntheticPurpose)12345, scope, 0,
+        "test:unknown-purpose", true);
+}, "C-05 unknown purpose cannot grant");
+
+// Evidence history, like audit records, is insert-only even when accessed through SQL.
+await using (var cn = await dataSource.OpenConnectionAsync())
+{
+    await using var sql = new NpgsqlCommand("DELETE FROM synthetic_consent_evidence", cn);
+    await ExpectError(async () => { await sql.ExecuteNonQueryAsync(); }, "A-02 DB consent history delete rejected");
+}
+
 Console.WriteLine("PASS synthetic-only Sprint 01 checks completed");

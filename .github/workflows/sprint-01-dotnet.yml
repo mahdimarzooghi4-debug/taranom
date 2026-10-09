@@ -46,3 +46,7 @@ jobs:
           test ! -d src/Taranom.AI
           test ! -d src/Taranom.Clinical
           test ! -d src/Taranom.Payments
+          test ! -d src/Taranom.Api
+          # The project contains no deployable API; only the contract library and smoke harness.
+          test "$(find src -name '*.csproj' | wc -l)" -eq 1
+          test "$(find tests -name '*.csproj' | wc -l)" -eq 1

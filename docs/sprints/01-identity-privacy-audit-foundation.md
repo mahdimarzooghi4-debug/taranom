@@ -62,3 +62,10 @@ The owner explicitly authorized **only** synthetic C#/.NET identity/access, sepa
 - New branch `sprint-01-dotnet-identity-consent-audit` stacked on `docs/technical-foundation-01`.
 - Test harness and fixtures never count as real identity/consent and must not be included in a production application.
 - Mandatory member Web App requirement is recorded in the backlog as `TRN-EP-13` but its code is explicitly **out of scope** of Sprint 01.
+
+## Hardening after initial green CI (Sprint 01 scope)
+
+- Test-only PostgreSQL consent store constructor restricted to friend smoke-test assembly; no externally constructible production consent provider.
+- Added a deliberately failing audit-trigger integration test to prove protected consent mutation rolls back on audit failure; added append-only evidence SQL refusal and invalid-purpose tests.
+- CI explicitly verifies absence of deployable API, AI, Clinical and Payment code projects.
+- The **Member Web App remains an obligatory separate Epic**, not hidden in Sprint 01 or treated as implemented. See [TRN-EP-13](../product/04-product-backlog.md).

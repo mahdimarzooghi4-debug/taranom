@@ -6,8 +6,17 @@ using Npgsql;
 namespace Taranom.SyntheticFoundation;
 
 // A test-only PostgreSQL-backed boundary; no API routes, clinical data or production adapters.
-public sealed class SyntheticConsentStore(NpgsqlDataSource dataSource)
+public sealed class SyntheticConsentStore
 {
+    private readonly NpgsqlDataSource dataSource;
+
+    // Not constructible from any deployable application assembly; smoke tests are a friend
+    // assembly, and cannot be treated as a real identity/consent provider.
+    internal SyntheticConsentStore(NpgsqlDataSource testDataSource)
+    {
+        dataSource = testDataSource;
+    }
+
     private const string SchemaSql = """
         CREATE TABLE IF NOT EXISTS synthetic_consent_stream (
             subject_ref text NOT NULL, purpose text NOT NULL, scope_ref text NOT NULL,
