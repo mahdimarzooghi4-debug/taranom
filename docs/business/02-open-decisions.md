@@ -30,7 +30,7 @@
 | TRN-DEC-021 | PARTIAL — six sources ACCEPTED, member allocation OPEN | **هر شش درآمد عملیاتی ترنم** منشأ تأمین اعتبار اعضا هستند؛ سه صندوق در PDF محاسبه اعتبار نمونه دارند، اما فرمول «انتقال شش درآمد به اعتبار اختصاصی» در سند کامل نشده؛ درصد/مبلغ انتساب و زمان تخصیص هنوز بازند | TRN-BUS-005، TRN-BIZ-004؛ قرارداد درآمد/تخصیص و تأیید مالی/حقوقی |
 | TRN-DEC-022 | PARTIAL — unified model + single wallet ACCEPTED; accounting proof OPEN | مدل سود سه صندوق **در مدل واحد تأمین اعتبار از شش درآمد ترنم ادغام می‌شود** و **برای هر عضو فقط یک کیف پول درمانی** وجود دارد؛ افزایش مستقل و مضاعف از سه صندوق مجاز نیست. نگاشت حسابداری سود و درآمد و اثبات عدم دوباره‌شماری هنوز باز است | TRN-BIZ-005؛ تکمیل TRN-BUS-005 و قرارداد مالی/حسابرسی |
 | TRN-DEC-023 | BLOCKER — backed credit and coverage | تعهد اعتبار انباشته چگونه در ترازنامه/تعهدات منعکس و با موجودی قابل پرداخت پشتیبانی می‌شود؟ چرا در صفحه ۶۱ «حق عضویت» با «پوشش درمانی» جمع شده است؟ | بررسی و اصلاح صورت‌های مالی/پوشش درمان با مسئول مالی، قرارداد مجاز و شواهد؛ TRN-BUS-005 |
-| TRN-DEC-024 | PARTIAL — categories ACCEPTED; settlement OPEN | مصرف کیف پول در **همه خدمات درمانی مجاز** مصوب شد. **روش تسویه با ارائه‌دهنده یا بازپرداخت به عضو**، اصالت اسناد، هماهنگی بیمه پایه/تکمیلی، منع پرداخت مضاعف و مسئولیت مالی هنوز تعیین نشده است | TRN-BIZ-007؛ قرارداد مصوب ارائه‌دهنده، بیمه، تسویه و کنترل مالی قبل از اجرا |
+| TRN-DEC-024 | PARTIAL — direct provider payment ACCEPTED; execution OPEN | **روش انحصاری فعلی پرداخت سهم کیف پول درمانی ترنم: پرداخت مستقیم به ارائه‌دهنده مجاز خدمت**؛ بازپرداخت هزینه درمان به عضو در این مسیر مصوب نیست (TRN-BIZ-008). دامنه مجازبودن ارائه‌دهنده (فقط طرف قرارداد یا هر دارای مجوز)، تأیید فاکتور، تعامل بیمه پایه/تکمیلی، سقف و زمان تسویه و منع پرداخت مضاعف OPEN | TRN-BIZ-008 و TRN-BUS-006؛ قراردادهای لازم ارائه‌دهنده/بیمه/پرداخت و تأیید حقوقی-مالی قبل از اجرا |
 
 ## مصوبات صریح ۲۰۲۶-۱۰-۰۸
 - TRN-DEC-006: تعداد و عنوان کانال‌های درآمدی، دقیقاً شش مورد. این تأیید شامل نرخ، محاسبه، حق عضویت و شناسایی درآمد نیست.
@@ -39,11 +39,12 @@
 - TRN-DEC-021: مشارکت **تمام شش منبع درآمد ترنم** در تأمین اعتبار پذیرفته شد؛ فرمول و سهم هنوز بازند.
 - TRN-DEC-022: **ادغام سه صندوق در مدل واحد شش‌منبعی و فقط یک کیف پول برای هر عضو** پذیرفته شد؛ صحت نگاشت حسابداری و منع دوباره‌شماری هنوز باید اثبات شود (TRN-BIZ-005).
 - TRN-DEC-015 (بخش زمان‌بندی): **انباشت از روز عضویت و ممنوعیت مصرف تا سپری‌شدن سه ماه** پذیرفته شد (TRN-BIZ-006).
-- TRN-DEC-015/024 (دامنه خدمات): **تمام خدمات درمانی مجاز**، از جمله ویزیت، دارو، آزمایش، تصویربرداری، بستری و جراحی در دامنه کیف پول مصوب است (TRN-BIZ-007)؛ مصداق و مدارک مجاز و روش تسویه OPEN.
+- TRN-DEC-015/024 (دامنه خدمات): **تمام خدمات درمانی مجاز**، از جمله ویزیت، دارو، آزمایش، تصویربرداری، بستری و جراحی مصوب است (TRN-BIZ-007)؛ مصداق و مدارک مجاز همچنان OPEN.
+- TRN-DEC-024 (مسیر پرداخت): **سهم ترنم مستقیماً به ارائه‌دهنده مجاز پرداخت می‌شود، نه به عضو به‌عنوان بازپرداخت** (TRN-BIZ-008). الزامات قراردادی، احراز ارائه‌دهنده، کنترل سهم بیمه‌ها و تسویه واقعی هنوز OPEN هستند.
 - ماهیت رسمی: **ترنم تعاونی نیست**؛ مثال قبلی صرفاً برای فهم بود (TRN-BIZ-004).
-- قراردادهای مرجع: `docs/decisions/TRN-BIZ-001-core-paradigm.md`، `docs/decisions/TRN-BIZ-002-member-treatment-benefit.md` و `docs/decisions/TRN-BIZ-003-individual-treatment-credit.md` و `docs/decisions/TRN-BIZ-004-noncooperative-six-income-sources.md` و `docs/decisions/TRN-BIZ-005-single-treatment-wallet.md` و `docs/decisions/TRN-BIZ-006-accrual-and-three-month-wait.md` و `docs/decisions/TRN-BIZ-007-all-permitted-medical-services.md`.
+- قراردادهای مرجع: `docs/decisions/TRN-BIZ-001-core-paradigm.md`، `docs/decisions/TRN-BIZ-002-member-treatment-benefit.md` و `docs/decisions/TRN-BIZ-003-individual-treatment-credit.md` و `docs/decisions/TRN-BIZ-004-noncooperative-six-income-sources.md` و `docs/decisions/TRN-BIZ-005-single-treatment-wallet.md` و `docs/decisions/TRN-BIZ-006-accrual-and-three-month-wait.md` و `docs/decisions/TRN-BIZ-007-all-permitted-medical-services.md` و `docs/decisions/TRN-BIZ-008-direct-provider-payment.md`.
 - ممیزی محاسبات منبع و شکاف‌های شش درآمد/اعتبار: `docs/business/05-six-revenue-member-credit-reconciliation.md` (SOURCE AUDIT، نه تصمیم مالی).
-- چرخه انباشت تا مصرف **یک کیف پول درمانی**: `docs/business/06-member-wallet-accrual-redemption-contract.md` (DRAFT)؛ قاعده «انباشت از روز عضویت، مصرف درمانی پس از سه ماه» در `TRN-BIZ-006` **ACCEPTED** است، باقی سازوکار مالی/درمانی باز است.
+- چرخه انباشت تا مصرف **یک کیف پول درمانی**: `docs/business/06-member-wallet-accrual-redemption-contract.md` (DRAFT)؛ قاعده زمان‌بندی TRN-BIZ-006، دامنه درمان TRN-BIZ-007 و **پرداخت مستقیم به ارائه‌دهنده مجاز TRN-BIZ-008** ACCEPTED هستند؛ اجرای مالی/درمانی و جزئیات تسویه OPEN.
 
 ## اصول ثبت
 - هر آیتم باز اجازه تعریف مقدار حدسی در API/DB/محاسبات نمی‌دهد.
