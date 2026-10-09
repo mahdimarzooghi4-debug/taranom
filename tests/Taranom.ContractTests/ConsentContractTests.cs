@@ -31,9 +31,9 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:care-grant", true);
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:care-grant", true, ct: TestContext.Current.CancellationToken);
         Assert.False(await ctx.Store.EvaluateAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.SecondaryAiResearchTest, ctx.Scope));
+            SyntheticPurpose.SecondaryAiResearchTest, ctx.Scope, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -42,9 +42,9 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:scope-grant", true);
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:scope-grant", true, ct: TestContext.Current.CancellationToken);
         Assert.False(await ctx.Store.EvaluateAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, "test:other-scope"));
+            SyntheticPurpose.CareCommunicationTest, "test:other-scope", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -53,9 +53,9 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:subject-grant", true);
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:subject-grant", true, ct: TestContext.Current.CancellationToken);
         Assert.False(await ctx.Store.EvaluateAsync(ctx.Principal, "test:other-member",
-            ctx.Tenant, SyntheticPurpose.CareCommunicationTest, ctx.Scope));
+            ctx.Tenant, SyntheticPurpose.CareCommunicationTest, ctx.Scope, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -64,11 +64,11 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         var result = await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, "test:share-grant", true);
+            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, "test:share-grant", true, ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, result.Version);
         Assert.False(result.Replayed);
         Assert.True(await ctx.Store.EvaluateAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.HealthDataShareTest, ctx.Scope));
+            SyntheticPurpose.HealthDataShareTest, ctx.Scope, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -77,12 +77,12 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:withdraw-grant", true);
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:withdraw-grant", true, ct: TestContext.Current.CancellationToken);
         var withdraw = await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 1, "test:withdraw", false);
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 1, "test:withdraw", false, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, withdraw.Version);
         Assert.False(await ctx.Store.EvaluateAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope));
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         Assert.False(await ctx.Store.EvaluateAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.SecondaryAiResearchTest, ctx.Scope));
+            SyntheticPurpose.SecondaryAiResearchTest, ctx.Scope, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -101,10 +101,10 @@ public sealed class ConsentContractTests
         await using var _ = ctx.DataSource;
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-                (SyntheticPurpose)909, ctx.Scope, 0, "test:cost-choice", true));
+                (SyntheticPurpose)909, ctx.Scope, 0, "test:cost-choice", true, ct: TestContext.Current.CancellationToken));
         Assert.Equal("INVALID_PURPOSE", error.Message);
         Assert.False(await ctx.Store.EvaluateAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.SecondaryAiResearchTest, ctx.Scope));
+            SyntheticPurpose.SecondaryAiResearchTest, ctx.Scope, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -113,9 +113,9 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         var a = await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, "test:replay-key", true);
+            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, "test:replay-key", true, ct: TestContext.Current.CancellationToken);
         var b = await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, "test:replay-key", true);
+            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, "test:replay-key", true, ct: TestContext.Current.CancellationToken);
         Assert.False(a.Replayed);
         Assert.True(b.Replayed);
         Assert.Equal(a.Version, b.Version);
@@ -127,10 +127,10 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, "test:collision", true);
+            SyntheticPurpose.HealthDataShareTest, ctx.Scope, 0, "test:collision", true, ct: TestContext.Current.CancellationToken);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-                SyntheticPurpose.HealthDataShareTest, ctx.Scope, 1, "test:collision", true));
+                SyntheticPurpose.HealthDataShareTest, ctx.Scope, 1, "test:collision", true, ct: TestContext.Current.CancellationToken));
         Assert.Equal("IDEMPOTENCY_CONFLICT", error.Message);
     }
 
@@ -144,7 +144,7 @@ public sealed class ConsentContractTests
             try
             {
                 await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-                    SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, request, true);
+                    SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, request, true, ct: TestContext.Current.CancellationToken);
                 return true;
             }
             catch (InvalidOperationException e) when (e.Message == "VERSION_CONFLICT")
@@ -153,7 +153,7 @@ public sealed class ConsentContractTests
             }
         });
         var result = await Task.WhenAll(tasks);
-        Assert.Single(result.Where(x => x));
+        Assert.Single(result, x => x);
     }
 
     [Fact]
@@ -162,16 +162,16 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         await ctx.Store.ChangeAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:grant-main", true);
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:grant-main", true, ct: TestContext.Current.CancellationToken);
         var otherTenant = "test:other-" + Guid.NewGuid().ToString("N");
         var second = new SyntheticPrincipal("test:actor-other", ctx.Subject,
             otherTenant, "MEMBER_TEST", true);
         Assert.False(await ctx.Store.EvaluateAsync(second, ctx.Subject, otherTenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope));
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, ct: TestContext.Current.CancellationToken));
         await ctx.Store.ChangeAsync(second, ctx.Subject, otherTenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:grant-other", true);
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, 0, "test:grant-other", true, ct: TestContext.Current.CancellationToken);
         Assert.True(await ctx.Store.EvaluateAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            SyntheticPurpose.CareCommunicationTest, ctx.Scope));
+            SyntheticPurpose.CareCommunicationTest, ctx.Scope, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -180,12 +180,12 @@ public sealed class ConsentContractTests
         var ctx = await SetupAsync();
         await using var _ = ctx.DataSource;
         var owner = await ctx.Store.EvaluateAccessAsync(ctx.Principal, ctx.Subject, ctx.Tenant,
-            "READ_OWN_TEST_CONSENT");
+            "READ_OWN_TEST_CONSENT", ct: TestContext.Current.CancellationToken);
         var stranger = await ctx.Store.EvaluateAccessAsync(ctx.Principal, "test:not-owner",
-            ctx.Tenant, "READ_OWN_TEST_CONSENT");
+            ctx.Tenant, "READ_OWN_TEST_CONSENT", ct: TestContext.Current.CancellationToken);
         Assert.True(owner.Allowed);
         Assert.False(stranger.Allowed);
-        Assert.Equal(1, await ctx.Store.AccessAuditCountAsync(ctx.Tenant, "ALLOW"));
-        Assert.Equal(1, await ctx.Store.AccessAuditCountAsync(ctx.Tenant, "DENY"));
+        Assert.Equal(1, await ctx.Store.AccessAuditCountAsync(ctx.Tenant, "ALLOW", ct: TestContext.Current.CancellationToken));
+        Assert.Equal(1, await ctx.Store.AccessAuditCountAsync(ctx.Tenant, "DENY", ct: TestContext.Current.CancellationToken));
     }
 }
