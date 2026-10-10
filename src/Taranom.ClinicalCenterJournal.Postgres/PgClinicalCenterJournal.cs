@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Npgsql;
 using Taranom.ClinicalCenterGovernance;
+using CenterReducer = global::Taranom.ClinicalCenterGovernance.ClinicalCenterJournal;
 
 namespace Taranom.ClinicalCenterJournal.Postgres;
 
@@ -13,7 +14,7 @@ internal sealed class PgClinicalCenterJournal(NpgsqlDataSource dataSource)
 {
     private static void ValidateCenter(string centerRef)
     {
-        if (!ClinicalCenterJournal.IsSyntheticRef(centerRef))
+        if (!CenterReducer.IsSyntheticRef(centerRef))
             throw new InvalidOperationException("TEST_CENTER_SYNTHETIC_REF_REQUIRED");
     }
 
@@ -123,7 +124,7 @@ internal sealed class PgClinicalCenterJournal(NpgsqlDataSource dataSource)
         }
 
         var current = await RehydrateLockedAsync(connection, tx, centerRef, ct);
-        var changed = ClinicalCenterJournal.Apply(current, command);
+        var changed = CenterReducer.Apply(current, command);
         if (changed.Outcome != CenterOutcome.Applied)
         {
             // Never materialize an otherwise absent center on a denial.
@@ -178,22 +179,22 @@ internal sealed class PgClinicalCenterJournal(NpgsqlDataSource dataSource)
             INSERT INTO internal_test_center_event
                 (center_ref,event_version,request_ref,command_json,event_digest)
             VALUES (@center,@version,@request,@json,@digest)
-            """, ct, ("center", centerRef), ("version", next.Version),
-            ("request", command.RequestId), ("json", json), ("digest", digest));
+            """, ct, ("center", (object)centerRef), ("version", (object)next.Version),
+            ("request", (object)command.RequestId), ("json", (object)json), ("digest", (object)digest));
 
         await RunAsync(connection, tx, """
             INSERT INTO internal_test_center_audit
                 (center_ref,event_version,request_ref,event_digest)
             VALUES (@center,@version,@request,@digest)
-            """, ct, ("center", centerRef), ("version", next.Version),
-            ("request", command.RequestId), ("digest", digest));
+            """, ct, ("center", (object)centerRef), ("version", (object)next.Version),
+            ("request", (object)command.RequestId), ("digest", (object)digest));
 
         var written = await RunAsync(connection, tx, """
             UPDATE internal_test_center
             SET current_version=@version
             WHERE center_ref=@center AND current_version=@previous
-            """, ct, ("center", centerRef),
-            ("version", next.Version), ("previous", current.Version));
+            """, ct, ("center", (object)centerRef),
+            ("version", (object)next.Version), ("previous", (object)current.Version));
         if (written != 1)
             throw new InvalidOperationException("TEST_CENTER_CONCURRENT_CAS_FAILED");
 
@@ -275,7 +276,7 @@ internal sealed class PgClinicalCenterJournal(NpgsqlDataSource dataSource)
                 {
                     throw new InvalidOperationException("TEST_CENTER_JOURNAL_CORRUPT");
                 }
-                var changed = ClinicalCenterJournal.Apply(state, command);
+                var changed = CenterReducer.Apply(state, command);
                 if (changed.Outcome != CenterOutcome.Applied ||
                     changed.Snapshot.Version != reader.GetInt64(0) ||
                     command.RequestId != reader.GetGuid(1) ||
