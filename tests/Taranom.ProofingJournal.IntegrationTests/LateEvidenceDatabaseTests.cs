@@ -7,6 +7,9 @@ namespace Taranom.ProofingJournal.IntegrationTests;
 
 // Synthetic refs and ephemeral CI-only credentials. No real income, patients,
 // financial balance or production evidence archive is ever connected here.
+// Both fixture classes modify PostgreSQL role/schema ACLs during bootstrap.
+// Keep test-class initialization ordered to avoid concurrent catalog DDL.
+[Collection("Proofing isolated PostgreSQL schema")]
 public sealed class LateEvidenceDatabaseTests
 {
     private static readonly Lazy<Task> Ready = new(PrepareAsync);

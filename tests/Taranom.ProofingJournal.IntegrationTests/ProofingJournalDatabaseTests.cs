@@ -7,6 +7,9 @@ namespace Taranom.ProofingJournal.IntegrationTests;
 
 // Genuine PostgreSQL tests against an ephemeral *synthetic-only* CI database.
 // Every case key is freshly generated; credentials exist only in the CI fixture.
+// Both fixture classes modify PostgreSQL role/schema ACLs during bootstrap.
+// Keep test-class initialization ordered to avoid concurrent catalog DDL.
+[Collection("Proofing isolated PostgreSQL schema")]
 public sealed class ProofingJournalDatabaseTests
 {
     private static readonly Lazy<Task> Ready = new(BootstrapAsync);
