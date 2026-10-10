@@ -37,7 +37,7 @@ internal readonly record struct TechnicalReceiptSourceEvidence(
 internal interface ITechnicalReceiptAuthoritySource
 {
     Task<TechnicalReceiptSourceEvidence?> ResolveAsync(
-        Guid packetId, CancellationToken cancellationToken);
+        Guid packetId, Guid requestId, CancellationToken cancellationToken);
 }
 
 internal static class ConflictPacketReceiptGuard
@@ -58,7 +58,7 @@ internal static class ConflictPacketReceiptGuard
         // No source => stop BEFORE reading even synthetic conflict packets.
         if (source is null) return TechnicalReceiptOutcome.AuthoritySourceUnavailable;
         TechnicalReceiptSourceEvidence? candidate;
-        try { candidate = await source.ResolveAsync(command.PacketId, ct); }
+        try { candidate = await source.ResolveAsync(command.PacketId, command.RequestId, ct); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return TechnicalReceiptOutcome.AuthoritySourceUnavailable; }
         if (candidate is not { } x)

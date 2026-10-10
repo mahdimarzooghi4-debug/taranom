@@ -14,7 +14,7 @@ public sealed class SyntheticPacketReceiptPostgresTests
         : ITechnicalReceiptAuthoritySource
     {
         internal bool Broken { get; set; }
-        public Task<TechnicalReceiptSourceEvidence?> ResolveAsync(Guid packet, CancellationToken ct)
+        public Task<TechnicalReceiptSourceEvidence?> ResolveAsync(Guid packet, Guid request, CancellationToken ct)
         {
             if (Broken) throw new InvalidOperationException("simulated source outage");
             return Task.FromResult(item);
@@ -301,7 +301,7 @@ public sealed class SyntheticPacketReceiptPostgresTests
         bool failAfter = false) : ITechnicalReceiptAuthoritySource
     {
         internal int Calls { get; private set; }
-        public Task<TechnicalReceiptSourceEvidence?> ResolveAsync(Guid packetId, CancellationToken ct)
+        public Task<TechnicalReceiptSourceEvidence?> ResolveAsync(Guid packetId, Guid requestId, CancellationToken ct)
         {
             Calls++;
             if (Calls > 1 && failAfter)
