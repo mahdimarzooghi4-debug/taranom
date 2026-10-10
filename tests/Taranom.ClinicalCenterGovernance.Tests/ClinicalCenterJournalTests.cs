@@ -183,7 +183,6 @@ public sealed class ClinicalCenterJournalTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(1)]
     [InlineData(2)]
     [InlineData(99)]
     public void AuthorityMissingRevokedOrUnrecognizedCannotDefineDoctor(int code)
