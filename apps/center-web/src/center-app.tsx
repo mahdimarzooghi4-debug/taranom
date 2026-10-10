@@ -65,7 +65,13 @@ export function CenterApp() {
   const focusOnRoute = useRef(false);
 
   useEffect(() => {
-    const sync = () => { focusOnRoute.current = true; setSection(resolveSection()); setMobileMenu(false); };
+    const sync = () => {
+      focusOnRoute.current = true;
+      setSection(resolveSection());
+      setMobileMenu(false);
+      // Browser Back/Forward must not leave a stale action dialog on another page.
+      setAction(null);
+    };
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
   }, []);
@@ -82,9 +88,20 @@ export function CenterApp() {
   useEffect(() => {
     if (!mobileMenu && !action) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (action) dismissAction();
-      else {
+      if (action) {
+        // Only the non-mutating close control is enabled in this dialog.
+        // Keep both Tab directions inside the modal instead of moving focus
+        // to underlying navigation, disabled save, or browser content.
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          closeActionRef.current?.focus();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          dismissAction();
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
         setMobileMenu(false);
         menuButtonRef.current?.focus();
       }
@@ -94,6 +111,9 @@ export function CenterApp() {
   }, [mobileMenu, action]);
 
   function navigate(e: MouseEvent<HTMLAnchorElement>, path: string) {
+    // Inert background also blocks physical interaction; this is a second
+    // guard against synthetic/programmatic navigation while the dialog is open.
+    if (action) { e.preventDefault(); return; }
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
     e.preventDefault();
     setMobileMenu(false);
@@ -107,6 +127,7 @@ export function CenterApp() {
   }
   function showAction(e: MouseEvent<HTMLButtonElement>, next: ActionKey) {
     triggerRef.current = e.currentTarget;
+    setMobileMenu(false);
     setAction(next);
   }
   function dismissAction() {
@@ -117,8 +138,11 @@ export function CenterApp() {
 
   return (
     <div className="center-shell">
-      <a className="skip-link" href="#center-main">پرش به محتوای اصلی</a>
-      <aside className="sidebar" aria-label="پنل مرکز درمانی">
+      <a className="skip-link" href="#center-main"
+        tabIndex={action ? -1 : undefined} aria-hidden={action ? true : undefined}>
+        پرش به محتوای اصلی
+      </a>
+      <aside className="sidebar" aria-label="پنل مرکز درمانی" inert={Boolean(action)}>
         <div className="brand"><div className="brand-logo" aria-hidden="true">ت</div>
           <div><strong>ترنم</strong><span>فضای مرکز درمانی</span></div>
         </div>
@@ -145,7 +169,7 @@ export function CenterApp() {
         </div>
       </aside>
 
-      <div className="workspace">
+      <div className="workspace" inert={Boolean(action)}>
         <header className="topbar">
           <div className="breadcrumbs">ترنم <span>/</span> مرکز درمانی <span>/</span> {section?.title ?? 'صفحه نامعتبر'}</div>
           <span className="connection-state"><i aria-hidden="true"></i> بدون اتصال عملیاتی</span>

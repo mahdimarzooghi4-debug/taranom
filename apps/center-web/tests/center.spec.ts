@@ -163,3 +163,80 @@ test('CENTER-14: unknown paths render safe 404 without private data', async ({ p
   await page.getByRole('link', { name: 'بازگشت به نمای کلی مرکز' }).click();
   await expect(page.getByRole('heading', { name: 'نمای کلی مرکز' })).toBeFocused();
 });
+
+test('CENTER-15: action dialog traps forward and backward keyboard focus and isolates background', async ({ page }) => {
+  await page.goto('/center/doctors');
+  const trigger = page.getByRole('button', { name: '+ معرفی پزشک' });
+  await trigger.click();
+  const dialog = page.getByRole('dialog');
+  const close = dialog.getByRole('button', { name: 'بازگشت به پنل' });
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  await expect(close).toBeFocused();
+  await expect(page.locator('.sidebar')).toHaveAttribute('inert', '');
+  await expect(page.locator('.workspace')).toHaveAttribute('inert', '');
+  await expect(dialog.getByRole('button', { name: /ثبت در سامانه/ })).toBeDisabled();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(close).toBeFocused();
+  await expect(page.getByRole('navigation', { name: 'بخش‌های پنل مرکز' })).toBeHidden();
+  await expect(page).toHaveURL(/\/center\/doctors$/);
+  await close.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.sidebar')).not.toHaveAttribute('inert', '');
+  await expect(page.locator('.workspace')).not.toHaveAttribute('inert', '');
+  await expect(trigger).toBeFocused();
+});
+
+test('CENTER-16: all four locked operations have keyboard containment and restore trigger focus', async ({ page }) => {
+  for (const [route, name] of [
+    ['/center/departments', '+ تعریف بخش'],
+    ['/center/doctors', '+ معرفی پزشک'],
+    ['/center/doctors', 'انتساب پزشک به بخش'],
+    ['/center/doctors', 'پایان همکاری پزشک'],
+  ] as const) {
+    await page.goto(route);
+    const trigger = page.getByRole('button', { name });
+    await trigger.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'بازگشت به پنل' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  }
+});
+
+test('CENTER-17: browser history dismisses action modal without changing any center data', async ({ page }) => {
+  const privateRequests: string[] = [];
+  page.on('request', request => {
+    if (/\/api\/|\/oauth\/|\/token(?:\?|$)/i.test(request.url())) privateRequests.push(request.url());
+  });
+  await page.goto('/center');
+  await page.getByRole('link', { name: /پزشکان وابسته/ }).first().click();
+  await expect(page).toHaveURL(/\/center\/doctors$/);
+  await page.getByRole('button', { name: '+ معرفی پزشک' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'نمای کلی مرکز' })).toBeFocused();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.workspace')).not.toHaveAttribute('inert', '');
+  expect(privateRequests).toEqual([]);
+});
+
+test('CENTER-18: mobile modal closes previously open menu and keeps keyboard focus within dialog', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/center/doctors');
+  const menu = page.getByRole('button', { name: 'باز کردن فهرست' });
+  await menu.click();
+  await expect(page.getByRole('navigation', { name: 'بخش‌های پنل مرکز' })).toBeVisible();
+  // While the menu is expanded the action remains a normal visible control.
+  await page.getByRole('button', { name: '+ معرفی پزشک' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'بازگشت به پنل' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '+ معرفی پزشک' })).toBeFocused();
+});
