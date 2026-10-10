@@ -387,6 +387,57 @@ public sealed class ProofingJournalDatabaseTests
     }
 
     [Fact]
+    public async Task RuntimeCannotModifyDenialAuditByUpdateOrDelete()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var key = NewCase();
+        await ApplyAsync(store, key,
+            Observe(Guid.Empty, 0, 0, ProofingObservation.Inconclusive));
+        await using var cn = await db.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using (var update = new NpgsqlCommand("""
+            UPDATE internal_test_proofing_denial SET reason_code=7 WHERE case_ref=@case
+            """, cn))
+        {
+            update.Parameters.AddWithValue("case", key);
+            var ex = await Assert.ThrowsAsync<PostgresException>(async () =>
+                await update.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+            Assert.Equal("42501", ex.SqlState);
+        }
+        await using (var delete = new NpgsqlCommand("""
+            DELETE FROM internal_test_proofing_denial WHERE case_ref=@case
+            """, cn))
+        {
+            delete.Parameters.AddWithValue("case", key);
+            var ex = await Assert.ThrowsAsync<PostgresException>(async () =>
+                await delete.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+            Assert.Equal("42501", ex.SqlState);
+        }
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_denial", key));
+    }
+
+    [Fact]
+    public async Task SchemaOwnerOrdinaryDmlCannotEraseDenialAudit()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var key = NewCase();
+        await ApplyAsync(store, key,
+            Observe(Guid.Empty, 0, 0, ProofingObservation.Inconclusive));
+        await using var admin = NpgsqlDataSource.Create(AdminConnection);
+        await using var cn = await admin.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using var cmd = new NpgsqlCommand("""
+            DELETE FROM internal_test_proofing_denial WHERE case_ref=@case
+            """, cn);
+        cmd.Parameters.AddWithValue("case", key);
+        var ex = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("P0001", ex.SqlState);
+        Assert.Equal("TEST_PROOFING_APPEND_ONLY", ex.MessageText);
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_denial", key));
+    }
+
+    [Fact]
     public async Task UnconnectedOrPersonalDataReferencesAreRejected()
     {
         var (db, store) = await ConnectAsync();
