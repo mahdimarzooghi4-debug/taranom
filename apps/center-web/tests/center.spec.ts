@@ -290,3 +290,56 @@ test('CENTER-CSP-03: injected inline script is rejected without breaking the pre
   expect(executed).toBe(false);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });
+
+
+test('CENTER-HTTP-01: real built-preview HTML response supplies frame protections and deny egress headers', async ({ request, page }) => {
+  const response = await request.get('/center/doctors');
+  expect(response.status()).toBe(200);
+  const headers = response.headers();
+  expect(headers['content-type']).toContain('text/html');
+  const policy = headers['content-security-policy'];
+  expect(policy).toContain("default-src 'none'");
+  expect(policy).toContain("frame-ancestors 'none'");
+  expect(policy).toContain("connect-src 'none'");
+  expect(policy).toContain("script-src 'self'");
+  expect(policy).toContain("style-src 'self'");
+  expect(policy).toContain("form-action 'none'");
+  expect(headers['x-frame-options']).toBe('DENY');
+  expect(headers['x-content-type-options']).toBe('nosniff');
+  expect(headers['referrer-policy']).toBe('no-referrer');
+  expect(headers['permissions-policy']).toContain('camera=()');
+  expect(headers['permissions-policy']).toContain('microphone=()');
+  expect(headers['permissions-policy']).toContain('geolocation=()');
+  expect(headers['permissions-policy']).toContain('payment=()');
+  expect(headers['cross-origin-opener-policy']).toBe('same-origin');
+  expect(headers['cross-origin-resource-policy']).toBe('same-origin');
+  expect(headers['cache-control']).toContain('no-store');
+  await page.goto('/center/doctors');
+  await expect(page.getByRole('main')).toBeVisible();
+});
+
+test('CENTER-HTTP-02: built JS asset also gets no-sniff and no-store response headers', async ({ page, request }) => {
+  await page.goto('/center');
+  const asset = await page.locator('script[type="module"][src^="/assets/"]').getAttribute('src');
+  expect(asset).toMatch(/^\/assets\/index-[a-zA-Z0-9_-]+\.js$/);
+  const response = await request.get(asset!);
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toContain('javascript');
+  expect(response.headers()['x-content-type-options']).toBe('nosniff');
+  expect(response.headers()['cache-control']).toContain('no-store');
+  expect(response.headers()['content-security-policy']).toContain("connect-src 'none'");
+});
+
+test('CENTER-HTTP-03: Chromium refuses iframe embedding from a top-level document without CSP', async ({ page }) => {
+  const cspErrors: string[] = [];
+  page.on('console', message => {
+    if (message.type() === 'error' &&
+        /frame-ancestors|X-Frame-Options|Refused to frame/i.test(message.text())) {
+      cspErrors.push(message.text());
+    }
+  });
+  await page.goto('about:blank');
+  await page.setContent('<iframe title="Embedding prohibited" src="http://127.0.0.1:4184/center"></iframe>');
+  await expect.poll(() => cspErrors.length, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(page.frameLocator('iframe').locator('#root')).toHaveCount(0);
+});
