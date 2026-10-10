@@ -18,7 +18,8 @@ internal enum TechnicalReceiptOutcome
     SyntheticTechnicalReceiptRecorded = 9,
     ExactReplay = 10,
     ConflictingReplay = 11,
-    AlreadyNotedForPacket = 12
+    AlreadyNotedForPacket = 12,
+    SimulatedIssuerSnapshotChanged = 13
 }
 
 internal readonly record struct TechnicalReceiptCommand(
@@ -28,7 +29,8 @@ internal readonly record struct TechnicalReceiptCommand(
 internal readonly record struct TechnicalReceiptSourceEvidence(
     Guid PacketId, Guid RequestId, string CenterRef, string SessionSubjectRef,
     string ResolvedRecipientRef, string CurrentGrantVersionRef,
-    string ReceiptEvidenceRef,
+    string ReceiptEvidenceRef, string SimulatedIssuerRef,
+    long SimulatedIssuerRevision,
     bool SimulatedSessionVerified, bool SimulatedAssignmentCurrent,
     bool SimulatedGrantNotRevoked, bool SimulatedAuditAvailable);
 
@@ -40,6 +42,11 @@ internal interface ITechnicalReceiptAuthoritySource
         Guid packetId, Guid requestId, CancellationToken cancellationToken);
 }
 
+internal readonly record struct TechnicalReceiptSourceCheck(
+    TechnicalReceiptOutcome Outcome, TechnicalReceiptSourceEvidence? Evidence);
+
+// The source revision and issuer below are ONLY simulated lineage markers.
+// They do not supply real authority or an atomic revocation guarantee.
 internal static class ConflictPacketReceiptGuard
 {
     internal static bool Valid(TechnicalReceiptCommand x) =>
@@ -52,33 +59,41 @@ internal static class ConflictPacketReceiptGuard
     internal static async Task<TechnicalReceiptOutcome> CheckAsync(
         TechnicalReceiptCommand command,
         ITechnicalReceiptAuthoritySource? source,
+        CancellationToken ct = default) =>
+        (await InspectAsync(command, source, ct)).Outcome;
+
+    internal static async Task<TechnicalReceiptSourceCheck> InspectAsync(
+        TechnicalReceiptCommand command,
+        ITechnicalReceiptAuthoritySource? source,
         CancellationToken ct = default)
     {
-        if (!Valid(command)) return TechnicalReceiptOutcome.Invalid;
+        if (!Valid(command)) return new(TechnicalReceiptOutcome.Invalid, null);
         // No source => stop BEFORE reading even synthetic conflict packets.
-        if (source is null) return TechnicalReceiptOutcome.AuthoritySourceUnavailable;
+        if (source is null) return new(TechnicalReceiptOutcome.AuthoritySourceUnavailable, null);
         TechnicalReceiptSourceEvidence? candidate;
         try { candidate = await source.ResolveAsync(command.PacketId, command.RequestId, ct); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return TechnicalReceiptOutcome.AuthoritySourceUnavailable; }
+        catch (Exception) { return new(TechnicalReceiptOutcome.AuthoritySourceUnavailable, null); }
         if (candidate is not { } x)
-            return TechnicalReceiptOutcome.AuthoritySourceUnavailable;
+            return new(TechnicalReceiptOutcome.AuthoritySourceUnavailable, null);
         if (x.PacketId != command.PacketId || x.RequestId != command.RequestId ||
             x.CenterRef != command.CenterRef)
-            return TechnicalReceiptOutcome.PacketScopeMismatch;
+            return new(TechnicalReceiptOutcome.PacketScopeMismatch, null);
         if (!x.SimulatedSessionVerified || !x.SimulatedAssignmentCurrent ||
             !x.SimulatedGrantNotRevoked || !x.SimulatedAuditAvailable ||
             !IntakeDomain.IsSyntheticRef(x.SessionSubjectRef) ||
             !IntakeDomain.IsSyntheticRef(x.ResolvedRecipientRef) ||
             !IntakeDomain.IsSyntheticRef(x.CurrentGrantVersionRef) ||
             !IntakeDomain.IsSyntheticRef(x.ReceiptEvidenceRef) ||
+            !IntakeDomain.IsSyntheticRef(x.SimulatedIssuerRef) ||
+            x.SimulatedIssuerRevision < 1 ||
             !string.Equals(x.ReceiptEvidenceRef, command.ReceiptEvidenceRef,
                 StringComparison.Ordinal) ||
             x.SessionSubjectRef != x.ResolvedRecipientRef ||
             x.ResolvedRecipientRef != command.RecipientClaimRef ||
             x.CurrentGrantVersionRef != command.GrantVersionRef)
-            return TechnicalReceiptOutcome.RecipientUnverified;
+            return new(TechnicalReceiptOutcome.RecipientUnverified, null);
         // A positive fake test source is never an authorization to receive.
-        return TechnicalReceiptOutcome.SimulatedPrerequisitesOnly;
+        return new(TechnicalReceiptOutcome.SimulatedPrerequisitesOnly, x);
     }
 }

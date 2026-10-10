@@ -25,6 +25,7 @@ public sealed class SyntheticPacketReceiptPostgresTests
         TechnicalReceiptCommand command) => new(command.PacketId, command.RequestId, command.CenterRef,
             command.RecipientClaimRef, command.RecipientClaimRef,
             command.GrantVersionRef, command.ReceiptEvidenceRef,
+            "test:simulated-issuer", 1,
             true, true, true, true);
 
     private static async Task<(NpgsqlDataSource Db, NpgsqlDataSource Reader,

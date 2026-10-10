@@ -8,7 +8,8 @@ namespace Taranom.ClinicalEvidenceJournal.Postgres;
 // A "receipt" is ONLY an internal simulated database observation: no real
 // recipient, assignment, notification, consent or legal responsibility.
 internal sealed record SyntheticPacketReceipt(
-    TechnicalReceiptCommand Command, Guid PacketId);
+    TechnicalReceiptCommand Command, Guid PacketId,
+    string SimulatedIssuerRef, long SimulatedIssuerRevision);
 
 internal sealed class PgSyntheticPacketReceiptJournal(
     NpgsqlDataSource database, PgUnverifiedConflictPacketJournal packets,
@@ -24,6 +25,8 @@ internal sealed class PgSyntheticPacketReceiptJournal(
                 request_ref uuid NOT NULL UNIQUE,
                 center_ref text NOT NULL,
                 recipient_ref text NOT NULL,
+                issuer_ref text NOT NULL,
+                issuer_revision bigint NOT NULL CHECK (issuer_revision > 0),
                 command_json text NOT NULL,
                 receipt_digest text NOT NULL,
                 recorded_at timestamptz NOT NULL DEFAULT now()
@@ -66,9 +69,10 @@ internal sealed class PgSyntheticPacketReceiptJournal(
     internal async Task<TechnicalReceiptOutcome> RecordAsync(
         TechnicalReceiptCommand command, CancellationToken ct = default)
     {
-        var gate = await ConflictPacketReceiptGuard.CheckAsync(command, source, ct);
-        if (gate != TechnicalReceiptOutcome.SimulatedPrerequisitesOnly)
-            return gate;
+        var initialCheck = await ConflictPacketReceiptGuard.InspectAsync(
+            command, source, ct);
+        if (initialCheck.Outcome != TechnicalReceiptOutcome.SimulatedPrerequisitesOnly)
+            return initialCheck.Outcome;
 
         UnverifiedConflictPacket packet;
         ConflictNoticeReadModel latest;
@@ -155,12 +159,23 @@ internal sealed class PgSyntheticPacketReceiptJournal(
         // writes, including the exact request and evidence-reference binding.
         // This is a negative TOCTOU regression guard, NOT a real revocation
         // guarantee: no production trust root or atomic issuer exists.
-        var beforeInsert = await ConflictPacketReceiptGuard.CheckAsync(
+        var beforeInsert = await ConflictPacketReceiptGuard.InspectAsync(
             command, source, ct);
-        if (beforeInsert != TechnicalReceiptOutcome.SimulatedPrerequisitesOnly)
+        if (beforeInsert.Outcome != TechnicalReceiptOutcome.SimulatedPrerequisitesOnly)
         {
             await tx.RollbackAsync(ct);
-            return beforeInsert;
+            return beforeInsert.Outcome;
+        }
+        // Compare versioned issuer lineage after the original and late checks.
+        // A changing synthetic source must not be written as stable; even an
+        // unchanged test issuer still grants NO real-world permission.
+        if (initialCheck.Evidence is not { } initialIssuer ||
+            beforeInsert.Evidence is not { } finalIssuer ||
+            initialIssuer.SimulatedIssuerRef != finalIssuer.SimulatedIssuerRef ||
+            initialIssuer.SimulatedIssuerRevision != finalIssuer.SimulatedIssuerRevision)
+        {
+            await tx.RollbackAsync(ct);
+            return TechnicalReceiptOutcome.SimulatedIssuerSnapshotChanged;
         }
 
         // Exactly one accepted technical receipt per immutable packet.
@@ -177,17 +192,22 @@ internal sealed class PgSyntheticPacketReceiptJournal(
         }
 
         var json = JsonSerializer.Serialize(command);
-        var digest = Digest(command.PacketId, json);
+        var digest = Digest(command.PacketId, json,
+            finalIssuer.SimulatedIssuerRef, finalIssuer.SimulatedIssuerRevision);
         await using (var write = new NpgsqlCommand("""
             INSERT INTO internal_test_packet_receipt
-              (packet_id,request_ref,center_ref,recipient_ref,command_json,receipt_digest)
-            VALUES (@packet,@request,@center,@recipient,@json,@digest)
+              (packet_id,request_ref,center_ref,recipient_ref,
+               issuer_ref,issuer_revision,command_json,receipt_digest)
+            VALUES (@packet,@request,@center,@recipient,
+                    @issuer,@issuerVersion,@json,@digest)
             """, cn, tx))
         {
             write.Parameters.AddWithValue("packet", command.PacketId);
             write.Parameters.AddWithValue("request", command.RequestId);
             write.Parameters.AddWithValue("center", command.CenterRef);
             write.Parameters.AddWithValue("recipient", command.RecipientClaimRef);
+            write.Parameters.AddWithValue("issuer", finalIssuer.SimulatedIssuerRef);
+            write.Parameters.AddWithValue("issuerVersion", finalIssuer.SimulatedIssuerRevision);
             write.Parameters.AddWithValue("json", json);
             write.Parameters.AddWithValue("digest", digest);
             await write.ExecuteNonQueryAsync(ct);
@@ -234,7 +254,8 @@ internal sealed class PgSyntheticPacketReceiptJournal(
     {
         await using var cmd = new NpgsqlCommand("""
             SELECT r.request_ref,r.center_ref,r.recipient_ref,r.command_json,
-                   r.receipt_digest,a.request_ref,a.receipt_digest
+                   r.receipt_digest,r.issuer_ref,r.issuer_revision,
+                   a.request_ref,a.receipt_digest
             FROM internal_test_packet_receipt r
             LEFT JOIN internal_test_packet_receipt_audit a ON a.packet_id=r.packet_id
             WHERE r.packet_id=@packet
@@ -242,7 +263,8 @@ internal sealed class PgSyntheticPacketReceiptJournal(
         cmd.Parameters.AddWithValue("packet", packetId);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
-        if (reader.IsDBNull(5) || reader.IsDBNull(6))
+        if (reader.IsDBNull(5) || reader.IsDBNull(6) ||
+            reader.IsDBNull(7) || reader.IsDBNull(8))
             throw new InvalidOperationException("TEST_PACKET_RECEIPT_CORRUPT");
         var json = reader.GetString(3);
         TechnicalReceiptCommand command;
@@ -252,16 +274,22 @@ internal sealed class PgSyntheticPacketReceiptJournal(
         if (!ConflictPacketReceiptGuard.Valid(command) ||
             command.PacketId != packetId ||
             command.RequestId != reader.GetGuid(0) ||
-            command.RequestId != reader.GetGuid(5) ||
+            command.RequestId != reader.GetGuid(7) ||
             command.CenterRef != reader.GetString(1) ||
             command.RecipientClaimRef != reader.GetString(2) ||
-            reader.GetString(4) != reader.GetString(6) ||
-            reader.GetString(4) != Digest(packetId, json))
+            !global::Taranom.ClinicalEvidenceIntake.ClinicalEvidenceIntake.IsSyntheticRef(
+                reader.GetString(5)) ||
+            reader.GetInt64(6) < 1 ||
+            reader.GetString(4) != reader.GetString(8) ||
+            reader.GetString(4) != Digest(packetId, json,
+                reader.GetString(5), reader.GetInt64(6)))
             throw new InvalidOperationException("TEST_PACKET_RECEIPT_CORRUPT");
-        return new(command, packetId);
+        return new(command, packetId, reader.GetString(5), reader.GetInt64(6));
     }
 
-    private static string Digest(Guid id, string json) =>
+    private static string Digest(Guid id, string json,
+        string issuer, long issuerVersion) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("|",
-            "taranom.test-technical-receipt.v1", id.ToString("N"), json))));
+            "taranom.test-technical-receipt.v2", id.ToString("N"), json, issuer,
+            issuerVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)))));
 }
