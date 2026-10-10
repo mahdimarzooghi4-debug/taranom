@@ -36,16 +36,17 @@ public sealed class MemberSelfReadBoundaryTests
     }
 
     [Theory]
-    [InlineData(SelfReadActorKind.Unknown)]
-    [InlineData(SelfReadActorKind.Sponsor)]
-    [InlineData(SelfReadActorKind.Employer)]
-    [InlineData(SelfReadActorKind.Provider)]
-    [InlineData(SelfReadActorKind.Administrator)]
-    [InlineData((SelfReadActorKind)999)]
-    public void OtherPartyCannotInheritMemberSelfRead(SelfReadActorKind party)
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(999)]
+    public void OtherPartyCannotInheritMemberSelfRead(int actorKind)
     {
         Assert.Equal(SelfReadBoundaryResult.ActorDenied,
-            MemberSelfReadBoundary.Assess(Valid with { ActorKind = party }));
+            MemberSelfReadBoundary.Assess(Valid with {
+                ActorKind = (SelfReadActorKind)actorKind }));
     }
 
     [Fact]
