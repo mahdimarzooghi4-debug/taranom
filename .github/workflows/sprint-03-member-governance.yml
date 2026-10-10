@@ -134,3 +134,49 @@ jobs:
             apps/member-web/test-results/results.xml
             apps/member-web/test-results/**/trace.zip
           if-no-files-found: warn
+
+  isolated-proofing-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_sprint03_isolated
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_sprint03_isolated"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint03_isolated;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Build separate non-deployable PostgreSQL integration tests
+        run: |
+          dotnet restore tests/Taranom.ProofingJournal.IntegrationTests/Taranom.ProofingJournal.IntegrationTests.csproj
+          dotnet build tests/Taranom.ProofingJournal.IntegrationTests/Taranom.ProofingJournal.IntegrationTests.csproj --no-restore --configuration Release
+      - name: Verify atomic rollback, concurrent replay, append-only audit and divergence detection
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.ProofingJournal.IntegrationTests/Taranom.ProofingJournal.IntegrationTests.csproj --no-build --configuration Release -- -xml TestResults/sprint03-proofing-postgres.xml
+          test -s TestResults/sprint03-proofing-postgres.xml
+      - name: Verify journal is not a deployable identity/API adapter
+        run: |
+          test ! -d src/Taranom.Api
+          test ! -d src/Taranom.IdentityProvider
+          ! grep -R -E 'HttpClient|JwtBearer|/api/v1/|NationalId|HealthRecord|Wallet' src/Taranom.ProofingJournal.Postgres --include='*.cs'
+      - name: Upload database integration evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint03-proofing-postgres-tests
+          path: TestResults/sprint03-proofing-postgres.xml
+          if-no-files-found: warn
