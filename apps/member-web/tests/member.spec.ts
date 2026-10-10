@@ -201,3 +201,46 @@ test('MEMBER-CSP-03: injected inline script is rejected without breaking the pre
   expect(executed).toBe(false);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });
+
+test('COST-01: member pre-treatment costs show all five shares as unknown, not zero', async ({ page }) => {
+  await page.goto('/member/costs');
+  await expect(page.getByRole('heading', { name: 'اجزای برآورد غیرقطعی' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'سهم‌های نامشخص پیش از خدمت' });
+  await expect(list.getByRole('listitem')).toHaveCount(5);
+  for (const label of [
+    'هزینه احتمالی خدمت', 'سهم احتمالی بیمه پایه', 'سهم احتمالی بیمه تکمیلی',
+    'سهم احتمالی اعتبار درمان', 'سهم احتمالی عضو',
+  ]) {
+    await expect(list.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(5);
+  await expect(page.getByText('همه مقادیر نامعلوم‌اند')).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('این بخش هنوز به سرویس واقعی متصل نیست');
+});
+
+test('COST-02: disconnected cost awareness never records legal consent or financial choice', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => {
+    const url = request.url();
+    if (['/api/', '/auth/', '/payment/', '/payments/', '/wallet/']
+      .some(path => url.includes(path))) requests.push(url);
+  });
+  await page.goto('/member/costs');
+  await expect(page.getByRole('button', { name: 'ثبت آگاهی و انتخاب — نیازمند اتصال امن' })).toBeDisabled();
+  await expect(page.getByText(/این نما تضمین قیمت، پوشش بیمه، موجودی کیف پول یا بدهی عضو نیست/))
+    .toBeVisible();
+  await page.keyboard.press('Tab');
+  expect(requests).toEqual([]);
+  await expect(page.getByRole('button', { name: /پرداخت|رزرو اعتبار|تأیید درمان/ })).toHaveCount(0);
+});
+
+test('COST-03: cost route remains isolated through member navigation and browser history', async ({ page }) => {
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'برآورد هزینه' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'برآورد هزینه' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'اجزای برآورد غیرقطعی' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'اجزای برآورد غیرقطعی' })).toBeVisible();
+});

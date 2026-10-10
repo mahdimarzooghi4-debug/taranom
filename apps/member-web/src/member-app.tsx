@@ -35,6 +35,16 @@ export const memberPages: readonly MemberPage[] = [
     detail: 'پیگیری واقعی درخواست و اختلاف بیمه‌ای نیازمند اتصال به مرجع مسئول است.', symbol: '☷' },
 ] as const;
 
+// No money, quote, insurer response or credit balance is present in this
+// disconnected page. All five positions deliberately remain unknown.
+const costShares = [
+  { key: 'service', label: 'هزینه احتمالی خدمت', owner: 'ارائه‌دهنده واجدصلاحیت و دارای قرارداد معتبر' },
+  { key: 'primary', label: 'سهم احتمالی بیمه پایه', owner: 'مرجع قانونی بیمه پایه' },
+  { key: 'supplemental', label: 'سهم احتمالی بیمه تکمیلی', owner: 'مرجع قانونی بیمه تکمیلی' },
+  { key: 'credit', label: 'سهم احتمالی اعتبار درمان', owner: 'متولی دارای مجوز کیف پول درمانی' },
+  { key: 'member', label: 'سهم احتمالی عضو', owner: 'اسناد معتبر نهایی مراجع مربوط' },
+] as const;
+
 const descriptions = [
   { label: 'هویت و دسترسی', value: 'اتصال برقرار نیست', help: 'احراز هویت واقعی هنوز پیاده‌سازی نشده است.' },
   { label: 'اطلاعات درمانی', value: 'در دسترس نیست', help: 'بدون دسترسی مجاز هیچ پرونده‌ای نمایش داده نمی‌شود.' },
@@ -197,6 +207,33 @@ export function MemberApp() {
                     </section>
                   ))}
                 </div>
+              ) : null}
+              {page.key === 'costs' ? (
+                <section aria-labelledby="nonbinding-cost-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">شفافیت هزینه بدون فرض مبلغ</p>
+                      <h2 id="nonbinding-cost-title">اجزای برآورد غیرقطعی</h2>
+                    </div>
+                    <span className="readonly-pill">همه مقادیر نامعلوم‌اند</span>
+                  </div>
+                  <div className="status-grid" role="list" aria-label="سهم‌های نامشخص پیش از خدمت">
+                    {costShares.map((share) => (
+                      <article key={share.key} role="listitem" className="status-card">
+                        <p className="status-card-label">{share.label}</p>
+                        <h3>اطلاعات موجود نیست</h3>
+                        <p>منبع مورد انتظار: {share.owner}؛ هیچ سند معتبر یا مبلغی دریافت نشده است.</p>
+                      </article>
+                    ))}
+                  </div>
+                  <p id="cost-awareness-limits" className="quiet">
+                    این نما تضمین قیمت، پوشش بیمه، موجودی کیف پول یا بدهی عضو نیست.
+                    برآورد، مجوز برداشت یا رزرو اعتبار نیست و تصمیم نهایی فقط با اسناد معتبر مراجع قانونی ممکن است.
+                  </p>
+                  <button type="button" disabled aria-describedby="cost-awareness-limits">
+                    ثبت آگاهی و انتخاب — نیازمند اتصال امن
+                  </button>
+                </section>
               ) : null}
               <InterruptionNotice detail={page.detail} />
               <div className="source-strip" aria-label="مالک داده">
