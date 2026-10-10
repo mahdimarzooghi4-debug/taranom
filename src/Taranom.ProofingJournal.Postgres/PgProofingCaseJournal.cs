@@ -17,7 +17,7 @@ internal sealed class PgProofingCaseJournal(NpgsqlDataSource dataSource)
     {
         if (string.IsNullOrWhiteSpace(caseRef) || caseRef.Length > 100 ||
             !caseRef.StartsWith("test:", StringComparison.Ordinal) ||
-            caseRef.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch is not ':' and '-' and '_'))
+            caseRef.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch != ':' && ch != '-' && ch != '_'))
             throw new InvalidOperationException("TEST_PROOFING_CASE_REF_REQUIRED");
     }
 
