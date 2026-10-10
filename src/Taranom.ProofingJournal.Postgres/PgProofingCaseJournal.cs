@@ -82,7 +82,7 @@ internal sealed class PgProofingCaseJournal(NpgsqlDataSource dataSource)
             END;
             $$;
             CREATE OR REPLACE FUNCTION internal_test_proofing_denial_guard()
-            RETURNS trigger LANGUAGE plpgsql AS $
+            RETURNS trigger LANGUAGE plpgsql AS $$
             BEGIN
                 IF TG_OP = 'INSERT' THEN
                     IF NEW.case_ref LIKE 'test:abort-deny-%' THEN
@@ -94,7 +94,7 @@ internal sealed class PgProofingCaseJournal(NpgsqlDataSource dataSource)
                 RAISE EXCEPTION 'TEST_PROOFING_APPEND_ONLY'
                     USING ERRCODE = 'P0001';
             END;
-            $;
+            $$;
             DROP TRIGGER IF EXISTS internal_test_proofing_denial_immutable
                 ON internal_test_proofing_denial;
             CREATE TRIGGER internal_test_proofing_denial_immutable
