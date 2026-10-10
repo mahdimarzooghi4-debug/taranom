@@ -99,46 +99,7 @@ internal sealed class PgUnverifiedEvidenceReviewQueue(NpgsqlDataSource dataSourc
             if (Enumerable.Range(6, 5).Any(reader.IsDBNull))
                 throw new InvalidOperationException("TEST_REVIEW_QUEUE_INTEGRITY_FAILED");
 
-            var subject = reader.GetString(0);
-            var kind = (EvidenceSubjectKind)reader.GetInt32(1);
-            var revision = reader.GetInt64(2);
-            var requestId = reader.GetGuid(3);
-            var json = reader.GetString(4);
-            var digest = reader.GetString(5);
-
-            EvidenceSubmission input;
-            try
-            {
-                input = JsonSerializer.Deserialize<EvidenceSubmission>(json);
-            }
-            catch (JsonException)
-            {
-                throw new InvalidOperationException("TEST_REVIEW_QUEUE_INTEGRITY_FAILED");
-            }
-
-            // Each returned queue item must match its accepted immutable
-            // event, review-work row and paired audit. This per-page check is
-            // NOT a full historical verification of records outside the page.
-            if (!IntakeDomain.IsSyntheticRef(subject) ||
-                !Enum.IsDefined(kind) ||
-                revision is < 1 ||
-                revision > reader.GetInt64(11) ||
-                input.RequestId != requestId ||
-                input.ExpectedRevision != revision - 1 ||
-                input.CenterRef != centerRef ||
-                input.SubjectRef != subject ||
-                input.SubjectKind != kind ||
-                input.EvidenceKind != (EvidenceKind)reader.GetInt32(6) ||
-                input.SubmittingActorRef != reader.GetString(7) ||
-                input.OpaqueEvidenceRef != reader.GetString(8) ||
-                requestId != reader.GetGuid(9) ||
-                digest != reader.GetString(10) ||
-                digest != Digest(centerRef, subject, kind, revision, json))
-                throw new InvalidOperationException("TEST_REVIEW_QUEUE_INTEGRITY_FAILED");
-
-            results.Add(new UnverifiedReviewQueueItem(
-                centerRef, subject, kind, revision, input.EvidenceKind,
-                input.OpaqueEvidenceRef!, input.SubmittingActorRef!));
+            results.Add(ValidateRow(reader, centerRef));
         }
 
         var more = results.Count > pageSize;
@@ -152,6 +113,51 @@ internal sealed class PgUnverifiedEvidenceReviewQueue(NpgsqlDataSource dataSourc
         }
 
         return new UnverifiedReviewQueuePage(results.AsReadOnly(), next);
+    }
+
+    // Shared validation for both live cursor pages and one-transaction frozen snapshots.
+    internal static UnverifiedReviewQueueItem ValidateRow(NpgsqlDataReader reader, string centerRef)
+    {
+        var subject = reader.GetString(0);
+        var kind = (EvidenceSubjectKind)reader.GetInt32(1);
+        var revision = reader.GetInt64(2);
+        var requestId = reader.GetGuid(3);
+        var json = reader.GetString(4);
+        var digest = reader.GetString(5);
+
+        EvidenceSubmission input;
+        try
+        {
+            input = JsonSerializer.Deserialize<EvidenceSubmission>(json);
+        }
+        catch (JsonException)
+        {
+            throw new InvalidOperationException("TEST_REVIEW_QUEUE_INTEGRITY_FAILED");
+        }
+
+        // Each returned queue item must match its accepted immutable
+        // event, review-work row and paired audit. This per-page check is
+        // NOT a full historical verification of records outside the page.
+        if (!IntakeDomain.IsSyntheticRef(subject) ||
+            !Enum.IsDefined(kind) ||
+            revision is < 1 ||
+            revision > reader.GetInt64(11) ||
+            input.RequestId != requestId ||
+            input.ExpectedRevision != revision - 1 ||
+            input.CenterRef != centerRef ||
+            input.SubjectRef != subject ||
+            input.SubjectKind != kind ||
+            input.EvidenceKind != (EvidenceKind)reader.GetInt32(6) ||
+            input.SubmittingActorRef != reader.GetString(7) ||
+            input.OpaqueEvidenceRef != reader.GetString(8) ||
+            requestId != reader.GetGuid(9) ||
+            digest != reader.GetString(10) ||
+            digest != Digest(centerRef, subject, kind, revision, json))
+            throw new InvalidOperationException("TEST_REVIEW_QUEUE_INTEGRITY_FAILED");
+
+        return new UnverifiedReviewQueueItem(
+            centerRef, subject, kind, revision, input.EvidenceKind,
+            input.OpaqueEvidenceRef!, input.SubmittingActorRef!);
     }
 
     private static string Digest(string center, string subject, EvidenceSubjectKind kind,
