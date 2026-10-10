@@ -277,7 +277,8 @@ internal sealed class PgSyntheticPacketReceiptJournal(
         return result is null ? null : (Guid)result;
     }
 
-    private static async Task<SyntheticPacketReceipt?> ReadLockedAsync(
+    // Reused only by the isolated synthetic read-only historical sweep.
+    internal static async Task<SyntheticPacketReceipt?> ReadLockedAsync(
         NpgsqlConnection cn, NpgsqlTransaction tx, Guid packetId, CancellationToken ct)
     {
         await using var cmd = new NpgsqlCommand("""

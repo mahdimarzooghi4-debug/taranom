@@ -50,6 +50,17 @@ internal static class ReviewJournalTestSchema
               TO taranom_sprint12_snapshot_capture;
             GRANT INSERT,SELECT ON internal_test_frozen_review_snapshot
               TO taranom_sprint12_snapshot_capture;
+            DO $block$ BEGIN
+              IF NOT EXISTS (SELECT 1 FROM pg_roles
+                WHERE rolname = 'taranom_sprint23_receipt_auditor') THEN
+                CREATE ROLE taranom_sprint23_receipt_auditor LOGIN
+                  PASSWORD 'ephemeral_synthetic_receipt_audit_only';
+              END IF;
+            END $block$;
+            GRANT USAGE ON SCHEMA public TO taranom_sprint23_receipt_auditor;
+            GRANT SELECT ON internal_test_packet_receipt,
+              internal_test_packet_receipt_audit
+              TO taranom_sprint23_receipt_auditor;
             """, cn);
         await command.ExecuteNonQueryAsync();
     }
