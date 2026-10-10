@@ -5,7 +5,7 @@
 - `npm ci --no-audit --no-fund --ignore-scripts`
 - `npm run typecheck`
 - `npm run build`
-- `npx playwright install chromium` then `npm run test:e2e`
+- `npx playwright install chromium` then `npm run build` and `npm run test:e2e`
 
 The app intentionally renders every member section in an explicitly unavailable state. Navigation paths are browser routes **only** and do not imply existing .NET read endpoints. It never sends private network API requests or persists sensitive state in browser storage. Pages and tests cover WEB-01, WEB-04…12 under this **shell-only** authorization. WEB-02/03 backend isolation requires later real backend identity/tenant contracts and must not be claimed satisfied by a disconnected shell.
 
@@ -14,3 +14,5 @@ Exact direct and transitive npm dependencies are committed in `package-lock.json
 Mandatory product member Web App is TRN-EP-13. This code implements the layout and safe baseline only; no Backend BFF or Production member authentication exists.
 
 Privacy hardening: no third-party remote font, analytics or content dependencies. The UI uses local/system font fallbacks so loading the unauthenticated shell sends no data to external domains.
+
+Code Review update: Playwright runs the actual Vite production bundle using `vite preview`, not the development HMR server. Client routing focuses the new heading after link navigation and browser Back/Forward; the mobile menu closes with Escape and returns focus to its toggle. These are accessibility controls for the disconnected shell, not a real member authorization layer.

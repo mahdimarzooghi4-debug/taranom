@@ -102,12 +102,49 @@ test('privacy: shell never requests external fonts, analytics or remote integrat
   const offsite: string[] = [];
   page.on('request', req => {
     const url = new URL(req.url());
-    if (url.protocol !== 'data:' && url.origin !== 'http://127.0.0.1:4173') offsite.push(req.url());
+    if (url.protocol !== 'data:' && url.origin !== 'http://127.0.0.1:4174') offsite.push(req.url());
   });
   await page.goto('/member');
   await page.getByRole('link', { name: 'سوابق سلامت' }).click();
   await expect(page.getByRole('status')).toContainText('متصل نیست');
   expect(offsite).toEqual([]);
+});
+
+test('review: browser runs the built Vite artifact, never its development HMR scripts', async ({ page }) => {
+  const requested: string[] = [];
+  page.on('request', request => requested.push(new URL(request.url()).pathname));
+  await page.goto('/member');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  expect(requested.some(path => path.startsWith('/assets/index-') && path.endsWith('.js'))).toBe(true);
+  expect(requested.some(path => path.startsWith('/@vite') || path.startsWith('/src/'))).toBe(false);
+});
+
+test('review: router sets heading focus after navigation and browser back/forward', async ({ page }) => {
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'عضویت من' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'عضویت من' })).toBeFocused();
+  await page.getByRole('link', { name: 'اعتبار درمان' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'اعتبار درمان' })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'عضویت من' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('heading', { level: 1, name: 'اعتبار درمان' })).toBeFocused();
+  await page.goto('/member/not-a-page');
+  await page.getByRole('link', { name: 'بازگشت به نمای کلی' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+});
+
+test('review: Escape closes mobile navigation and restores toggle focus', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/member');
+  const open = page.getByRole('button', { name: 'باز کردن فهرست بخش‌ها' });
+  await open.click();
+  const close = page.getByRole('button', { name: 'بستن فهرست بخش‌ها' });
+  await expect(close).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Escape');
+  await expect(open).toHaveAttribute('aria-expanded', 'false');
+  await expect(open).toBeFocused();
+  await expect(page.getByRole('navigation', { name: 'بخش‌های وب‌اپ عضو' })).toBeHidden();
 });
 
 test('WEB-12: no synthetic member identity provider can be enabled by query flags', async ({ page }) => {

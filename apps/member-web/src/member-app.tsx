@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
 type PageKey =
   | 'overview' | 'membership' | 'credit' | 'consents' | 'care'
@@ -63,24 +63,53 @@ function InterruptionNotice({ detail }: { detail: string }) {
 export function MemberApp() {
   const [page, setPage] = useState<MemberPage | undefined>(currentPage);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const routeNeedsFocus = useRef(false);
 
   useEffect(() => {
-    const changed = () => { setPage(currentPage()); setMobileOpen(false); };
+    const changed = () => {
+      routeNeedsFocus.current = true;
+      setPage(currentPage());
+      setMobileOpen(false);
+    };
     window.addEventListener('popstate', changed);
     return () => window.removeEventListener('popstate', changed);
   }, []);
 
   useEffect(() => {
     document.title = page ? 'ترنم | ' + page.label + ' — متصل نیست' : 'ترنم | صفحه پیدا نشد';
+    // Focus after React has rendered the new route heading (including browser Back/Forward).
+    // Do not steal focus on initial deep links or during normal keyboard navigation.
+    if (routeNeedsFocus.current) {
+      routeNeedsFocus.current = false;
+      document.getElementById(page ? 'page-title' : 'not-found-title')?.focus();
+    }
   }, [page]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', closeWithEscape);
+    return () => window.removeEventListener('keydown', closeWithEscape);
+  }, [mobileOpen]);
 
   function go(event: MouseEvent<HTMLAnchorElement>, href: string) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
     event.preventDefault();
+    if (window.location.pathname === href) {
+      setMobileOpen(false);
+      document.getElementById(page ? 'page-title' : 'not-found-title')?.focus();
+      return;
+    }
+    routeNeedsFocus.current = true;
     window.history.pushState({}, '', href);
     setPage(currentPage());
     setMobileOpen(false);
-    document.getElementById('main-content')?.focus();
   }
 
   return (
@@ -95,7 +124,7 @@ export function MemberApp() {
           <span className="side-small">پنل عضو</span>
           <span className="side-tag">نسخه پایه</span>
         </div>
-        <button className="menu-toggle" type="button"
+        <button ref={menuButtonRef} className="menu-toggle" type="button"
           aria-expanded={mobileOpen} aria-controls="member-nav"
           onClick={() => setMobileOpen((v) => !v)}>
           {mobileOpen ? 'بستن فهرست بخش‌ها' : 'باز کردن فهرست بخش‌ها'}
@@ -132,7 +161,7 @@ export function MemberApp() {
           {!page ? (
             <section className="not-found" aria-labelledby="not-found-title">
               <p className="eyebrow">مسیر ناشناخته</p>
-              <h1 id="not-found-title">صفحه پیدا نشد</h1>
+              <h1 id="not-found-title" tabIndex={-1}>صفحه پیدا نشد</h1>
               <p>این آدرس بخشی از فضای عضو نیست. هیچ محتوای خصوصی در این مسیر نمایش داده نمی‌شود.</p>
               <a className="return-link" href="/member" onClick={(event) => go(event, '/member')}>بازگشت به نمای کلی</a>
             </section>
@@ -145,7 +174,7 @@ export function MemberApp() {
               <section className="hero" aria-labelledby="page-title">
                 <div className="hero-content">
                   <span className="hero-kicker">وب‌اپ عضو ترنم <span aria-hidden="true">/</span> رابط اولیه</span>
-                  <h1 id="page-title">{page.key === 'overview' ? 'فضایی آرام برای پیگیری سلامت' : page.label}</h1>
+                  <h1 id="page-title" tabIndex={-1}>{page.key === 'overview' ? 'فضایی آرام برای پیگیری سلامت' : page.label}</h1>
                   <p>{page.key === 'overview'
                     ? 'اینجا در آینده مسیرهای عضویت و خدمات سلامت عضو در یک فضای یکپارچه قرار می‌گیرند؛ در حال حاضر هیچ اطلاعات شخصی نمایش داده نمی‌شود.'
                     : page.subtitle + ' — فقط پس از اتصال به سرویس معتبر و احراز هویت قابل استفاده خواهد بود.'}</p>
