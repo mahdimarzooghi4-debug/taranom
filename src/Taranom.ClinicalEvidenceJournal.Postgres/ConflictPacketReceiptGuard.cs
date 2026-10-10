@@ -1,0 +1,78 @@
+using Taranom.ClinicalEvidenceIntake;
+using IntakeDomain = global::Taranom.ClinicalEvidenceIntake.ClinicalEvidenceIntake;
+
+namespace Taranom.ClinicalEvidenceJournal.Postgres;
+
+// The alleged recipient is an untrusted synthetic identity, NEVER an actual
+// legal reviewer or person receiving a real health/conflict file.
+internal enum TechnicalReceiptOutcome
+{
+    Invalid = 1,
+    AuthoritySourceUnavailable = 2,
+    RecipientUnverified = 3,
+    PacketScopeMismatch = 4,
+    RecipientIsSubjectOrInitiator = 5,
+    PacketMissingOrCorrupt = 6,
+    SupersededSourceRevision = 7,
+    SyntheticTechnicalReceiptRecorded = 8,
+    ExactReplay = 9,
+    ConflictingReplay = 10,
+    AlreadyNotedForPacket = 11
+}
+
+internal readonly record struct TechnicalReceiptCommand(
+    Guid RequestId, Guid PacketId, string CenterRef,
+    string RecipientClaimRef, string GrantVersionRef, string ReceiptEvidenceRef);
+
+internal readonly record struct TechnicalReceiptSourceEvidence(
+    Guid PacketId, string CenterRef, string SessionSubjectRef,
+    string ResolvedRecipientRef, string CurrentGrantVersionRef,
+    bool SimulatedSessionVerified, bool SimulatedAssignmentCurrent,
+    bool SimulatedGrantNotRevoked, bool SimulatedAuditAvailable);
+
+// An interface seam for future legally approved issuer/assignment registry.
+// Only TEST DOUBLES may implement it in this Sprint. No actual source exists.
+internal interface ITechnicalReceiptAuthoritySource
+{
+    Task<TechnicalReceiptSourceEvidence?> ResolveAsync(
+        Guid packetId, CancellationToken cancellationToken);
+}
+
+internal static class ConflictPacketReceiptGuard
+{
+    internal static bool Valid(TechnicalReceiptCommand x) =>
+        x.RequestId != Guid.Empty && x.PacketId != Guid.Empty &&
+        IntakeDomain.IsSyntheticRef(x.CenterRef) &&
+        IntakeDomain.IsSyntheticRef(x.RecipientClaimRef) &&
+        IntakeDomain.IsSyntheticRef(x.GrantVersionRef) &&
+        IntakeDomain.IsSyntheticRef(x.ReceiptEvidenceRef);
+
+    internal static async Task<TechnicalReceiptOutcome> CheckAsync(
+        TechnicalReceiptCommand command,
+        ITechnicalReceiptAuthoritySource? source,
+        CancellationToken ct = default)
+    {
+        if (!Valid(command)) return TechnicalReceiptOutcome.Invalid;
+        // No source => stop BEFORE reading even synthetic conflict packets.
+        if (source is null) return TechnicalReceiptOutcome.AuthoritySourceUnavailable;
+        TechnicalReceiptSourceEvidence? candidate;
+        try { candidate = await source.ResolveAsync(command.PacketId, ct); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return TechnicalReceiptOutcome.AuthoritySourceUnavailable; }
+        if (candidate is not { } x)
+            return TechnicalReceiptOutcome.AuthoritySourceUnavailable;
+        if (x.PacketId != command.PacketId || x.CenterRef != command.CenterRef)
+            return TechnicalReceiptOutcome.PacketScopeMismatch;
+        if (!x.SimulatedSessionVerified || !x.SimulatedAssignmentCurrent ||
+            !x.SimulatedGrantNotRevoked || !x.SimulatedAuditAvailable ||
+            !IntakeDomain.IsSyntheticRef(x.SessionSubjectRef) ||
+            !IntakeDomain.IsSyntheticRef(x.ResolvedRecipientRef) ||
+            !IntakeDomain.IsSyntheticRef(x.CurrentGrantVersionRef) ||
+            x.SessionSubjectRef != x.ResolvedRecipientRef ||
+            x.ResolvedRecipientRef != command.RecipientClaimRef ||
+            x.CurrentGrantVersionRef != command.GrantVersionRef)
+            return TechnicalReceiptOutcome.RecipientUnverified;
+        // A positive fake test source is never an authorization to receive.
+        return TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded;
+    }
+}
