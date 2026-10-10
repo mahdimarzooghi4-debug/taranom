@@ -146,8 +146,8 @@ public sealed class ReviewIntakePostgresTests
         var b = Center();
         await Submit(store, a, Doctor, EvidenceSubjectKind.Physician, Physician(a));
         await Submit(store, b, Doctor, EvidenceSubjectKind.Physician, Physician(b));
-        Assert.Equal(1, (await Read(store, a, Doctor, EvidenceSubjectKind.Physician)).Submissions.Length);
-        Assert.Equal(1, (await Read(store, b, Doctor, EvidenceSubjectKind.Physician)).Submissions.Length);
+        Assert.Single((await Read(store, a, Doctor, EvidenceSubjectKind.Physician)).Submissions);
+        Assert.Single((await Read(store, b, Doctor, EvidenceSubjectKind.Physician)).Submissions);
         Assert.Equal(1L, await Count(db, "internal_test_review_case", a, Doctor));
         Assert.Equal(1L, await Count(db, "internal_test_review_case", b, Doctor));
     }
