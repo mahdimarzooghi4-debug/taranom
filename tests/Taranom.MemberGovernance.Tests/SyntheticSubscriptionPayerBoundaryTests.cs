@@ -134,7 +134,6 @@ public sealed class SyntheticSubscriptionPayerBoundaryTests
     [InlineData("contract-member")]
     [InlineData("contract-tenant")]
     [InlineData("payer-actor")]
-    [InlineData("payer-tenant")]
     public void ExactIndividualOwnershipContractAndClaimedActorCannotBeSwapped(string mutation)
     {
         var sample = Input(SyntheticMembershipMarket.CorporateEmployer,
@@ -145,10 +144,21 @@ public sealed class SyntheticSubscriptionPayerBoundaryTests
             "contract-member" => sample with { ClaimedContractMemberRef = "test:other" },
             "contract-tenant" => sample with { ClaimedContractTenantRef = "test:other-tenant" },
             "payer-actor" => sample with { ClaimedPayerRef = "test:member-one" },
-            "payer-tenant" => sample with { ClaimedPayerTenantRef = "" },
             _ => throw new ArgumentException()
         };
         Assert.Equal(SyntheticPayerBoundaryResult.ContractScopeDenied,
+            SyntheticSubscriptionPayerBoundary.Evaluate(sample));
+    }
+
+    [Fact]
+    public void MissingPayerTenantIsInvalidInputNotAValidClaimedScope()
+    {
+        var sample = Input(SyntheticMembershipMarket.CorporateEmployer,
+            SyntheticSubscriptionPayerKind.Employer) with
+            {
+                ClaimedPayerTenantRef = ""
+            };
+        Assert.Equal(SyntheticPayerBoundaryResult.InvalidInput,
             SyntheticSubscriptionPayerBoundary.Evaluate(sample));
     }
 
