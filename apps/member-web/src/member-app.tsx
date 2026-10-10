@@ -56,6 +56,20 @@ const supportPaths = [
     disclosure: 'ثبت اعتراض موجب برداشت، مسدودی یا اصلاح خودکار کیف پول نمی‌شود.' },
 ] as const;
 
+// Coordinating a visit and making clinical decisions are DIFFERENT duties.
+// All entries are static responsibility descriptions, not existing activities.
+const careResponsibilitySteps = [
+  { key: 'contact', label: 'درخواست و هماهنگی غیراضطراری',
+    owner: 'ترنم: هماهنگی ارتباط و پیگیری تجربه عضو',
+    restriction: 'هیچ درخواست یا پرونده واقعی هنوز ثبت نشده است.' },
+  { key: 'clinical', label: 'تصمیم بالینی و ارجاع تخصصی',
+    owner: 'پزشک یا مرکز درمانی دارای صلاحیت، مجوز و مسئولیت قانونی',
+    restriction: 'سامانه نمی‌تواند تشخیص، درمان یا ارجاع پزشکی را خودکار تأیید کند.' },
+  { key: 'followup', label: 'پیگیری پس از خدمت',
+    owner: 'ترنم: هماهنگی تجربه؛ متخصص مجاز: تصمیم مراقبت و پیگیری بالینی',
+    restriction: 'هیچ مراجعه، برنامه مراقبتی یا وضعیت تکمیل خدمت تأیید نشده است.' },
+] as const;
+
 const descriptions = [
   { label: 'هویت و دسترسی', value: 'اتصال برقرار نیست', help: 'احراز هویت واقعی هنوز پیاده‌سازی نشده است.' },
   { label: 'اطلاعات درمانی', value: 'در دسترس نیست', help: 'بدون دسترسی مجاز هیچ پرونده‌ای نمایش داده نمی‌شود.' },
@@ -244,6 +258,37 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="cost-awareness-limits">
                     ثبت آگاهی و انتخاب — نیازمند اتصال امن
                   </button>
+                </section>
+              ) : null}
+              {page.key === 'care' ? (
+                <section aria-labelledby="care-boundary-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">هماهنگی خدمت، جدا از تصمیم پزشکی</p>
+                      <h2 id="care-boundary-title">مراحل و مسئولیت‌های مسیر درمان</h2>
+                    </div>
+                    <span className="readonly-pill">هیچ مسیر فعالی وجود ندارد</span>
+                  </div>
+                  <div className="status-grid" role="list" aria-label="مرزهای هماهنگی و درمان">
+                    {careResponsibilitySteps.map((step) => (
+                      <article className="status-card" role="listitem" key={step.key}>
+                        <p className="status-card-label">{step.label}</p>
+                        <h3>اطلاعات موجود نیست</h3>
+                        <p>{step.owner}</p>
+                        <p>{step.restriction}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <p id="care-safety-limit" className="quiet">
+                    هماهنگی ترنم جایگزین ارزیابی متخصص، تأیید ارجاع یا مجوز دسترسی به پرونده سلامت نیست.
+                    مشارکت عضو و استفاده از اطلاعات سلامت فقط با مبنای قانونی و مجوز معتبر انجام می‌شود.
+                  </p>
+                  <button type="button" disabled aria-describedby="care-safety-limit">
+                    درخواست هماهنگی — نیازمند هویت و مجوز واقعی
+                  </button>
+                  <p className="emergency-note">
+                    در احتمال فوریت پزشکی، دریافت کمک فوری را به هماهنگی غیراضطراری یا پاسخ پزشک در سامانه موکول نکنید.
+                  </p>
                 </section>
               ) : null}
               {page.key === 'support' ? (

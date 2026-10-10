@@ -294,3 +294,51 @@ test('SUPPORT-04: navigation back and forward retains disconnected legal boundar
   await page.goForward();
   await expect(page.getByRole('heading', { name: 'موضوعات شکایت و اعتراض' })).toBeVisible();
 });
+
+test('CARE-01: three non-emergency care responsibilities remain legally separated', async ({ page }) => {
+  await page.goto('/member/care');
+  await expect(page.getByRole('heading', { name: 'مراحل و مسئولیت‌های مسیر درمان' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'مرزهای هماهنگی و درمان' });
+  await expect(list.getByRole('listitem')).toHaveCount(3);
+  const coordination = list.getByRole('listitem').filter({ hasText: 'درخواست و هماهنگی غیراضطراری' });
+  const clinical = list.getByRole('listitem').filter({ hasText: 'تصمیم بالینی و ارجاع تخصصی' });
+  const followUp = list.getByRole('listitem').filter({ hasText: 'پیگیری پس از خدمت' });
+  await expect(coordination).toContainText('ترنم: هماهنگی ارتباط');
+  await expect(clinical).toContainText('پزشک یا مرکز درمانی دارای صلاحیت');
+  await expect(followUp).toContainText('متخصص مجاز: تصمیم مراقبت');
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+});
+
+test('CARE-02: care preview never claims a licensed visit, appointment or referral', async ({ page }) => {
+  await page.goto('/member/care');
+  await expect(page.getByText('هیچ مسیر فعالی وجود ندارد')).toBeVisible();
+  await expect(page.getByText('سامانه نمی‌تواند تشخیص، درمان یا ارجاع پزشکی را خودکار تأیید کند.')).toBeVisible();
+  await expect(page.getByText('هیچ مراجعه، برنامه مراقبتی یا وضعیت تکمیل خدمت تأیید نشده است.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'درخواست هماهنگی — نیازمند هویت و مجوز واقعی' })).toBeDisabled();
+  await expect(page.getByRole('status')).toContainText('این بخش هنوز به سرویس واقعی متصل نیست');
+});
+
+test('CARE-03: emergency pathway cannot be hidden behind care coordination and no private calls occur', async ({ page }) => {
+  const privateRequests: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/clinical/', '/referral/', '/appointment/', '/identity/']
+      .some(path => request.url().includes(path))) privateRequests.push(request.url());
+  });
+  await page.goto('/member/care');
+  await expect(page.getByText('در احتمال فوریت پزشکی، دریافت کمک فوری را به هماهنگی غیراضطراری یا پاسخ پزشک در سامانه موکول نکنید.')).toBeVisible();
+  await expect(page.getByText('مشارکت عضو و استفاده از اطلاعات سلامت فقط با مبنای قانونی و مجوز معتبر انجام می‌شود.', { exact: false })).toBeVisible();
+  expect(privateRequests).toEqual([]);
+  await expect(page.getByRole('button', { name: /تأیید درمان|تجویز|ارجاع تخصصی/ })).toHaveCount(0);
+});
+
+test('CARE-04: browser history restores care context without enabling any action', async ({ page }) => {
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'هماهنگی درمان' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'هماهنگی درمان' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'مراحل و مسئولیت‌های مسیر درمان' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'مراحل و مسئولیت‌های مسیر درمان' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'درخواست هماهنگی — نیازمند هویت و مجوز واقعی' })).toBeDisabled();
+});
