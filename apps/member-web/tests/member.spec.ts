@@ -342,3 +342,48 @@ test('CARE-04: browser history restores care context without enabling any action
   await expect(page.getByRole('heading', { name: 'مراحل و مسئولیت‌های مسیر درمان' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'درخواست هماهنگی — نیازمند هویت و مجوز واقعی' })).toBeDisabled();
 });
+
+test('CONSENT-10: independent care and secondary research consent prerequisites appear unknown', async ({ page }) => {
+  await page.goto('/member/consents');
+  await expect(page.getByRole('heading', { name: 'مرزهای مستقل رضایت و حفاظت داده' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'پیش‌شرط‌های مستقل اشتراک و استفاده داده' });
+  await expect(list.getByRole('listitem')).toHaveCount(4);
+  for (const name of [
+    'اشتراک‌گذاری برای خدمات درمانی',
+    'رضایت مستقل پژوهش و آموزش هوش مصنوعی',
+    'مجوز و مبنای قانونی پردازش ثانویه',
+    'حفاظت داده و محدوده استفاده',
+  ]) {
+    await expect(list.getByText(name, { exact: true })).toBeVisible();
+  }
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(4);
+  await expect(page.getByText('هیچ رضایت معتبری دریافت نشده است')).toBeVisible();
+});
+
+test('CONSENT-11: no implicit AI consent, real medical sharing or dataset action', async ({ page }) => {
+  const privateRequests: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/consent/', '/health/', '/training/', '/ai/', '/identity/']
+      .some(route => request.url().includes(route))) privateRequests.push(request.url());
+  });
+  await page.goto('/member/consents');
+  const list = page.getByRole('list', { name: 'پیش‌شرط‌های مستقل اشتراک و استفاده داده' });
+  await expect(list).toContainText('عضویت، پرداخت یا رضایت درمانی هرگز جانشین رضایت آگاهانه مستقل پژوهشی نیست.');
+  await expect(list).toContainText('رضایت به‌تنهایی مجوز قانونی استفاده پژوهشی یا انتقال داده ایجاد نمی‌کند.');
+  await expect(page.getByText(/نحوه لغو رضایت، نگهداری/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ثبت یا تغییر رضایت — نیازمند احراز هویت و قرارداد قانونی' })).toBeDisabled();
+  expect(privateRequests).toEqual([]);
+  expect(await page.evaluate(() => ({ local: Object.keys(localStorage), session: Object.keys(sessionStorage) })))
+    .toEqual({ local: [], session: [] });
+});
+
+test('CONSENT-12: member navigation preserves disabled privacy action through history', async ({ page }) => {
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'رضایت‌ها و حریم خصوصی' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'رضایت‌ها و حریم خصوصی' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'مرزهای مستقل رضایت و حفاظت داده' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', { name: 'ثبت یا تغییر رضایت — نیازمند احراز هویت و قرارداد قانونی' })).toBeDisabled();
+});

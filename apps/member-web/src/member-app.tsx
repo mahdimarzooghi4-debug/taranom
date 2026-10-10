@@ -70,6 +70,19 @@ const careResponsibilitySteps = [
     restriction: 'هیچ مراجعه، برنامه مراقبتی یا وضعیت تکمیل خدمت تأیید نشده است.' },
 ] as const;
 
+// These are independently required *categories of evidence*, NOT effective
+// legal grants; nothing here reads, records or preselects member consent.
+const consentBoundaries = [
+  { key: 'care', label: 'اشتراک‌گذاری برای خدمات درمانی',
+    explanation: 'دسترسی تیم درمانی فقط با نیاز خدمت، اختیار قانونی و مجوز مشخص ممکن است.' },
+  { key: 'research', label: 'رضایت مستقل پژوهش و آموزش هوش مصنوعی',
+    explanation: 'عضویت، پرداخت یا رضایت درمانی هرگز جانشین رضایت آگاهانه مستقل پژوهشی نیست.' },
+  { key: 'law', label: 'مجوز و مبنای قانونی پردازش ثانویه',
+    explanation: 'رضایت به‌تنهایی مجوز قانونی استفاده پژوهشی یا انتقال داده ایجاد نمی‌کند.' },
+  { key: 'privacy', label: 'حفاظت داده و محدوده استفاده',
+    explanation: 'نوع داده، هدف، حفاظت، نگهداری و آثار انصراف باید جداگانه احراز شوند.' },
+] as const;
+
 const descriptions = [
   { label: 'هویت و دسترسی', value: 'اتصال برقرار نیست', help: 'احراز هویت واقعی هنوز پیاده‌سازی نشده است.' },
   { label: 'اطلاعات درمانی', value: 'در دسترس نیست', help: 'بدون دسترسی مجاز هیچ پرونده‌ای نمایش داده نمی‌شود.' },
@@ -232,6 +245,34 @@ export function MemberApp() {
                     </section>
                   ))}
                 </div>
+              ) : null}
+              {page.key === 'consents' ? (
+                <section aria-labelledby="consent-boundary-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">رضایت درمانی با استفاده پژوهشی یکی نیست</p>
+                      <h2 id="consent-boundary-title">مرزهای مستقل رضایت و حفاظت داده</h2>
+                    </div>
+                    <span className="readonly-pill">هیچ رضایت معتبری دریافت نشده است</span>
+                  </div>
+                  <div className="status-grid" role="list" aria-label="پیش‌شرط‌های مستقل اشتراک و استفاده داده">
+                    {consentBoundaries.map((item) => (
+                      <article key={item.key} role="listitem" className="status-card">
+                        <p className="status-card-label">{item.label}</p>
+                        <h3>اطلاعات موجود نیست</h3>
+                        <p>{item.explanation}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <p className="quiet" id="secondary-consent-limits">
+                    وضعیت این صفحه دلیل وجود رضایت، مجوز پژوهش، اجازه اشتراک پرونده یا
+                    ورود اطلاعات به Dataset هوش مصنوعی نیست. نحوه لغو رضایت، نگهداری
+                    و استفاده از داده‌های مشتق هنوز قرارداد معتبر ندارد.
+                  </p>
+                  <button type="button" disabled aria-describedby="secondary-consent-limits">
+                    ثبت یا تغییر رضایت — نیازمند احراز هویت و قرارداد قانونی
+                  </button>
+                </section>
               ) : null}
               {page.key === 'costs' ? (
                 <section aria-labelledby="nonbinding-cost-title">
