@@ -14,10 +14,11 @@ internal enum TechnicalReceiptOutcome
     RecipientIsSubjectOrInitiator = 5,
     PacketMissingOrCorrupt = 6,
     SupersededSourceRevision = 7,
-    SyntheticTechnicalReceiptRecorded = 8,
-    ExactReplay = 9,
-    ConflictingReplay = 10,
-    AlreadyNotedForPacket = 11
+    SimulatedPrerequisitesOnly = 8,
+    SyntheticTechnicalReceiptRecorded = 9,
+    ExactReplay = 10,
+    ConflictingReplay = 11,
+    AlreadyNotedForPacket = 12
 }
 
 internal readonly record struct TechnicalReceiptCommand(
@@ -73,6 +74,6 @@ internal static class ConflictPacketReceiptGuard
             x.CurrentGrantVersionRef != command.GrantVersionRef)
             return TechnicalReceiptOutcome.RecipientUnverified;
         // A positive fake test source is never an authorization to receive.
-        return TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded;
+        return TechnicalReceiptOutcome.SimulatedPrerequisitesOnly;
     }
 }
