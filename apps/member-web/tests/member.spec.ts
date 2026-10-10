@@ -466,3 +466,51 @@ test('BUNDLE-01: built member shell fetches only local route, JS and CSS (no ext
     expect(target.pathname).not.toMatch(/\.map$/);
   }
 });
+
+test('PAYER-01: three market funding routes remain unknown and membership stays individual', async ({ page }) => {
+  await page.goto('/member/membership');
+  await expect(page.getByRole('heading', { name: 'مسیرهای سه‌گانه تأمین هزینه عضویت' })).toBeVisible();
+  const routes = page.getByRole('list', { name: 'مسیرهای پرداخت و مالکیت فردی' });
+  await expect(routes.getByRole('listitem')).toHaveCount(3);
+  for (const name of ['عموم مردم', 'نهادهای حمایتی', 'سازمان‌ها و شرکت‌ها']) {
+    await expect(routes.getByText(name, { exact: true })).toBeVisible();
+  }
+  await expect(routes.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+  await expect(routes).toContainText('عضو یا نهاد حمایتی، فقط مطابق قرارداد معتبر');
+  await expect(routes).toContainText('عضو یا کارفرما، فقط مطابق قرارداد معتبر');
+  await expect(page.getByText('مالک عضویت و کیف پول درمانی همیشه خود فرد عضو است.', { exact: false })).toBeVisible();
+});
+
+test('PAYER-02: sponsor subscription payment does not confer clinical or wallet rights', async ({ page }) => {
+  await page.goto('/member/membership');
+  await expect(page.getByText('پرداخت حق اشتراک توسط حامی، حق دیدن پرونده سلامت، برداشت اعتبار،', { exact: false })).toBeVisible();
+  await expect(page.getByText('هیچ قرارداد یا پرداختی تأیید نشده است')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'درخواست یا پرداخت عضویت — نیازمند قرارداد و سرویس معتبر' })).toBeDisabled();
+  await expect(page.getByRole('status')).toContainText('این بخش هنوز به سرویس واقعی متصل نیست');
+});
+
+test('PAYER-03: individual wallet preview exposes no balance or payment activation', async ({ page }) => {
+  await page.goto('/member/credit');
+  await expect(page.getByRole('heading', { name: 'اختیار کیف پول درمانی متعلق به عضو است' })).toBeVisible();
+  await expect(page.getByText('موجودی نامعلوم')).toBeVisible();
+  await expect(page.getByText('تأمین هزینه اشتراک توسط سازمان یا نهاد حمایتی، مالکیت کیف پول یا دسترسی', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'مشاهده گردش اعتبار — نیازمند احراز هویت و منبع مالی معتبر' })).toBeDisabled();
+  await expect(page.getByRole('status')).toContainText('این بخش هنوز به سرویس واقعی متصل نیست');
+});
+
+test('PAYER-04: member funding preview does not contact private services or write browser storage', async ({ page }) => {
+  const privateRequests: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/billing/', '/subscription/', '/wallet/', '/identity/', '/health/']
+      .some(path => request.url().includes(path))) privateRequests.push(request.url());
+  });
+  await page.goto('/member/membership');
+  await page.getByRole('link', { name: 'اعتبار درمان' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'اعتبار درمان' })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'مسیرهای سه‌گانه تأمین هزینه عضویت' })).toBeVisible();
+  expect(privateRequests).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

@@ -83,6 +83,20 @@ const consentBoundaries = [
     explanation: 'نوع داده، هدف، حفاظت، نگهداری و آثار انصراف باید جداگانه احراز شوند.' },
 ] as const;
 
+// Accepted TRN-BIZ-028/029 only describe possible payer arrangements;
+// these are NOT active subscriptions, verified contracts or payer records.
+const membershipFundingRoutes = [
+  { key: 'public', label: 'عموم مردم',
+    payer: 'خود عضو، در مسیر عضویت مستقیم',
+    restriction: 'هیچ پرداخت یا عضویت واقعی ثبت نشده است.' },
+  { key: 'support', label: 'نهادهای حمایتی',
+    payer: 'عضو یا نهاد حمایتی، فقط مطابق قرارداد معتبر',
+    restriction: 'هیچ نهاد حامی یا قرارداد واقعی تأیید نشده است.' },
+  { key: 'corporate', label: 'سازمان‌ها و شرکت‌ها',
+    payer: 'عضو یا کارفرما، فقط مطابق قرارداد معتبر',
+    restriction: 'هیچ کارفرما یا تعهد پرداخت واقعی تأیید نشده است.' },
+] as const;
+
 const descriptions = [
   { label: 'هویت و دسترسی', value: 'اتصال برقرار نیست', help: 'احراز هویت واقعی هنوز پیاده‌سازی نشده است.' },
   { label: 'اطلاعات درمانی', value: 'در دسترس نیست', help: 'بدون دسترسی مجاز هیچ پرونده‌ای نمایش داده نمی‌شود.' },
@@ -245,6 +259,55 @@ export function MemberApp() {
                     </section>
                   ))}
                 </div>
+              ) : null}
+              {page.key === 'membership' ? (
+                <section aria-labelledby="payer-boundary-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">پرداخت‌کننده اشتراک با مالک عضویت یکی نیست</p>
+                      <h2 id="payer-boundary-title">مسیرهای سه‌گانه تأمین هزینه عضویت</h2>
+                    </div>
+                    <span className="readonly-pill">هیچ قرارداد یا پرداختی تأیید نشده است</span>
+                  </div>
+                  <div className="status-grid" role="list" aria-label="مسیرهای پرداخت و مالکیت فردی">
+                    {membershipFundingRoutes.map((route) => (
+                      <article key={route.key} role="listitem" className="status-card">
+                        <p className="status-card-label">{route.label}</p>
+                        <h3>اطلاعات موجود نیست</h3>
+                        <p>{route.payer}</p>
+                        <p>{route.restriction}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <p id="membership-ownership-boundary" className="quiet">
+                    مالک عضویت و کیف پول درمانی همیشه خود فرد عضو است.
+                    پرداخت حق اشتراک توسط حامی، حق دیدن پرونده سلامت، برداشت اعتبار،
+                    تغییر رضایت یا تصمیم درمان را به حامی منتقل نمی‌کند.
+                    مبلغ، وضعیت پرداخت، قرارداد، مدت اعتبار و استحقاق هنوز نامعلوم‌اند.
+                  </p>
+                  <button type="button" disabled aria-describedby="membership-ownership-boundary">
+                    درخواست یا پرداخت عضویت — نیازمند قرارداد و سرویس معتبر
+                  </button>
+                </section>
+              ) : null}
+              {page.key === 'credit' ? (
+                <section aria-labelledby="individual-wallet-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">مالکیت فردی مستقل از پرداخت‌کننده اشتراک</p>
+                      <h2 id="individual-wallet-title">اختیار کیف پول درمانی متعلق به عضو است</h2>
+                    </div>
+                    <span className="readonly-pill">موجودی نامعلوم</span>
+                  </div>
+                  <p className="quiet">
+                    تأمین هزینه اشتراک توسط سازمان یا نهاد حمایتی، مالکیت کیف پول یا دسترسی
+                    به اطلاعات درمانی عضو ایجاد نمی‌کند. اعتبار درمان نقدشدنی نیست و
+                    هیچ مبلغ، تراکنش، مصرف یا تخصیصی در این پیش‌نمایش وجود ندارد.
+                  </p>
+                  <button type="button" disabled>
+                    مشاهده گردش اعتبار — نیازمند احراز هویت و منبع مالی معتبر
+                  </button>
+                </section>
               ) : null}
               {page.key === 'consents' ? (
                 <section aria-labelledby="consent-boundary-title">
