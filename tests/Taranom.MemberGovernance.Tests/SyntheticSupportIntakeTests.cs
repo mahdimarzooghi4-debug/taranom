@@ -27,10 +27,11 @@ public sealed class SyntheticSupportIntakeTests
         };
 
     [Theory]
-    [InlineData(SyntheticSupportTopic.MedicalServiceComplaint)]
-    [InlineData(SyntheticSupportTopic.InsuranceCoverageDispute)]
-    public void BothIndependentTopicsCreateOnlyUnverifiedIntake(SyntheticSupportTopic topic)
+    [InlineData(1)]
+    [InlineData(2)]
+    public void BothIndependentTopicsCreateOnlyUnverifiedIntake(int topicValue)
     {
+        var topic = (SyntheticSupportTopic)topicValue;
         var command = Submit(topic);
         var result = SyntheticSupportIntake.Apply(SyntheticSupportSnapshot.Empty, command);
         Assert.Equal(SyntheticSupportOutcome.RecordedUnverified, result.Outcome);
