@@ -115,7 +115,8 @@ internal sealed class PgSyntheticPacketReceiptJournal(
         var replayId = await FindExistingRequestAsync(cn, tx, command.RequestId, ct);
         if (replayId is { } previous)
         {
-            var existing = await ReadLockedAsync(cn, tx, previous, ct);
+            var existing = await ReadLockedAsync(cn, tx, previous, ct)
+                ?? throw new InvalidOperationException("TEST_PACKET_RECEIPT_CORRUPT");
             await tx.RollbackAsync(ct);
             return existing.Command == command
                 ? TechnicalReceiptOutcome.ExactReplay
