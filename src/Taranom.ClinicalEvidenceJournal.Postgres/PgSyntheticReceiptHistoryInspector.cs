@@ -12,7 +12,8 @@ internal enum SyntheticReceiptHistoryStatus
     HistoricalReceiptCorrupt = 5,
     RecordedCommandMismatch = 6,
     HistoricalIssuerVersionDifferent = 7,
-    SimulatedVersionMatchesHistoryOnly = 8
+    SimulatedVersionMatchesHistoryOnly = 8,
+    SimulatedIssuerSnapshotChangedDuringInspection = 9
 }
 
 internal sealed class PgSyntheticReceiptHistoryInspector(
@@ -48,8 +49,22 @@ internal sealed class PgSyntheticReceiptHistoryInspector(
             return SyntheticReceiptHistoryStatus.NoHistoricalReceipt;
         if (stored.Command != expected)
             return SyntheticReceiptHistoryStatus.RecordedCommandMismatch;
-        if (stored.SimulatedIssuerRef != attested.SimulatedIssuerRef ||
-            stored.SimulatedIssuerRevision != attested.SimulatedIssuerRevision)
+
+        // The SQL read is historical. Recheck the simulated issuer AFTER
+        // reading it: a positive first answer alone must not be treated as
+        // stable even for this nonauthorizing diagnostic result.
+        var afterRead = await ConflictPacketReceiptGuard.InspectAsync(
+            expected, source, ct);
+        if (afterRead.Outcome == TechnicalReceiptOutcome.AuthoritySourceUnavailable)
+            return SyntheticReceiptHistoryStatus.SourceUnavailable;
+        if (afterRead.Outcome != TechnicalReceiptOutcome.SimulatedPrerequisitesOnly ||
+            afterRead.Evidence is not { } finalIssuer)
+            return SyntheticReceiptHistoryStatus.RecipientOrGrantUnverified;
+        if (attested.SimulatedIssuerRef != finalIssuer.SimulatedIssuerRef ||
+            attested.SimulatedIssuerRevision != finalIssuer.SimulatedIssuerRevision)
+            return SyntheticReceiptHistoryStatus.SimulatedIssuerSnapshotChangedDuringInspection;
+        if (stored.SimulatedIssuerRef != finalIssuer.SimulatedIssuerRef ||
+            stored.SimulatedIssuerRevision != finalIssuer.SimulatedIssuerRevision)
             return SyntheticReceiptHistoryStatus.HistoricalIssuerVersionDifferent;
 
         return SyntheticReceiptHistoryStatus.SimulatedVersionMatchesHistoryOnly;

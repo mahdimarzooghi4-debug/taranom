@@ -121,21 +121,40 @@ internal sealed class PgSyntheticPacketReceiptJournal(
         {
             var existing = await ReadLockedAsync(cn, tx, previous, ct)
                 ?? throw new InvalidOperationException("TEST_PACKET_RECEIPT_CORRUPT");
-            // A duplicate request is an immutable historical fact, not proof
-            // of a current simulated issuer. Never call a changed source
-            // snapshot "ExactReplay"; preserve the original row and audit.
-            // This is a single TEST DOUBLE check, not atomic revocation.
-            var sameCommand = existing.Command == command;
+            // Preserve request-id conflict precedence, even if a claimed
+            // TEST DOUBLE changes after the first check. No second receipt.
+            if (existing.Command != command)
+            {
+                await tx.RollbackAsync(ct);
+                return TechnicalReceiptOutcome.ConflictingReplay;
+            }
+
+            // Recheck the source after the PostgreSQL request/packet locks and
+            // durable receipt+audit read. This is a negative TOCTOU guard,
+            // NOT an external authority transaction or instant revocation.
+            var replayCheck = await ConflictPacketReceiptGuard.InspectAsync(
+                command, source, ct);
+            if (replayCheck.Outcome != TechnicalReceiptOutcome.SimulatedPrerequisitesOnly)
+            {
+                await tx.RollbackAsync(ct);
+                return replayCheck.Outcome;
+            }
+            if (initialCheck.Evidence is not { } firstIssuer ||
+                replayCheck.Evidence is not { } lastIssuer ||
+                firstIssuer.SimulatedIssuerRef != lastIssuer.SimulatedIssuerRef ||
+                firstIssuer.SimulatedIssuerRevision != lastIssuer.SimulatedIssuerRevision)
+            {
+                await tx.RollbackAsync(ct);
+                return TechnicalReceiptOutcome.SimulatedIssuerSnapshotChanged;
+            }
+
             var issuerMatchesHistory =
-                initialCheck.Evidence is { } reported &&
-                existing.SimulatedIssuerRef == reported.SimulatedIssuerRef &&
-                existing.SimulatedIssuerRevision == reported.SimulatedIssuerRevision;
+                existing.SimulatedIssuerRef == lastIssuer.SimulatedIssuerRef &&
+                existing.SimulatedIssuerRevision == lastIssuer.SimulatedIssuerRevision;
             await tx.RollbackAsync(ct);
-            return !sameCommand
-                ? TechnicalReceiptOutcome.ConflictingReplay
-                : !issuerMatchesHistory
-                    ? TechnicalReceiptOutcome.HistoricalIssuerVersionDifferentOnReplay
-                    : TechnicalReceiptOutcome.ExactReplay;
+            return issuerMatchesHistory
+                ? TechnicalReceiptOutcome.ExactReplay
+                : TechnicalReceiptOutcome.HistoricalIssuerVersionDifferentOnReplay;
         }
 
         if (latest.Revision != packet.Command.ExpectedDisclosureRevision)
