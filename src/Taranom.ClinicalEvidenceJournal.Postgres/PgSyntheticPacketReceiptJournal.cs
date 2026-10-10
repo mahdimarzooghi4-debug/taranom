@@ -150,6 +150,19 @@ internal sealed class PgSyntheticPacketReceiptJournal(
             }
         }
 
+        // A test-source grant may change while PostgreSQL source/packet locks
+        // are acquired. Revalidate after both locks and before any receipt
+        // writes, including the exact request and evidence-reference binding.
+        // This is a negative TOCTOU regression guard, NOT a real revocation
+        // guarantee: no production trust root or atomic issuer exists.
+        var beforeInsert = await ConflictPacketReceiptGuard.CheckAsync(
+            command, source, ct);
+        if (beforeInsert != TechnicalReceiptOutcome.SimulatedPrerequisitesOnly)
+        {
+            await tx.RollbackAsync(ct);
+            return beforeInsert;
+        }
+
         // Exactly one accepted technical receipt per immutable packet.
         await using (var existingPacket = new NpgsqlCommand("""
             SELECT packet_id FROM internal_test_packet_receipt WHERE packet_id=@packet

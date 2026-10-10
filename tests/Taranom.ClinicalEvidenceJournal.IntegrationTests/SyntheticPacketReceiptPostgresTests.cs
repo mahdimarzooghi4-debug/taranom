@@ -22,9 +22,10 @@ public sealed class SyntheticPacketReceiptPostgresTests
     }
 
     private static TechnicalReceiptSourceEvidence Attestation(
-        TechnicalReceiptCommand command) => new(command.PacketId, command.CenterRef,
+        TechnicalReceiptCommand command) => new(command.PacketId, command.RequestId, command.CenterRef,
             command.RecipientClaimRef, command.RecipientClaimRef,
-            command.GrantVersionRef, true, true, true, true);
+            command.GrantVersionRef, command.ReceiptEvidenceRef,
+            true, true, true, true);
 
     private static async Task<(NpgsqlDataSource Db, NpgsqlDataSource Reader,
         PgReviewerConflictDisclosureJournal Notices, PgUnverifiedConflictPacketJournal Packets,

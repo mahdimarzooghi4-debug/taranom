@@ -26,8 +26,9 @@ internal readonly record struct TechnicalReceiptCommand(
     string RecipientClaimRef, string GrantVersionRef, string ReceiptEvidenceRef);
 
 internal readonly record struct TechnicalReceiptSourceEvidence(
-    Guid PacketId, string CenterRef, string SessionSubjectRef,
+    Guid PacketId, Guid RequestId, string CenterRef, string SessionSubjectRef,
     string ResolvedRecipientRef, string CurrentGrantVersionRef,
+    string ReceiptEvidenceRef,
     bool SimulatedSessionVerified, bool SimulatedAssignmentCurrent,
     bool SimulatedGrantNotRevoked, bool SimulatedAuditAvailable);
 
@@ -62,13 +63,17 @@ internal static class ConflictPacketReceiptGuard
         catch (Exception) { return TechnicalReceiptOutcome.AuthoritySourceUnavailable; }
         if (candidate is not { } x)
             return TechnicalReceiptOutcome.AuthoritySourceUnavailable;
-        if (x.PacketId != command.PacketId || x.CenterRef != command.CenterRef)
+        if (x.PacketId != command.PacketId || x.RequestId != command.RequestId ||
+            x.CenterRef != command.CenterRef)
             return TechnicalReceiptOutcome.PacketScopeMismatch;
         if (!x.SimulatedSessionVerified || !x.SimulatedAssignmentCurrent ||
             !x.SimulatedGrantNotRevoked || !x.SimulatedAuditAvailable ||
             !IntakeDomain.IsSyntheticRef(x.SessionSubjectRef) ||
             !IntakeDomain.IsSyntheticRef(x.ResolvedRecipientRef) ||
             !IntakeDomain.IsSyntheticRef(x.CurrentGrantVersionRef) ||
+            !IntakeDomain.IsSyntheticRef(x.ReceiptEvidenceRef) ||
+            !string.Equals(x.ReceiptEvidenceRef, command.ReceiptEvidenceRef,
+                StringComparison.Ordinal) ||
             x.SessionSubjectRef != x.ResolvedRecipientRef ||
             x.ResolvedRecipientRef != command.RecipientClaimRef ||
             x.CurrentGrantVersionRef != command.GrantVersionRef)
