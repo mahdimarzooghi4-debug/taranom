@@ -52,6 +52,14 @@ internal sealed class PgProofingCaseJournal(NpgsqlDataSource dataSource)
                 FOREIGN KEY(case_ref,case_revision)
                     REFERENCES internal_test_proofing_event(case_ref,case_revision)
             );
+            CREATE TABLE IF NOT EXISTS internal_test_proofing_denial (
+                attempt_ref uuid PRIMARY KEY,
+                case_ref text NOT NULL,
+                request_ref uuid NOT NULL,
+                reason_code integer NOT NULL CHECK (reason_code IN (3, 4, 5, 6, 7)),
+                observed_case_revision bigint NOT NULL CHECK (observed_case_revision >= 0),
+                occurred_at timestamptz NOT NULL DEFAULT now()
+            );
             CREATE OR REPLACE FUNCTION internal_test_proofing_immutable()
             RETURNS trigger LANGUAGE plpgsql AS $$
             BEGIN
@@ -73,6 +81,25 @@ internal sealed class PgProofingCaseJournal(NpgsqlDataSource dataSource)
                     USING ERRCODE = 'P0001';
             END;
             $$;
+            CREATE OR REPLACE FUNCTION internal_test_proofing_denial_guard()
+            RETURNS trigger LANGUAGE plpgsql AS $
+            BEGIN
+                IF TG_OP = 'INSERT' THEN
+                    IF NEW.case_ref LIKE 'test:abort-deny-%' THEN
+                        RAISE EXCEPTION 'TEST_PROOFING_DENIAL_AUDIT_UNAVAILABLE'
+                            USING ERRCODE = 'P0001';
+                    END IF;
+                    RETURN NEW;
+                END IF;
+                RAISE EXCEPTION 'TEST_PROOFING_APPEND_ONLY'
+                    USING ERRCODE = 'P0001';
+            END;
+            $;
+            DROP TRIGGER IF EXISTS internal_test_proofing_denial_immutable
+                ON internal_test_proofing_denial;
+            CREATE TRIGGER internal_test_proofing_denial_immutable
+                BEFORE INSERT OR UPDATE OR DELETE ON internal_test_proofing_denial
+                FOR EACH ROW EXECUTE FUNCTION internal_test_proofing_denial_guard();
             DROP TRIGGER IF EXISTS internal_test_proofing_event_immutable
                 ON internal_test_proofing_event;
             CREATE TRIGGER internal_test_proofing_event_immutable
@@ -110,7 +137,18 @@ internal sealed class PgProofingCaseJournal(NpgsqlDataSource dataSource)
         var current = await RehydrateLockedAsync(connection, tx, caseRef, ct);
         var change = ProofingCaseJournal.Apply(current, input);
         if (change.Outcome != ProofingJournalOutcome.Applied)
-            return change; // disposing an uncommitted tx rolls back any initial row
+        {
+            // Idempotent historical replay is not a rejected operation.
+            // A failed command must not commit the synthetic case row
+            // created above, even when no prior case existed. Roll it back
+            // BEFORE inserting the separate, minimal denial audit.
+            await tx.RollbackAsync(ct);
+            if (change.Outcome != ProofingJournalOutcome.Replayed)
+                await RecordDeniedAttemptAsync(connection, caseRef, input.RequestId,
+                    change.Outcome, current.CaseRevision, ct);
+            // Denial-audit failure throws instead of returning an unlogged deny.
+            return change;
+        }
 
         var snapshot = change.Snapshot;
         var json = JsonSerializer.Serialize(input);
@@ -163,6 +201,34 @@ internal sealed class PgProofingCaseJournal(NpgsqlDataSource dataSource)
 
         await tx.CommitAsync(ct);
         return change;
+    }
+
+    // Deliberately omit the original payload, principal, national identifier,
+    // tenant and provider assertion. This is not a complete operational audit.
+    // The only auditable outcomes here are deterministic reducer denials.
+    // Invalid case references and database corruption fail before this point.
+    private static async Task RecordDeniedAttemptAsync(
+        NpgsqlConnection connection, string caseRef, Guid requestRef,
+        ProofingJournalOutcome reason, long observedRevision, CancellationToken ct)
+    {
+        if (reason is not (ProofingJournalOutcome.InvalidCommand
+            or ProofingJournalOutcome.ConflictingReplay
+            or ProofingJournalOutcome.StaleCaseRevision
+            or ProofingJournalOutcome.StaleIdentityRevision
+            or ProofingJournalOutcome.NotApplicable))
+            throw new InvalidOperationException("TEST_PROOFING_DENIAL_REASON_INVALID");
+
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO internal_test_proofing_denial
+                (attempt_ref,case_ref,request_ref,reason_code,observed_case_revision)
+            VALUES (@attempt,@case,@request,@reason,@revision)
+            """, connection);
+        command.Parameters.AddWithValue("attempt", Guid.NewGuid());
+        command.Parameters.AddWithValue("case", caseRef);
+        command.Parameters.AddWithValue("request", requestRef);
+        command.Parameters.AddWithValue("reason", (int)reason);
+        command.Parameters.AddWithValue("revision", observedRevision);
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     internal async Task<ProofingCaseSnapshot> ReadAsync(
