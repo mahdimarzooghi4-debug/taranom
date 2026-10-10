@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "scope": "FIRST_COMPREHENSIVE_NATIONAL_OFFICIAL_LAUNCH",
+  "source_policy_refs": [
+    "TRN-BIZ-028",
+    "TRN-BIZ-030",
+    "TRN-BIZ-040"
+  ],
+  "release_admission": "DENIED_BY_DEFAULT",
+  "real_release_approval_observed": false,
+  "external_evidence_verified": false,
+  "statement": "This is a repository-owned checklist of unverified prerequisites, NOT a real infrastructure/partner/medical/legal readiness assessment.",
+  "items": [
+    {
+      "id": "TRN-EP-01",
+      "label": "Identity & Access",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-018",
+        "TRN-BIZ-019"
+      ],
+      "missing_evidence": [
+        "VERIFIED_MEMBER_IDENTITY",
+        "LEGAL_OPERATOR_IDENTITY",
+        "INDEPENDENT_REVIEWS_AND_RELEASE_APPROVAL"
+      ]
+    },
+    {
+      "id": "TRN-EP-02",
+      "label": "Consent & Data Governance",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-035",
+        "TRN-BIZ-036"
+      ],
+      "missing_evidence": [
+        "DATA_RIGHTS_AND_CONSENT",
+        "INDEPENDENT_REVIEWS_AND_RELEASE_APPROVAL"
+      ]
+    },
+    {
+      "id": "TRN-EP-03",
+      "label": "Membership",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-015",
+        "TRN-BIZ-016",
+        "TRN-BIZ-024"
+      ],
+      "missing_evidence": [
+        "AUTHENTIC_MEMBERSHIP_AND_ACTIVATION",
+        "VERIFIED_MEMBER_IDENTITY"
+      ]
+    },
+    {
+      "id": "TRN-EP-04",
+      "label": "Provider Registry",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-043",
+        "TRN-BIZ-044"
+      ],
+      "missing_evidence": [
+        "PROVIDER_LICENSE_AND_CONTRACT",
+        "NATIONAL_COVERAGE_EVIDENCE"
+      ]
+    },
+    {
+      "id": "TRN-EP-05",
+      "label": "Care Coordination",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-034",
+        "TRN-BIZ-046",
+        "TRN-BIZ-047"
+      ],
+      "missing_evidence": [
+        "CLINICAL_SAFETY_AND_RESPONSIBILITY",
+        "EMERGENCY_PROTOCOL_AND_CAPACITY",
+        "PROVIDER_LICENSE_AND_CONTRACT"
+      ]
+    },
+    {
+      "id": "TRN-EP-06",
+      "label": "Personal Health Record",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-035",
+        "TRN-BIZ-041"
+      ],
+      "missing_evidence": [
+        "DATA_RIGHTS_AND_CONSENT",
+        "REAL_EXTERNAL_INTEGRATIONS",
+        "PRODUCTION_HOSTING_AND_SECURITY"
+      ]
+    },
+    {
+      "id": "TRN-EP-07",
+      "label": "Insurance Coordination",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-048",
+        "TRN-BIZ-049"
+      ],
+      "missing_evidence": [
+        "INSURER_AGREEMENT_AND_ENTITLEMENT",
+        "REAL_EXTERNAL_INTEGRATIONS"
+      ]
+    },
+    {
+      "id": "TRN-EP-08",
+      "label": "Member Credit & Finance",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-026",
+        "TRN-BIZ-042"
+      ],
+      "missing_evidence": [
+        "FINANCIAL_LICENSE_BACKING_AND_AUDIT",
+        "PROVIDER_LICENSE_AND_CONTRACT"
+      ]
+    },
+    {
+      "id": "TRN-EP-09",
+      "label": "Billing & Cost Awareness",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-050",
+        "TRN-BIZ-051",
+        "TRN-BIZ-052"
+      ],
+      "missing_evidence": [
+        "OFFICIAL_BILLING_AND_MEMBER_ACKNOWLEDGMENT",
+        "INSURER_AGREEMENT_AND_ENTITLEMENT"
+      ]
+    },
+    {
+      "id": "TRN-EP-10",
+      "label": "Quality & Complaints",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-044",
+        "TRN-BIZ-045"
+      ],
+      "missing_evidence": [
+        "COMPLAINTS_LEGAL_AUTHORITY_AND_PROCESS",
+        "CLINICAL_SAFETY_AND_RESPONSIBILITY"
+      ]
+    },
+    {
+      "id": "TRN-EP-11",
+      "label": "Internal AI",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-036",
+        "TRN-BIZ-037",
+        "TRN-BIZ-038",
+        "TRN-BIZ-039"
+      ],
+      "missing_evidence": [
+        "CONSENTED_AI_DATASET_AND_INDEPENDENT_EVALUATION",
+        "HUMAN_AI_COMMITTEE_AND_RELEASE_APPROVAL",
+        "PRODUCTION_HOSTING_AND_SECURITY"
+      ]
+    },
+    {
+      "id": "TRN-EP-12",
+      "label": "Operational Readiness",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-030",
+        "TRN-BIZ-040"
+      ],
+      "missing_evidence": [
+        "PRODUCTION_HOSTING_AND_SECURITY",
+        "INDEPENDENT_REVIEWS_AND_RELEASE_APPROVAL",
+        "REAL_EXTERNAL_INTEGRATIONS"
+      ]
+    },
+    {
+      "id": "TRN-EP-13",
+      "label": "Member Web",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-030",
+        "TRN-BIZ-035"
+      ],
+      "missing_evidence": [
+        "VERIFIED_MEMBER_IDENTITY",
+        "PRODUCTION_HOSTING_AND_SECURITY",
+        "DATA_RIGHTS_AND_CONSENT"
+      ]
+    },
+    {
+      "id": "MARKET-PUBLIC",
+      "label": "عموم مردم",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-028",
+        "TRN-BIZ-030"
+      ],
+      "missing_evidence": [
+        "ALL_3_MARKET_OPERATIONS",
+        "VERIFIED_MEMBER_IDENTITY"
+      ]
+    },
+    {
+      "id": "MARKET-SUPPORT",
+      "label": "نهادهای حمایتی",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-028",
+        "TRN-BIZ-029"
+      ],
+      "missing_evidence": [
+        "ALL_3_MARKET_OPERATIONS",
+        "DATA_RIGHTS_AND_CONSENT"
+      ]
+    },
+    {
+      "id": "MARKET-CORPORATE",
+      "label": "سازمان‌ها و شرکت‌ها",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-028",
+        "TRN-BIZ-029"
+      ],
+      "missing_evidence": [
+        "ALL_3_MARKET_OPERATIONS",
+        "DATA_RIGHTS_AND_CONSENT"
+      ]
+    },
+    {
+      "id": "NATIONAL-COVERAGE",
+      "label": "پوشش رسمی سراسری",
+      "status": "BLOCKED_UNVERIFIED",
+      "policy_refs": [
+        "TRN-BIZ-040",
+        "TRN-BIZ-043"
+      ],
+      "missing_evidence": [
+        "NATIONAL_COVERAGE_EVIDENCE",
+        "PROVIDER_LICENSE_AND_CONTRACT",
+        "INDEPENDENT_REVIEWS_AND_RELEASE_APPROVAL"
+      ]
+    }
+  ]
+}
