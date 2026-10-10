@@ -22,6 +22,7 @@ internal static class ReviewJournalTestSchema
         await PgFrozenUnverifiedReviewQueue.InitializeTestSchemaAsync(owner);
         await PgHumanReviewNoteJournal.InitializeTestSchemaAsync(owner);
         await PgReviewerConflictDisclosureJournal.InitializeTestSchemaAsync(owner);
+        await PgUnverifiedConflictPacketJournal.InitializeTestSchemaAsync(owner);
         await using var cn = await owner.OpenConnectionAsync();
         await using var command = new NpgsqlCommand("""
             DO $block$ BEGIN
