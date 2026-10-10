@@ -147,8 +147,9 @@ public sealed class SyntheticPacketReceiptPostgresTests
         var journal = Journal(db, packets, notices, Attestation(command));
         await Record(journal, command);
         Assert.Equal(TechnicalReceiptOutcome.ExactReplay, await Record(journal, command));
+        var changed = command with { ReceiptEvidenceRef = "test:changed-proof" };
         Assert.Equal(TechnicalReceiptOutcome.ConflictingReplay,
-            await Record(journal, command with { ReceiptEvidenceRef = "test:changed-proof" }));
+            await Record(Journal(db, packets, notices, Attestation(changed)), changed));
         Assert.Equal(1L, await Count(db, "audit", command.PacketId));
     }
 
@@ -159,8 +160,9 @@ public sealed class SyntheticPacketReceiptPostgresTests
         await using var _ = db; await using var __ = reader;
         var journal = Journal(db, packets, notices, Attestation(command));
         await Record(journal, command);
+        var second = command with { RequestId = Guid.NewGuid() };
         Assert.Equal(TechnicalReceiptOutcome.AlreadyNotedForPacket,
-            await Record(journal, command with { RequestId = Guid.NewGuid() }));
+            await Record(Journal(db, packets, notices, Attestation(second)), second));
     }
 
     [Fact]
@@ -169,8 +171,10 @@ public sealed class SyntheticPacketReceiptPostgresTests
         var (db, reader, notices, packets, notice, command) = await SetupAsync();
         await using var _ = db; await using var __ = reader;
         var journal = Journal(db, packets, notices, Attestation(command));
+        var competing = command with { RequestId = Guid.NewGuid() };
+        var secondJournal = Journal(db, packets, notices, Attestation(competing));
         var result = await Task.WhenAll(Record(journal, command),
-            Record(journal, command with { RequestId = Guid.NewGuid() }));
+            Record(secondJournal, competing));
         Assert.Single(result, x => x == TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded);
         Assert.Single(result, x => x == TechnicalReceiptOutcome.AlreadyNotedForPacket);
         Assert.Equal(1L, await Count(db, "audit", command.PacketId));
@@ -288,6 +292,139 @@ public sealed class SyntheticPacketReceiptPostgresTests
                 await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
             Assert.Equal("TEST_PACKET_RECEIPT_APPEND_ONLY", err.MessageText);
         }
+    }
+
+
+    private sealed class TwoStageSource(
+        TechnicalReceiptSourceEvidence initial,
+        TechnicalReceiptSourceEvidence? after,
+        bool failAfter = false) : ITechnicalReceiptAuthoritySource
+    {
+        internal int Calls { get; private set; }
+        public Task<TechnicalReceiptSourceEvidence?> ResolveAsync(Guid packetId, CancellationToken ct)
+        {
+            Calls++;
+            if (Calls > 1 && failAfter)
+                throw new InvalidOperationException("simulated revocation-source outage");
+            return Task.FromResult(Calls == 1
+                ? (TechnicalReceiptSourceEvidence?)initial : after);
+        }
+    }
+
+    [Fact]
+    public async Task SourceAnswerIsCheckedAgainBeforeAcceptingNewReceipt()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var correct = Attestation(command);
+        var changing = new TwoStageSource(correct, correct with {
+            SimulatedGrantNotRevoked = false
+        });
+        var journal = new PgSyntheticPacketReceiptJournal(db, packets, notices, changing);
+        Assert.Equal(TechnicalReceiptOutcome.RecipientUnverified,
+            await Record(journal, command));
+        Assert.Equal(2, changing.Calls);
+        Assert.Equal(0L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(0L, await Count(db, "audit", command.PacketId));
+    }
+
+    [Fact]
+    public async Task SecondSourceOutageBlocksWriteAfterInitiallyPositiveResult()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var changing = new TwoStageSource(Attestation(command), null, true);
+        Assert.Equal(TechnicalReceiptOutcome.AuthoritySourceUnavailable,
+            await Record(new(db, packets, notices, changing), command));
+        Assert.Equal(2, changing.Calls);
+        Assert.Equal(0L, await Count(db, "receipt", command.PacketId));
+    }
+
+    [Fact]
+    public async Task SecondSourceMissingAnswerBlocksWrite()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var changing = new TwoStageSource(Attestation(command), null);
+        Assert.Equal(TechnicalReceiptOutcome.AuthoritySourceUnavailable,
+            await Record(new(db, packets, notices, changing), command));
+        Assert.Equal(2, changing.Calls);
+        Assert.Equal(0L, await Count(db, "audit", command.PacketId));
+    }
+
+    [Fact]
+    public async Task SecondSourceChangedDelegationVersionBlocksWrite()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var valid = Attestation(command);
+        var changing = new TwoStageSource(valid, valid with {
+            CurrentGrantVersionRef = "test:grant-replaced-v2"
+        });
+        Assert.Equal(TechnicalReceiptOutcome.RecipientUnverified,
+            await Record(new(db, packets, notices, changing), command));
+        Assert.Equal(0L, await Count(db, "receipt", command.PacketId));
+    }
+
+    [Fact]
+    public async Task SecondSourceChangedRecipientBlocksWrite()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var valid = Attestation(command);
+        var changing = new TwoStageSource(valid, valid with {
+            ResolvedRecipientRef = "test:someone-else"
+        });
+        Assert.Equal(TechnicalReceiptOutcome.RecipientUnverified,
+            await Record(new(db, packets, notices, changing), command));
+        Assert.Equal(0L, await Count(db, "receipt", command.PacketId));
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task IssuerMustBindRequestAndExactReceiptEvidence(
+        bool changeRequest, bool changeEvidence)
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var invalid = Attestation(command) with {
+            RequestId = changeRequest ? Guid.NewGuid() : command.RequestId,
+            ReceiptEvidenceRef = changeEvidence ? "test:other-receipt" : command.ReceiptEvidenceRef
+        };
+        Assert.Equal(changeRequest
+                ? TechnicalReceiptOutcome.PacketScopeMismatch
+                : TechnicalReceiptOutcome.RecipientUnverified,
+            await Record(Journal(db, packets, notices, invalid), command));
+        Assert.Equal(0L, await Count(db, "receipt", command.PacketId));
+    }
+
+    [Fact]
+    public async Task SecondIssuerRebindToDifferentRequestIsDenied()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var valid = Attestation(command);
+        var changing = new TwoStageSource(valid, valid with {
+            RequestId = Guid.NewGuid()
+        });
+        Assert.Equal(TechnicalReceiptOutcome.PacketScopeMismatch,
+            await Record(new(db, packets, notices, changing), command));
+        Assert.Equal(0L, await Count(db, "receipt", command.PacketId));
+    }
+
+    [Fact]
+    public async Task StableSourceMustPassBothChecksAndRetainOneReceipt()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var valid = Attestation(command);
+        var stable = new TwoStageSource(valid, valid);
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(new(db, packets, notices, stable), command));
+        Assert.Equal(2, stable.Calls);
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(1L, await Count(db, "audit", command.PacketId));
     }
 
     [Fact]
