@@ -153,3 +153,51 @@ test('WEB-12: no synthetic member identity provider can be enabled by query flag
   await expect(page.getByText('بدون حساب واقعی، بدون داده درمانی و بدون اتصال مالی')).toBeVisible();
   await expect(page.getByRole('button', { name: /خروج از حساب/ })).toHaveCount(0);
 });
+
+test('MEMBER-CSP-01: disconnected built preview keeps policy and renders', async ({ page }) => {
+  await page.goto('/member');
+  const p = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+  expect(p).toContain("default-src 'none'");
+  expect(p).toContain("script-src 'self'");
+  expect(p).toContain("style-src 'self'");
+  expect(p).toContain("connect-src 'none'");
+  expect(p).toContain("form-action 'none'");
+  expect(p).toContain("base-uri 'none'");
+  await expect(page.locator('meta[name="referrer"]')).toHaveAttribute('content', 'no-referrer');
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow,noarchive');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+});
+
+test('MEMBER-CSP-02: policy blocks same-origin private API and remote connections before request', async ({ page }) => {
+  const outgoing: string[] = [];
+  page.on('request', request => {
+    if (request.url().includes('blocked-csp-')) outgoing.push(request.url());
+  });
+  await page.goto('/member');
+  const blocked = await page.evaluate(async () => {
+    const attempt = async (url: string): Promise<boolean> => {
+      try { await fetch(url, { method: 'GET' }); return false; }
+      catch { return true; }
+    };
+    return [
+      await attempt('/api/blocked-csp-local'),
+      await attempt('https://example.com/blocked-csp-external'),
+    ];
+  });
+  expect(blocked).toEqual([true, true]);
+  expect(outgoing).toEqual([]);
+});
+
+test('MEMBER-CSP-03: injected inline script is rejected without breaking the preview', async ({ page }) => {
+  await page.goto('/member');
+  await page.evaluate(() => {
+    const script = document.createElement('script');
+    script.textContent = 'window.__taranom_untrusted_inline_executed = true;';
+    document.body.appendChild(script);
+  });
+  const executed = await page.evaluate(() => Boolean(
+    (window as Window & { __taranom_untrusted_inline_executed?: boolean })
+      .__taranom_untrusted_inline_executed));
+  expect(executed).toBe(false);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+});

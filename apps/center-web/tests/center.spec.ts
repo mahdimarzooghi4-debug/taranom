@@ -242,3 +242,51 @@ test('CENTER-18: mobile modal closes previously open menu and keeps keyboard foc
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '+ معرفی پزشک' })).toBeFocused();
 });
+
+test('CENTER-CSP-01: disconnected built preview keeps policy and renders', async ({ page }) => {
+  await page.goto('/center');
+  const p = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+  expect(p).toContain("default-src 'none'");
+  expect(p).toContain("script-src 'self'");
+  expect(p).toContain("style-src 'self'");
+  expect(p).toContain("connect-src 'none'");
+  expect(p).toContain("form-action 'none'");
+  expect(p).toContain("base-uri 'none'");
+  await expect(page.locator('meta[name="referrer"]')).toHaveAttribute('content', 'no-referrer');
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow,noarchive');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+});
+
+test('CENTER-CSP-02: policy blocks same-origin private API and remote connections before request', async ({ page }) => {
+  const outgoing: string[] = [];
+  page.on('request', request => {
+    if (request.url().includes('blocked-csp-')) outgoing.push(request.url());
+  });
+  await page.goto('/center');
+  const blocked = await page.evaluate(async () => {
+    const attempt = async (url: string): Promise<boolean> => {
+      try { await fetch(url, { method: 'GET' }); return false; }
+      catch { return true; }
+    };
+    return [
+      await attempt('/api/blocked-csp-local'),
+      await attempt('https://example.com/blocked-csp-external'),
+    ];
+  });
+  expect(blocked).toEqual([true, true]);
+  expect(outgoing).toEqual([]);
+});
+
+test('CENTER-CSP-03: injected inline script is rejected without breaking the preview', async ({ page }) => {
+  await page.goto('/center');
+  await page.evaluate(() => {
+    const script = document.createElement('script');
+    script.textContent = 'window.__taranom_untrusted_inline_executed = true;';
+    document.body.appendChild(script);
+  });
+  const executed = await page.evaluate(() => Boolean(
+    (window as Window & { __taranom_untrusted_inline_executed?: boolean })
+      .__taranom_untrusted_inline_executed));
+  expect(executed).toBe(false);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+});
