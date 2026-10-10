@@ -330,6 +330,63 @@ public sealed class ProofingJournalDatabaseTests
     }
 
     [Fact]
+    public async Task ConflictingReplayIsDenialAuditedWithoutNewAcceptedEvent()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var key = NewCase();
+        var original = Observe(Guid.NewGuid(), 0, 0, ProofingObservation.Inconclusive);
+        await ApplyAsync(store, key, original);
+        var tampered = original with { ProofingEvidence = original.ProofingEvidence with
+            { Observation = ProofingObservation.VerifiedMatch } };
+        Assert.Equal(ProofingJournalOutcome.ConflictingReplay,
+            (await ApplyAsync(store, key, tampered)).Outcome);
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_denial", key));
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_event", key));
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_audit", key));
+        await using var cn = await db.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using var cmd = new NpgsqlCommand("""
+            SELECT reason_code, request_ref, observed_case_revision
+            FROM internal_test_proofing_denial WHERE case_ref=@case
+            """, cn);
+        cmd.Parameters.AddWithValue("case", key);
+        await using var rows = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        Assert.True(await rows.ReadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal((int)ProofingJournalOutcome.ConflictingReplay, rows.GetInt32(0));
+        Assert.Equal(original.RequestId, rows.GetGuid(1));
+        Assert.Equal(1L, rows.GetInt64(2));
+    }
+
+    [Fact]
+    public async Task CompetingWritersAuditTheirStaleDenial()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var key = NewCase();
+        var results = await Task.WhenAll(
+            ApplyAsync(store, key,
+                Observe(Guid.NewGuid(), 0, 0, ProofingObservation.ProviderUnavailable)),
+            ApplyAsync(store, key,
+                Observe(Guid.NewGuid(), 0, 0, ProofingObservation.VerifiedMatch)));
+        Assert.Single(results, x => x.Outcome == ProofingJournalOutcome.Applied);
+        Assert.Single(results, x => x.Outcome == ProofingJournalOutcome.StaleCaseRevision);
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_audit", key));
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_denial", key));
+    }
+
+    [Fact]
+    public async Task InapplicableCorrectionIsDeniedWithoutCreatingCase()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var key = NewCase();
+        Assert.Equal(ProofingJournalOutcome.NotApplicable,
+            (await ApplyAsync(store, key, Correct(Guid.NewGuid(), 0, 0))).Outcome);
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_denial", key));
+        Assert.Equal(0L, await CountAsync(db, "internal_test_proofing_case", key));
+    }
+
+    [Fact]
     public async Task UnconnectedOrPersonalDataReferencesAreRejected()
     {
         var (db, store) = await ConnectAsync();
