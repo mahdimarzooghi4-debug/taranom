@@ -48,7 +48,7 @@ public sealed class CenterAuthorityGateTests
         CenterAuthorityRequest? request = null)
     {
         var source = new TestSource(evidence);
-        return await new CenterAuthorityGate(source).AssessAsync(request ?? Request());
+        return await new CenterAuthorityGate(source).AssessAsync(request ?? Request(), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public sealed class CenterAuthorityGateTests
             BrowserTenantHint = Tenant
         };
         Assert.Equal(CenterAuthorityResult.AuthoritativeSourceUnavailable,
-            await new CenterAuthorityGate().AssessAsync(request));
+            await new CenterAuthorityGate().AssessAsync(request, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed class CenterAuthorityGateTests
     public async Task NoIdentitySourceMeansNoPrivilegedDataOrWrites()
     {
         var source = new TestSource();
-        var result = await new CenterAuthorityGate(source).AssessAsync(Request());
+        var result = await new CenterAuthorityGate(source).AssessAsync(Request(), TestContext.Current.CancellationToken);
         Assert.Equal(CenterAuthorityResult.AuthoritativeSourceUnavailable, result);
         Assert.Equal(1, source.Calls);
     }
@@ -103,7 +103,7 @@ public sealed class CenterAuthorityGateTests
     {
         var source = new TestSource(Complete()) { Fail = true };
         Assert.Equal(CenterAuthorityResult.AuthoritativeSourceUnavailable,
-            await new CenterAuthorityGate(source).AssessAsync(Request()));
+            await new CenterAuthorityGate(source).AssessAsync(Request(), TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -298,7 +298,7 @@ public sealed class CenterAuthorityGateTests
         var source = new TestSource(Complete());
         Assert.Equal(CenterAuthorityResult.InvalidRequest,
             await new CenterAuthorityGate(source).AssessAsync(
-                Request() with { RequestedCenterRef = center }));
+                Request() with { RequestedCenterRef = center }, TestContext.Current.CancellationToken));
         Assert.Equal(0, source.Calls);
     }
 
@@ -307,10 +307,10 @@ public sealed class CenterAuthorityGateTests
     {
         var source = new TestSource(Complete());
         Assert.Equal(CenterAuthorityResult.InvalidRequest,
-            await new CenterAuthorityGate(source).AssessAsync(default));
+            await new CenterAuthorityGate(source).AssessAsync(default, TestContext.Current.CancellationToken));
         Assert.Equal(CenterAuthorityResult.InvalidRequest,
             await new CenterAuthorityGate(source).AssessAsync(
-                Request() with { Operation = (CenterReadWriteOperation)100 }));
+                Request() with { Operation = (CenterReadWriteOperation)100 }, TestContext.Current.CancellationToken));
         Assert.Equal(0, source.Calls);
     }
 
