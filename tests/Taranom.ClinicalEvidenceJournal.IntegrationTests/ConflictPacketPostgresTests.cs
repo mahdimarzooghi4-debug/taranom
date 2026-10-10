@@ -140,4 +140,81 @@ public sealed class ConflictPacketPostgresTests
         Assert.DoesNotContain(Enum.GetNames<ConflictPacketOutcome>(),
             value => value is "Approved" or "Assigned" or "Cleared" or "Delivered");
     }
+
+    [Fact]
+    public async Task ExactConcurrentRetryCreatesSinglePacket()
+    {
+        var (db, reader, notices, packets, notice, packet) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        await notices.RecordAsync(notice, TestContext.Current.CancellationToken);
+        var results = await Task.WhenAll(Prepare(packets, packet), Prepare(packets, packet));
+        Assert.Single(results, x => x == ConflictPacketOutcome.UnverifiedPacketPrepared);
+        Assert.Single(results, x => x == ConflictPacketOutcome.ExactReplay);
+    }
+
+    [Fact]
+    public async Task AnotherCenterCannotConsumePriorRequestId()
+    {
+        var (db1, reader1, notices1, packets1, notice1, packet1) = await SetupAsync();
+        var (db2, reader2, notices2, packets2, notice2, packet2) = await SetupAsync();
+        await using var _ = db1; await using var __ = reader1;
+        await using var ___ = db2; await using var ____ = reader2;
+        await notices1.RecordAsync(notice1, TestContext.Current.CancellationToken);
+        await notices2.RecordAsync(notice2, TestContext.Current.CancellationToken);
+        Assert.Equal(ConflictPacketOutcome.UnverifiedPacketPrepared,
+            await Prepare(packets1, packet1));
+        Assert.Equal(ConflictPacketOutcome.ConflictingReplay,
+            await Prepare(packets2, packet2 with { RequestId = packet1.RequestId }));
+    }
+
+    [Fact]
+    public async Task HistoricalReplayDoesNotRewritePreparedManifest()
+    {
+        var (db, reader, notices, packets, notice, packet) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        await notices.RecordAsync(notice, TestContext.Current.CancellationToken);
+        await Prepare(packets, packet);
+        var savedId = await FindId(db, packet.RequestId);
+        await notices.RecordAsync(notice with { RequestId = Guid.NewGuid(),
+            ExpectedRevision = 1, RelationshipEvidenceRef = "test:new-evidence" },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(ConflictPacketOutcome.ExactReplay, await Prepare(packets, packet));
+        Assert.Single((await packets.ReadAsync(savedId, TestContext.Current.CancellationToken))
+            .CapturedDisclosures);
+    }
+
+    [Fact]
+    public async Task OrdinaryDatabaseUpdateAndDeleteCannotRewriteAcceptedPacket()
+    {
+        var (db, reader, notices, packets, notice, packet) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        await notices.RecordAsync(notice, TestContext.Current.CancellationToken);
+        await Prepare(packets, packet);
+        var id = await FindId(db, packet.RequestId);
+        await using var cn = await db.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        foreach (var sql in new[] {
+            "UPDATE internal_test_conflict_packet SET packet_digest='changed' WHERE packet_id=@id",
+            "DELETE FROM internal_test_conflict_packet_audit WHERE packet_id=@id"
+        })
+        {
+            await using var cmd = new NpgsqlCommand(sql, cn);
+            cmd.Parameters.AddWithValue("id", id);
+            var err = await Assert.ThrowsAsync<PostgresException>(async () =>
+                await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+            Assert.Equal("TEST_CONFLICT_PACKET_APPEND_ONLY", err.MessageText);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("real:human")]
+    [InlineData("test:")]
+    [InlineData("test:parent/child")]
+    public async Task InvalidCenterCannotPrepareHandoff(string center)
+    {
+        var (db, reader, notices, packets, notice, packet) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        Assert.Equal(ConflictPacketOutcome.Invalid,
+            await Prepare(packets, packet with { CenterRef = center }));
+    }
 }
