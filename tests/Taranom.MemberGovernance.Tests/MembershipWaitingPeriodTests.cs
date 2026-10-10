@@ -57,14 +57,13 @@ public sealed class MembershipWaitingPeriodTests
     [Fact]
     public void LocalCalendarMonthCountCannotReplaceNinetyFullDays()
     {
-        var threeMonthsLater = Activation.AddMonths(3);
-        // 2026-01-01 through 2026-04-01 is exactly 90 days in this example;
-        // instead use a season where three months is not 90 days.
-        var summerActivation = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        // February 1 to May 1 in 2026 is only 89 complete days.
+        var shortQuarter = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
         Assert.Equal(WaitingPeriodState.StillWaiting,
-            MembershipWaitingPeriod.Observe(summerActivation, summerActivation.AddMonths(3)).State);
+            MembershipWaitingPeriod.Observe(shortQuarter, shortQuarter.AddMonths(3)).State);
+        // January 1 to April 1 in 2026 happens to be exactly 90 days.
         Assert.Equal(WaitingPeriodState.NinetyFullDaysElapsed,
-            MembershipWaitingPeriod.Observe(Activation, threeMonthsLater).State);
+            MembershipWaitingPeriod.Observe(Activation, Activation.AddMonths(3)).State);
     }
 
     [Fact]
