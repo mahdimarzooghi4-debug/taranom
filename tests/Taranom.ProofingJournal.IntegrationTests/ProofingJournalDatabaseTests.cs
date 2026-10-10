@@ -32,12 +32,14 @@ public sealed class ProofingJournalDatabaseTests
             END;
             $role$;
             REVOKE ALL ON internal_test_proofing_case,
-              internal_test_proofing_event, internal_test_proofing_audit FROM PUBLIC;
+              internal_test_proofing_event, internal_test_proofing_audit,
+              internal_test_proofing_denial FROM PUBLIC;
             GRANT USAGE ON SCHEMA public TO taranom_sprint03_journal_test;
             GRANT SELECT, INSERT, UPDATE ON internal_test_proofing_case
                 TO taranom_sprint03_journal_test;
             GRANT SELECT, INSERT ON internal_test_proofing_event,
-                internal_test_proofing_audit TO taranom_sprint03_journal_test;
+                internal_test_proofing_audit,
+                internal_test_proofing_denial TO taranom_sprint03_journal_test;
             """, cn);
         await grant.ExecuteNonQueryAsync(ct);
     }
@@ -73,7 +75,8 @@ public sealed class ProofingJournalDatabaseTests
     {
         // The table name is selected exclusively from these test-owned literals.
         if (table is not ("internal_test_proofing_event" or
-                          "internal_test_proofing_audit" or "internal_test_proofing_case"))
+                          "internal_test_proofing_audit" or "internal_test_proofing_case" or
+                          "internal_test_proofing_denial"))
             throw new ArgumentException("Invalid test table", nameof(table));
         await using var cn = await db.OpenConnectionAsync(TestContext.Current.CancellationToken);
         await using var cmd = new NpgsqlCommand(
