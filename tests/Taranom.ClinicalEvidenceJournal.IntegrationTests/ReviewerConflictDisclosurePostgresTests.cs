@@ -389,6 +389,113 @@ public sealed class ReviewerConflictDisclosurePostgresTests
         Assert.Equal("TEST_CONFLICT_NOTICE_HISTORY_CORRUPT",again.Message);
     }
 
+    private sealed class TestReviewerSource(ReviewerProvenanceEvidence value)
+        : IReviewerProvenanceSource
+    {
+        public Task<ReviewerProvenanceEvidence?> ResolveFromServerAsync(
+            Guid requestId, CancellationToken ct) =>
+            Task.FromResult<ReviewerProvenanceEvidence?>(value);
+    }
+
+    private static ReviewerProvenanceEvidence PositiveProvenance(string center) =>
+        new(Reviewer, Reviewer, center, "test:grant-v1", "test:grant-v1",
+            "test:unverified-qualification-ref",
+            ReviewerProvenanceCheck.ConfirmedByTestDouble,
+            ReviewerProvenanceCheck.ConfirmedByTestDouble,
+            ReviewerProvenanceCheck.ConfirmedByTestDouble,
+            ReviewerProvenanceCheck.ConfirmedByTestDouble,
+            ReviewerProvenanceCheck.ConfirmedByTestDouble,
+            ReviewerProvenanceCheck.ConfirmedByTestDouble);
+
+    private static Task<ReviewerConflictAdmission> Inspect(
+        PgClinicalEvidenceJournal claims, PgHumanReviewNoteJournal notes,
+        PgReviewerConflictDisclosureJournal conflicts,
+        ConflictNoticeCommand disclosure,
+        IReviewerProvenanceSource? source = null)
+    {
+        var provenance = new PgReviewerProvenanceInterlock(notes, claims, source);
+        var admission = new PgReviewerConflictAdmission(provenance, conflicts);
+        return admission.InspectAsync(new ReviewerProvenanceRequest(
+            disclosure.CenterRef, disclosure.SubjectRef, disclosure.SubjectKind,
+            disclosure.EvidenceRevision, disclosure.ReviewNoteRequestId),
+            TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ComposedAdmissionDeniesWithoutAuthenticReviewerSource()
+    {
+        var (owner, claims, capturer, frozen, notes, conflicts) = await ConnectAsync();
+        await using var _ = owner;
+        await using var __ = capturer;
+        var cmd = await SeedAsync(claims, frozen, notes, Center());
+        await RecordAsync(conflicts, cmd);
+        Assert.Equal(ReviewerConflictAdmission.ReviewerProvenanceUnverified,
+            await Inspect(claims, notes, conflicts, cmd));
+    }
+
+    [Fact]
+    public async Task EvenSyntheticPositiveProvenanceAndNoNoticeMeanUnknown()
+    {
+        var (owner, claims, capturer, frozen, notes, conflicts) = await ConnectAsync();
+        await using var _ = owner;
+        await using var __ = capturer;
+        var cmd = await SeedAsync(claims, frozen, notes, Center());
+        Assert.Equal(ReviewerConflictAdmission.RelationshipStatusUnknown,
+            await Inspect(claims, notes, conflicts, cmd,
+                new TestReviewerSource(PositiveProvenance(cmd.CenterRef))));
+    }
+
+    [Fact]
+    public async Task ComposedAdmissionEscalatesStoredPotentialRelationship()
+    {
+        var (owner, claims, capturer, frozen, notes, conflicts) = await ConnectAsync();
+        await using var _ = owner;
+        await using var __ = capturer;
+        var cmd = await SeedAsync(claims, frozen, notes, Center());
+        await RecordAsync(conflicts, cmd);
+        Assert.Equal(ReviewerConflictAdmission.PotentialRelationshipNeedsIndependentReview,
+            await Inspect(claims, notes, conflicts, cmd,
+                new TestReviewerSource(PositiveProvenance(cmd.CenterRef))));
+    }
+
+    [Fact]
+    public async Task ComposedAdmissionCannotUseRevokedSyntheticReviewerGrant()
+    {
+        var (owner, claims, capturer, frozen, notes, conflicts) = await ConnectAsync();
+        await using var _ = owner;
+        await using var __ = capturer;
+        var cmd = await SeedAsync(claims, frozen, notes, Center());
+        await RecordAsync(conflicts, cmd);
+        var forged = PositiveProvenance(cmd.CenterRef) with {
+            GrantNotRevoked = ReviewerProvenanceCheck.Denied
+        };
+        Assert.Equal(ReviewerConflictAdmission.ReviewerProvenanceUnverified,
+            await Inspect(claims, notes, conflicts, cmd,
+                new TestReviewerSource(forged)));
+    }
+
+    [Fact]
+    public async Task CorruptedNoticeHistoryCannotBecomeAnIndependenceClearance()
+    {
+        var (owner, claims, capturer, frozen, notes, conflicts) = await ConnectAsync();
+        await using var _ = owner;
+        await using var __ = capturer;
+        var cmd = await SeedAsync(claims, frozen, notes, Center());
+        await RecordAsync(conflicts, cmd);
+        await using (var cn = await owner.OpenConnectionAsync(TestContext.Current.CancellationToken))
+        await using (var sql = new NpgsqlCommand("""
+            UPDATE internal_test_conflict_notice_head SET current_revision=0
+            WHERE center_ref=@center
+            """, cn))
+        {
+            sql.Parameters.AddWithValue("center", cmd.CenterRef);
+            await sql.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+        Assert.Equal(ReviewerConflictAdmission.DisclosureHistoryCorrupt,
+            await Inspect(claims, notes, conflicts, cmd,
+                new TestReviewerSource(PositiveProvenance(cmd.CenterRef))));
+    }
+
     [Fact]
     public void NoConflictFreeOrMedicalApprovalVocabularyExists()
     {
