@@ -179,7 +179,9 @@ test('CENTER-15: action dialog traps forward and backward keyboard focus and iso
   await expect(close).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(close).toBeFocused();
-  await expect(page.getByRole('navigation', { name: 'بخش‌های پنل مرکز' })).toBeHidden();
+  // HTML inert blocks focus/interaction but does not mean CSS display:none.
+  expect(await page.locator('#center-navigation').evaluate(
+    element => element.closest('[inert]') !== null)).toBe(true);
   await expect(page).toHaveURL(/\/center\/doctors$/);
   await close.click();
   await expect(dialog).toHaveCount(0);
