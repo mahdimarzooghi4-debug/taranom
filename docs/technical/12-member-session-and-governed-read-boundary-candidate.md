@@ -6,6 +6,14 @@
 - **Hard fact:** Sprint 01 implements **synthetic-only** .NET identity/consent/audit; Sprint 02 implements a **disconnected** React/TS member shell. Neither creates a real member identity, IdP connection, member-facing BFF, authenticated HTTP session, domain read endpoint, verified health data or financial source.
 - This document expresses security invariants and prerequisites, **not an approval of a vendor, URL, DTO, HTTP route, cookie scheme, client grant, token claim, timeout or data policy**.
 
+## 0. Business decisions already approved — do not reopen as unspecified
+
+- **TRN-BIZ-018/019:** valid identity proofing is mandatory **before automatic membership activation**. The approved *category* of the proofing authority is a **licensed specialist identity-verification provider directly contracted with Taranom and reliant on authoritative identity sources**. This does **not** select an actual company, identity API, legal data-processing agreement, issuer, authentication IdP or member session technology.
+- **Identity proofing and Web authentication are separate trust decisions.** A contracted proofing result may establish verified identity evidence subject to owner validation; an authenticated browser session controls access to that account. Neither a successful login nor identity proofing **by itself** creates active membership. Whether the eventual specialist proofing vendor can also provide authentication must be established independently, never assumed.
+- **TRN-BIZ-020/021/022/023:** unavailable or inconclusive proofing leaves the application pending for later reliable verification; definitive mismatch permits correction of allowed personal data (including incorrect national ID **before activation**) followed by renewed authoritative proofing. These are Business outcomes, **not approved persistence enum names, retry intervals, form fields or API commands**. Identity correction must not enable session impersonation, account takeover or a new official activation timestamp.
+- **TRN-BIZ-015/016/017/024:** fee-paying membership and conditional automatic activation are accepted principles; exact verification of payment, all activation conditions and executable activation rules remain unapproved. Only a separately evidenced **official membership activation event** starts the waiting period, which is **90 complete 24-hour periods**, not account creation, payment, login, proofing alone or a three-calendar-month approximation. No wallet value may be inferred from activation.
+- The business rules above constrain future .NET contracts but do **not** authorize authentication, KYC integration, membership activation code or financial behavior under Sprint 03.
+
 ## 1. Explicit trust boundary and owner responsibilities
 
 | Layer | Permitted responsibility | Prohibited substitution |
@@ -25,14 +33,14 @@ The intended **real** session sequence, after selecting legally/technically vali
 
 1. Anonymous browser remains in the current `NOT_CONNECTED` / protected-unavailable mode. A browser UI may navigate but receives **no member private payload**.
 2. A trusted server boundary initiates a reviewed authentication handshake with the selected real IdP. Exact OIDC flows, callback URLs, state/nonce, anti-replay, PKCE applicability, trust roots, token lifetimes, step-up rules and identity proofing require explicit technical sign-off.
-3. The server **validates** identity evidence, then independently resolves its *authoritative* Taranom member subject and allowed tenant/org association from the .NET owner. **No browser-supplied claims or sponsor contract alone establishes membership**.
+3. The server **validates** authentication evidence and obtains the separately authorized identity-proofing/verified-member linkage where applicable, then independently resolves its *authoritative* Taranom member subject and allowed tenant/org association from the .NET owner. A valid login without verified entitlement must remain unprivileged; correction/reproofing and activation follow their own approved lifecycle. **No browser-supplied claims or sponsor contract alone establishes membership**.
 4. Session state is protected at server boundary. Session/cookie policy, secure attributes, CSRF, expiration, refresh/revocation, parallel devices, login/logout audit and error handling must be agreed and tested before any real login Code. **A successful provider redirect alone is not an authorized member session.**
-5. Every protected read is checked against current member identity + tenant + resource + purpose + consent + current authoritative source version. Missing context, expired/revoked session, out-of-tenant request, unavailable IdP, absent audit or unverifiable consent => DENY/UNAVAILABLE. No optimistic member view.
+5. Every protected read is checked against current member identity + tenant + resource + purpose + **operation-specific lawful basis, including independently scoped consent wherever required**, and current authoritative source version. Missing context, expired/revoked session, out-of-tenant request, unavailable IdP, absent audit or unverifiable consent => DENY/UNAVAILABLE. No optimistic member view.
 6. Logout/revocation must invalidate the server session; browser cleanup alone is insufficient. After expiry/logout, back-button/deep-link or stale cache cannot display protected data.
 
 ### Open admission inputs (do not invent)
 
-- IdP/identity-verification operator, contract, issuer, registration, verified member identifier mapping, assurance and recovery policy.
+- Actual contracted/licensed **specialist identity-proofing operator** and its lawful source/evidence, contract, proof validity, mismatch/correction/reverification obligations; **separately**, the member Web authentication IdP/issuer, trust registration, assurance and recovery policy. The approved provider *category* in TRN-BIZ-019 is not an unnamed vendor selection.
 - Tenant/member organizational model, sponsor-vs-member relationship and authoritative entitlement source; member profiles and roles require accountable .NET ownership.
 - Whether BFF runs within the .NET API process or a separate trusted web server; physical host, DNS, TLS, same-origin topology and protection of session secrets.
 - Human-approved authentication and authorization failure taxonomy, audit/legal basis, cookie/CSRF/CORS/CSP/cache rules, session lifetimes and retention requirements.
@@ -76,7 +84,7 @@ No direct client decision can move a state to `AVAILABLE`; no fallback to a mock
 | INT-01 | Unauthenticated direct URL, refresh, history and preloaded assets yield no private member payload. |
 | INT-02 | User-modified browser member ID, tenant, role, route/query/headers cannot alter effective authenticated server identity or scope. |
 | INT-03 | Sponsor, employer, unrelated member and cross-tenant reads fail closed; denied attempts have minimized audit evidence. |
-| INT-04 | Forged/replayed/expired identity assertion and unapproved IdP cannot create/restore a real member session. |
+| INT-04 | Forged/replayed/expired authentication or identity-proofing evidence, an unapproved IdP, unverified corrected identity, and successful login without verified member entitlement cannot activate membership or grant protected reads. |
 | INT-05 | Logout, revocation, missing audit or changed permission invalidates access; historical browser cache does not re-expose private data. |
 | INT-06 | Missing/withdrawn purpose-specific consent blocks only relevant protected use; care consent cannot imply research or cost commitment. |
 | INT-07 | Missing finance/provider/insurer integration never displays zero credit, insurer approval, payment/settlement, or invented treatment. |
