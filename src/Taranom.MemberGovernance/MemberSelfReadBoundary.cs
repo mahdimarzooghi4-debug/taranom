@@ -98,7 +98,6 @@ internal static class MemberSelfReadBoundary
     private static bool IsSyntheticRef(string? value) =>
         value is { Length: > 5 and <= 128 } &&
         value.StartsWith("test:", StringComparison.Ordinal) &&
-        value.AsSpan(5).IndexOfAnyExceptInRange('0', 'z') == -1 &&
         value.AsSpan(5).ToArray().All(ch =>
             char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' or ':');
 }

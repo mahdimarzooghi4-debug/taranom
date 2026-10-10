@@ -117,6 +117,20 @@ public sealed class MemberSelfReadBoundaryTests
     }
 
     [Fact]
+    public void BoundedSyntheticRefsMayContainHyphenAndUnderscore()
+    {
+        var input = Valid with
+        {
+            ServerResolvedMemberRef = "test:member-a_1",
+            ResourceOwnerMemberRef = "test:member-a_1",
+            ServerResolvedTenantRef = "test:tenant-1",
+            ResourceOwnerTenantRef = "test:tenant-1"
+        };
+        Assert.Equal(SelfReadBoundaryResult.PreconditionsPresentOnly,
+            MemberSelfReadBoundary.Assess(input));
+    }
+
+    [Fact]
     public void ResourceRefWithDifferentCaseIsNotEqual()
     {
         Assert.Equal(SelfReadBoundaryResult.ScopeDenied,
