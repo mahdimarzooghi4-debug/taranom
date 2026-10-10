@@ -12,3 +12,7 @@ Five routes within **one center panel**: `/center`, `/center/departments`, `/cen
 Local checks: `npm ci --ignore-scripts`, `npm run typecheck`, `npm run build`, `npx playwright install chromium`, `npm run test:e2e`. CI uses the committed version-pinned lockfile and tests the built preview, not Vite development mode.
 
 This source is strictly internal Code/Code Review and not Stage, formal QA, Release or Production; it must remain a Draft PR until independently authorized.
+
+## Sprint 25 — disconnected browser egress defense
+
+The Center Web built preview uses the same restrictive HTML meta CSP and no-referrer/noindex metadata as Member Web. Three built-browser tests exercise policy presence, blocked local `/api/` + off-site `fetch`, and blocked inline script insertion. Existing disabled/nonmutating center actions and the server DENY-ONLY protected-data gate stay unchanged. Meta CSP is defense in depth for an **offline disconnected preview**, not center-management authorization, professional licensing, a legal medical data right or real hosting/anti-clickjacking policy. Future Production hosting would need approved HTTP headers and independent identity/consent/rights controls; HMR may be restricted.
