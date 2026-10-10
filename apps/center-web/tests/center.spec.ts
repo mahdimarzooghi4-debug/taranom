@@ -29,7 +29,10 @@ test('CENTER-03: no fictitious doctor, patient or department record on direct li
     await expect(page.getByRole('status', { name: 'بخش متصل نیست' })).toBeVisible();
     await expect(page.getByRole('status')).toContainText('نبود اتصال به معنی');
   }
-  await expect(page.getByText(/دکتر رضایی|پزشک نمونه|بیمار نمونه|۵۰ پزشک/)).toHaveCount(0);
+  // The educational notice may legitimately say "بدون پزشک نمونه".
+  // Prove no real-looking record row or invented named clinician exists.
+  await expect(page.locator('table tbody tr, [data-record="doctor"], [data-record="department"]')).toHaveCount(0);
+  await expect(page.getByText(/دکتر رضایی|بیمار نمونه|۵۰ پزشک/)).toHaveCount(0);
 });
 
 test('CENTER-04: defining department is a non-mutating locked workflow', async ({ page }) => {
