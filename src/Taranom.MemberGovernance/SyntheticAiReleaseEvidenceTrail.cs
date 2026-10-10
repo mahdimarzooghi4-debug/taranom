@@ -145,16 +145,19 @@ internal static class SyntheticAiReleaseEvidenceTrail
                     history.Append(command))
                 : new(SyntheticAiReleaseEvidenceOutcome.MissingCandidate, history);
 
+        // Once a candidate exists, any different new candidate request is
+        // always a forbidden second candidate stage; no downstream packet
+        // can turn it into a release or replace immutable provenance.
+        if (command.Action ==
+            SyntheticAiReleaseEvidenceAction.RecordUnverifiedCandidate)
+            return new(SyntheticAiReleaseEvidenceOutcome.DuplicateStage, history);
+
         var original = history.Events[0].Command;
         if (command.CandidateRef != original.CandidateRef ||
             command.DatasetVersionRef != original.DatasetVersionRef ||
             command.ArtifactDigestSha256 != original.ArtifactDigestSha256 ||
             command.OriginalCandidateRequestId != original.RequestId)
             return new(SyntheticAiReleaseEvidenceOutcome.ScopeMismatch, history);
-
-        if (command.Action ==
-            SyntheticAiReleaseEvidenceAction.RecordUnverifiedCandidate)
-            return new(SyntheticAiReleaseEvidenceOutcome.DuplicateStage, history);
 
         if (command.Action ==
             SyntheticAiReleaseEvidenceAction.RecordUnverifiedJointCommitteePacket)
