@@ -121,10 +121,21 @@ internal sealed class PgSyntheticPacketReceiptJournal(
         {
             var existing = await ReadLockedAsync(cn, tx, previous, ct)
                 ?? throw new InvalidOperationException("TEST_PACKET_RECEIPT_CORRUPT");
+            // A duplicate request is an immutable historical fact, not proof
+            // of a current simulated issuer. Never call a changed source
+            // snapshot "ExactReplay"; preserve the original row and audit.
+            // This is a single TEST DOUBLE check, not atomic revocation.
+            var sameCommand = existing.Command == command;
+            var issuerMatchesHistory =
+                initialCheck.Evidence is { } reported &&
+                existing.SimulatedIssuerRef == reported.SimulatedIssuerRef &&
+                existing.SimulatedIssuerRevision == reported.SimulatedIssuerRevision;
             await tx.RollbackAsync(ct);
-            return existing.Command == command
-                ? TechnicalReceiptOutcome.ExactReplay
-                : TechnicalReceiptOutcome.ConflictingReplay;
+            return !sameCommand
+                ? TechnicalReceiptOutcome.ConflictingReplay
+                : !issuerMatchesHistory
+                    ? TechnicalReceiptOutcome.HistoricalIssuerVersionDifferentOnReplay
+                    : TechnicalReceiptOutcome.ExactReplay;
         }
 
         if (latest.Revision != packet.Command.ExpectedDisclosureRevision)

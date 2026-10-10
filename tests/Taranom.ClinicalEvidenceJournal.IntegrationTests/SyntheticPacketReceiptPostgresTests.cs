@@ -604,6 +604,88 @@ public sealed class SyntheticPacketReceiptPostgresTests
                     command, TestContext.Current.CancellationToken));
     }
 
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplayDetectsChangedHistoricalIssuerWithoutRewritingOriginal(
+        bool changeIssuerIdentity)
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var original = Attestation(command) with { SimulatedIssuerRevision = 7 };
+        var stored = Journal(db, packets, notices, original);
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(stored, command));
+        var changed = changeIssuerIdentity
+            ? original with { SimulatedIssuerRef = "test:replacement-issuer" }
+            : original with { SimulatedIssuerRevision = 8 };
+        Assert.Equal(TechnicalReceiptOutcome.HistoricalIssuerVersionDifferentOnReplay,
+            await Record(Journal(db, packets, notices, changed), command));
+        var read = await stored.ReadAsync(command.PacketId,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(read);
+        Assert.Equal(original.SimulatedIssuerRef, read.SimulatedIssuerRef);
+        Assert.Equal(original.SimulatedIssuerRevision, read.SimulatedIssuerRevision);
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(1L, await Count(db, "audit", command.PacketId));
+        Assert.Equal(SyntheticReceiptHistoryStatus.HistoricalIssuerVersionDifferent,
+            await new PgSyntheticReceiptHistoryInspector(
+                stored, new TestSource(changed)).InspectAsync(
+                    command, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ReplayChangedCommandTakesPrecedenceOverIssuerMismatch()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(db, packets, notices, Attestation(command)), command));
+        var competing = command with { ReceiptEvidenceRef = "test:different-evidence" };
+        var newIssuer = Attestation(competing) with {
+            SimulatedIssuerRef = "test:new-issuer", SimulatedIssuerRevision = 100
+        };
+        Assert.Equal(TechnicalReceiptOutcome.ConflictingReplay,
+            await Record(Journal(db, packets, notices, newIssuer), competing));
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(1L, await Count(db, "audit", command.PacketId));
+    }
+
+    [Fact]
+    public async Task ReplayWithRevokedSyntheticClaimFailsClosedWithoutChangingHistory()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(db, packets, notices, Attestation(command)), command));
+        var invalid = Attestation(command) with { SimulatedGrantNotRevoked = false };
+        Assert.Equal(TechnicalReceiptOutcome.RecipientUnverified,
+            await Record(Journal(db, packets, notices, invalid), command));
+        Assert.Equal(TechnicalReceiptOutcome.AuthoritySourceUnavailable,
+            await Record(Journal(db, packets, notices), command));
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(1L, await Count(db, "audit", command.PacketId));
+    }
+
+    [Fact]
+    public async Task ConcurrentChangedIssuerReplaysRemainReadOnlyAndNonAuthorizing()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var original = Attestation(command);
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(db, packets, notices, original), command));
+        var stale = Journal(db, packets, notices, original with {
+            SimulatedIssuerRevision = 2
+        });
+        var results = await Task.WhenAll(Record(stale, command), Record(stale, command));
+        Assert.All(results, result =>
+            Assert.Equal(TechnicalReceiptOutcome.HistoricalIssuerVersionDifferentOnReplay, result));
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(1L, await Count(db, "audit", command.PacketId));
+    }
+
     [Fact]
     public void ContractHasNoRealHumanAcknowledgementOrReviewerDecision()
     {

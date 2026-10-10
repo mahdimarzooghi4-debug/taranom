@@ -19,7 +19,8 @@ internal enum TechnicalReceiptOutcome
     ExactReplay = 10,
     ConflictingReplay = 11,
     AlreadyNotedForPacket = 12,
-    SimulatedIssuerSnapshotChanged = 13
+    SimulatedIssuerSnapshotChanged = 13,
+    HistoricalIssuerVersionDifferentOnReplay = 14
 }
 
 internal readonly record struct TechnicalReceiptCommand(
