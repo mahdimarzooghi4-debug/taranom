@@ -1055,6 +1055,142 @@ public sealed class SyntheticPacketReceiptPostgresTests
         }
     }
 
+
+    private static NpgsqlDataSource ReceiptAuditReader()
+    {
+        var config = new NpgsqlConnectionStringBuilder(Pg) {
+            Username = "taranom_sprint23_receipt_auditor",
+            Password = "ephemeral_synthetic_receipt_audit_only"
+        };
+        return NpgsqlDataSource.Create(config.ConnectionString);
+    }
+
+    [Fact]
+    public async Task ReceiptAuditSweepReturnsOnlyScopedSyntheticHistory()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(db, packets, notices, Attestation(command)), command));
+        var (otherDb, otherReader, otherNotices, otherPackets, otherNotice, other) =
+            await SetupAsync();
+        await using var _other = otherDb; await using var _otherReader = otherReader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(otherDb, otherPackets, otherNotices, Attestation(other)), other));
+        await using var limited = ReceiptAuditReader();
+        var page = await new PgSyntheticReceiptAuditSweep(limited).ScanPageAsync(
+            command.CenterRef, null, 10, TestContext.Current.CancellationToken);
+        Assert.Equal(1, page.Inspected);
+        Assert.Equal(0, page.Inconsistent);
+        Assert.False(page.HasMore);
+        Assert.Null(page.NextPacketCursor);
+    }
+
+    [Fact]
+    public async Task ReceiptAuditSweepPaginatesTwoReceiptsFromSameCenter()
+    {
+        var (db, reader, notices, packets, notice, first) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(db, packets, notices, Attestation(first)), first));
+        var (otherDb, otherReader, otherNotices, otherPackets, otherNotice, second) =
+            await SetupAsync(existingCenter: first.CenterRef, doctorRef: "test:second-doctor");
+        await using var _other = otherDb; await using var _otherReader = otherReader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(otherDb, otherPackets, otherNotices, Attestation(second)), second));
+        await using var limited = ReceiptAuditReader();
+        var sweep = new PgSyntheticReceiptAuditSweep(limited);
+        var firstPage = await sweep.ScanPageAsync(first.CenterRef, null, 1,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1, firstPage.Inspected);
+        Assert.Equal(0, firstPage.Inconsistent);
+        Assert.True(firstPage.HasMore);
+        Assert.NotNull(firstPage.NextPacketCursor);
+        var secondPage = await sweep.ScanPageAsync(first.CenterRef,
+            firstPage.NextPacketCursor, 1, TestContext.Current.CancellationToken);
+        Assert.Equal(1, secondPage.Inspected);
+        Assert.Equal(0, secondPage.Inconsistent);
+        Assert.False(secondPage.HasMore);
+        Assert.Null(secondPage.NextPacketCursor);
+        Assert.NotEqual(first.PacketId, second.PacketId);
+    }
+
+    [Theory]
+    [InlineData("audit-digest")]
+    [InlineData("receipt-digest")]
+    [InlineData("issuer-revision")]
+    [InlineData("command-json")]
+    [InlineData("missing-audit")]
+    public async Task ReceiptAuditSweepDetectsKnownCorruptHistoricalPairs(
+        string corruption)
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(db, packets, notices, Attestation(command)), command));
+        await CorruptReceiptFixtureAsync(db, command.PacketId, corruption);
+        await using var limited = ReceiptAuditReader();
+        var page = await new PgSyntheticReceiptAuditSweep(limited).ScanPageAsync(
+            command.CenterRef, null, 10, TestContext.Current.CancellationToken);
+        Assert.Equal(1, page.Inspected);
+        Assert.Equal(1, page.Inconsistent);
+        Assert.False(page.HasMore);
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(corruption == "missing-audit" ? 0L : 1L,
+            await Count(db, "audit", command.PacketId));
+    }
+
+    [Fact]
+    public async Task ReceiptAuditRoleCannotWriteOrReadOtherReviewTables()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(db, packets, notices, Attestation(command)), command));
+        await using var limited = ReceiptAuditReader();
+        await using var cn = await limited.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        foreach (var sql in new[] {
+            "UPDATE internal_test_packet_receipt SET receipt_digest='test:forged' WHERE packet_id=@id",
+            "DELETE FROM internal_test_packet_receipt_audit WHERE packet_id=@id",
+            "SELECT count(*) FROM internal_test_review_case"
+        })
+        {
+            await using var statement = new NpgsqlCommand(sql, cn);
+            statement.Parameters.AddWithValue("id", command.PacketId);
+            var forbidden = await Assert.ThrowsAsync<PostgresException>(async () =>
+                await statement.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+            Assert.Equal("42501", forbidden.SqlState);
+        }
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(1L, await Count(db, "audit", command.PacketId));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    [InlineData(-1)]
+    public async Task ReceiptAuditSweepRejectsInvalidPageSizesBeforeSql(int pageSize)
+    {
+        await using var limited = ReceiptAuditReader();
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            new PgSyntheticReceiptAuditSweep(limited).ScanPageAsync(
+                "test:valid-center", null, pageSize,
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ReceiptAuditSweepRejectsNonSyntheticScopeAndEmptyCursor()
+    {
+        await using var limited = ReceiptAuditReader();
+        var sweep = new PgSyntheticReceiptAuditSweep(limited);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            sweep.ScanPageAsync("real:center", null, 1,
+                TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            sweep.ScanPageAsync("test:center", Guid.Empty, 1,
+                TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public void ContractHasNoRealHumanAcknowledgementOrReviewerDecision()
     {
