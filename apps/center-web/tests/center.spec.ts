@@ -330,16 +330,26 @@ test('CENTER-HTTP-02: built JS asset also gets no-sniff and no-store response he
   expect(response.headers()['content-security-policy']).toContain("connect-src 'none'");
 });
 
-test('CENTER-HTTP-03: Chromium refuses iframe embedding from a top-level document without CSP', async ({ page }) => {
-  const cspErrors: string[] = [];
-  page.on('console', message => {
-    if (message.type() === 'error' &&
-        /frame-ancestors|X-Frame-Options|Refused to frame/i.test(message.text())) {
-      cspErrors.push(message.text());
-    }
-  });
+test('CENTER-HTTP-03: Chromium cannot render an iframe of the built preview', async ({ page }) => {
+  const target = 'http://127.0.0.1:4184/center';
+  const delivered = await page.request.get(target);
+  expect(delivered.status()).toBe(200);
+  expect(delivered.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+  expect(delivered.headers()['x-frame-options']).toBe('DENY');
+
+  // Parent is about:blank with NO CSP. Validate actual blocked child content
+  // after iframe load, not fragile Chromium console error wording.
   await page.goto('about:blank');
-  await page.setContent('<iframe title="Embedding prohibited" src="http://127.0.0.1:4184/center"></iframe>');
-  await expect.poll(() => cspErrors.length, { timeout: 10000 }).toBeGreaterThan(0);
+  await page.evaluate(async url => {
+    const frame = document.createElement('iframe');
+    frame.title = 'Embedding prohibited';
+    frame.src = url;
+    const load = new Promise<void>(resolve => {
+      frame.addEventListener('load', () => resolve(), { once: true });
+    });
+    document.body.append(frame);
+    await load;
+  }, target);
   await expect(page.frameLocator('iframe').locator('#root')).toHaveCount(0);
+  await expect(page.frameLocator('iframe').locator('main')).toHaveCount(0);
 });

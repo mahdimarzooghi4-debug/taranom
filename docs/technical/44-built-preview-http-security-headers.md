@@ -23,7 +23,7 @@ Add three real Playwright Chromium tests **to each app**, exercising its **built
 
 1. Deep-route HTTP response is HTML with CSP including header-only `frame-ancestors 'none'` and all named network/identity/privacy restrictions; existing visible app route still renders, ensuring nonblocking functionality.
 2. Hashed production JavaScript asset HTTP response includes nosniff, no-store and CSP.
-3. Chromium top-level `about:blank` embeds the preview URL in an iframe (the parent has NO CSP). Verify a browser frame-block console diagnostic and absence of the mounted React `#root` in the nested frame. This tests the **real server response's anti-embedding enforcement**, not a meta-tag string or a parent's `frame-src` policy.
+3. Chromium top-level `about:blank` embeds the preview URL in an iframe (the parent has NO CSP). Await the iframe load event, then verify the blocked child exposes neither React `#root` nor `main`. Chromium console error wording is not an acceptance condition; HTTP policy headers are independently asserted. This tests the **real server response's anti-embedding enforcement**, not a meta-tag string or a parent's `frame-src` policy.
 
 Existing 33 Member + 21 Center Chromium cases still exercise disconnected UI, navigation/RTL/accessibility, safety notices, CSP denial of private same-origin and external fetch, inline-script blocking and no browser storage. Six new tests should yield **36 Member and 24 Center**, subject to actual CI logs. Inherit **all 12 CI jobs**, including real PostgreSQL and clinical protected-data DENY-ONLY, plus Sprint34 static external AI source gate.
 
