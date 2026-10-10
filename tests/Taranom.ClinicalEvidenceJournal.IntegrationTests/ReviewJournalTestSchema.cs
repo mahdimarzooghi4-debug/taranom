@@ -20,6 +20,7 @@ internal static class ReviewJournalTestSchema
         await using var owner = NpgsqlDataSource.Create(url);
         await PgClinicalEvidenceJournal.InitializeIsolatedTestSchemaAsync(owner);
         await PgFrozenUnverifiedReviewQueue.InitializeTestSchemaAsync(owner);
+        await PgHumanReviewNoteJournal.InitializeTestSchemaAsync(owner);
         await using var cn = await owner.OpenConnectionAsync();
         await using var command = new NpgsqlCommand("""
             DO $block$ BEGIN
