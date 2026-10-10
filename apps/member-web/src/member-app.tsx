@@ -45,6 +45,17 @@ const costShares = [
   { key: 'member', label: 'سهم احتمالی عضو', owner: 'اسناد معتبر نهایی مراجع مربوط' },
 ] as const;
 
+// Two legally distinct paths share a future member-facing contact point, but
+// neither a medical verdict nor an insurer decision can be issued here.
+const supportPaths = [
+  { key: 'care', label: 'شکایت از خدمت یا حادثه پزشکی',
+    authority: 'رسیدگی تخصصی فقط با مرجع پزشکی و حقوقی صاحب‌اختیار است.',
+    disclosure: 'مدارک سلامت صرفاً با مبنای قانونی و دسترسی محدود قابل بررسی‌اند.' },
+  { key: 'insurance', label: 'اعتراض به پوشش یا سهم بیمه',
+    authority: 'تصمیم پوشش و اصلاح سهم بیمه فقط با بیمه‌گر یا مرجع قانونی است.',
+    disclosure: 'ثبت اعتراض موجب برداشت، مسدودی یا اصلاح خودکار کیف پول نمی‌شود.' },
+] as const;
+
 const descriptions = [
   { label: 'هویت و دسترسی', value: 'اتصال برقرار نیست', help: 'احراز هویت واقعی هنوز پیاده‌سازی نشده است.' },
   { label: 'اطلاعات درمانی', value: 'در دسترس نیست', help: 'بدون دسترسی مجاز هیچ پرونده‌ای نمایش داده نمی‌شود.' },
@@ -233,6 +244,37 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="cost-awareness-limits">
                     ثبت آگاهی و انتخاب — نیازمند اتصال امن
                   </button>
+                </section>
+              ) : null}
+              {page.key === 'support' ? (
+                <section aria-labelledby="support-paths-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">مسیر واحد پیگیری؛ اختیارهای مستقل</p>
+                      <h2 id="support-paths-title">موضوعات شکایت و اعتراض</h2>
+                    </div>
+                    <span className="readonly-pill">ثبت واقعی غیرفعال</span>
+                  </div>
+                  <div className="status-grid" role="list" aria-label="مسیرهای مستقل رسیدگی">
+                    {supportPaths.map((path) => (
+                      <article className="status-card" role="listitem" key={path.key}>
+                        <p className="status-card-label">{path.label}</p>
+                        <h3>ثبت و پیگیری هنوز متصل نیست</h3>
+                        <p>{path.authority}</p>
+                        <p>{path.disclosure}</p>
+                        <button type="button" disabled>
+                          ثبت درخواست — نیازمند احراز هویت و مرجع معتبر
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                  <p className="quiet" id="support-legal-limit">
+                    این صفحه رأی پزشکی، تصمیم بیمه‌گر، حکم جبران خسارت یا وضعیت یک پرونده واقعی نیست.
+                    هیچ شماره پرونده، زمان پاسخ یا نتیجه رسیدگی ساخته نشده است.
+                  </p>
+                  <p className="emergency-note">
+                    در فوریت پزشکی، کمک پزشکی و تماس با خدمات فوریت را به ثبت شکایت یا بررسی بیمه موکول نکنید.
+                  </p>
                 </section>
               ) : null}
               <InterruptionNotice detail={page.detail} />

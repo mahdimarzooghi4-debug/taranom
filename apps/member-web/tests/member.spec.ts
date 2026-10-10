@@ -244,3 +244,53 @@ test('COST-03: cost route remains isolated through member navigation and browser
   await page.goForward();
   await expect(page.getByRole('heading', { name: 'اجزای برآورد غیرقطعی' })).toBeVisible();
 });
+
+test('SUPPORT-01: medical and insurance complaint routes remain legally distinct', async ({ page }) => {
+  await page.goto('/member/support');
+  await expect(page.getByRole('heading', { name: 'موضوعات شکایت و اعتراض' })).toBeVisible();
+  const paths = page.getByRole('list', { name: 'مسیرهای مستقل رسیدگی' });
+  await expect(paths.getByRole('listitem')).toHaveCount(2);
+  const medical = paths.getByRole('listitem').filter({ hasText: 'شکایت از خدمت یا حادثه پزشکی' });
+  const insurance = paths.getByRole('listitem').filter({ hasText: 'اعتراض به پوشش یا سهم بیمه' });
+  await expect(medical).toContainText('مرجع پزشکی و حقوقی صاحب‌اختیار');
+  await expect(insurance).toContainText('فقط با بیمه‌گر یا مرجع قانونی');
+  await expect(insurance).toContainText('موجب برداشت، مسدودی یا اصلاح خودکار کیف پول نمی‌شود');
+  await expect(medical).toContainText('مدارک سلامت صرفاً با مبنای قانونی');
+});
+
+test('SUPPORT-02: disconnected complaint UI cannot submit, pay or access private sources', async ({ page }) => {
+  const privateRequests: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/auth/', '/wallet/', '/claims/', '/medical/']
+      .some(path => request.url().includes(path))) privateRequests.push(request.url());
+  });
+  await page.goto('/member/support');
+  const paths = page.getByRole('list', { name: 'مسیرهای مستقل رسیدگی' });
+  await expect(paths.getByRole('button', { name: 'ثبت درخواست — نیازمند احراز هویت و مرجع معتبر' })).toHaveCount(2);
+  for (const button of await paths.getByRole('button').all()) {
+    await expect(button).toBeDisabled();
+  }
+  await expect(page.getByRole('status')).toContainText('این بخش هنوز به سرویس واقعی متصل نیست');
+  expect(privateRequests).toEqual([]);
+  await expect(page.getByRole('button', { name: /تأیید بیمه|صدور رأی|پرداخت خسارت/ })).toHaveCount(0);
+});
+
+test('SUPPORT-03: no fabricated case number or processing deadline, urgent help stays independent', async ({ page }) => {
+  await page.goto('/member/support');
+  await expect(page.getByText('هیچ شماره پرونده، زمان پاسخ یا نتیجه رسیدگی ساخته نشده است.', { exact: false })).toBeVisible();
+  await expect(page.getByText('در فوریت پزشکی، کمک پزشکی و تماس با خدمات فوریت را به ثبت شکایت یا بررسی بیمه موکول نکنید.')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'مسیرهای مستقل رسیدگی' }).getByRole('heading',
+    { name: 'ثبت و پیگیری هنوز متصل نیست' })).toHaveCount(2);
+  await expect(page).toHaveURL(/\/member\/support$/);
+});
+
+test('SUPPORT-04: navigation back and forward retains disconnected legal boundaries', async ({ page }) => {
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'پشتیبانی و شکایات' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'پشتیبانی و شکایات' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'موضوعات شکایت و اعتراض' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'موضوعات شکایت و اعتراض' })).toBeVisible();
+});
