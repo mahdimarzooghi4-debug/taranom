@@ -102,10 +102,11 @@ public sealed class ClinicalEvidenceIntakeTests
     }
 
     [Theory]
-    [InlineData(1, 1)]
     [InlineData(1, 2)]
+    [InlineData(1, 3)]
     [InlineData(2, 0)]
-    [InlineData(2, 3)]
+    [InlineData(2, 1)]
+    [InlineData(2, 99)]
     public void EvidenceSubjectAndClaimTypeMustMatch(int subjectKind, int kind)
     {
         var state = subjectKind == 1 ? NewManager() : NewDoctor();
