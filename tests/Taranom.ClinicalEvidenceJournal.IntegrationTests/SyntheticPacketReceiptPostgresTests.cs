@@ -55,8 +55,21 @@ public sealed class SyntheticPacketReceiptPostgresTests
             (await evidence.SubmitAsync(center, doctorRef,
                 EvidenceSubjectKind.Physician, claim, TestContext.Current.CancellationToken)).Outcome);
         var snapshot = await frozen.CaptureAsync(center, null, TestContext.Current.CancellationToken);
+        // A center may have several physician claims. Select the item that
+        // actually belongs to this synthetic subject, not always index 0.
+        var frozenItems = await frozen.PageAsync(center, null, snapshot, 100,
+            null, TestContext.Current.CancellationToken);
+        var itemIndex = -1;
+        for (var i = 0; i < frozenItems.Items.Count; i++)
+        {
+            if (frozenItems.Items[i].SubjectRef == doctorRef &&
+                frozenItems.Items[i].SubjectKind == EvidenceSubjectKind.Physician &&
+                frozenItems.Items[i].Revision == 1)
+                itemIndex = i;
+        }
+        Assert.True(itemIndex >= 0);
         var review = new HumanReviewNoteCommand(Guid.NewGuid(), 0, center, doctorRef,
-            EvidenceSubjectKind.Physician, 1, snapshot, 0, null,
+            EvidenceSubjectKind.Physician, 1, snapshot, itemIndex, null,
             "test:claimed-reviewer", "test:unverified-rationale");
         Assert.Equal(HumanReviewNoteOutcome.PendingSourceVerificationRecorded,
             (await notes.RecordAsync(review, TestContext.Current.CancellationToken)).Outcome);
