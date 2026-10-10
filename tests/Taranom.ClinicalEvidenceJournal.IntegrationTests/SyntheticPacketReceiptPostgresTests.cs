@@ -100,6 +100,51 @@ public sealed class SyntheticPacketReceiptPostgresTests
         return (long)(await cmd.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
     }
 
+
+    // Deliberate *privileged* fixture corruption for isolated PostgreSQL tests.
+    // SET LOCAL never escapes the test transaction. This proves detection of
+    // simple inconsistency, NOT protection from owners who can forge both
+    // records and their unkeyed digest. It is not a production adapter.
+    private static async Task CorruptReceiptFixtureAsync(
+        NpgsqlDataSource db, Guid packet, string corruption)
+    {
+        string sql = corruption switch {
+            "audit-digest" => """
+                UPDATE internal_test_packet_receipt_audit
+                   SET receipt_digest='test:broken-audit' WHERE packet_id=@id
+                """,
+            "receipt-digest" => """
+                UPDATE internal_test_packet_receipt
+                   SET receipt_digest='test:broken-receipt' WHERE packet_id=@id
+                """,
+            "issuer-revision" => """
+                UPDATE internal_test_packet_receipt
+                   SET issuer_revision=issuer_revision+1 WHERE packet_id=@id
+                """,
+            "command-json" => """
+                UPDATE internal_test_packet_receipt
+                   SET command_json='{malformed' WHERE packet_id=@id
+                """,
+            "missing-audit" => """
+                DELETE FROM internal_test_packet_receipt_audit WHERE packet_id=@id
+                """,
+            _ => throw new ArgumentException("Unknown test corruption", nameof(corruption))
+        };
+        await using var cn = await db.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using var tx = await cn.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        await using (var bypass = new NpgsqlCommand(
+            "SET LOCAL session_replication_role = replica", cn, tx))
+        {
+            await bypass.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+        await using (var change = new NpgsqlCommand(sql, cn, tx))
+        {
+            change.Parameters.AddWithValue("id", packet);
+            Assert.Equal(1, await change.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+        }
+        await tx.CommitAsync(TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task MissingAuthoritySourceFailsBeforeAnyReceiptWrite()
     {
@@ -893,6 +938,120 @@ public sealed class SyntheticPacketReceiptPostgresTests
                 .InspectAsync(altered, TestContext.Current.CancellationToken));
         Assert.Equal(1, changing.Calls);
         Assert.Equal(1L, await Count(db, "audit", command.PacketId));
+    }
+
+
+    [Theory]
+    [InlineData("audit-digest")]
+    [InlineData("receipt-digest")]
+    [InlineData("issuer-revision")]
+    [InlineData("command-json")]
+    [InlineData("missing-audit")]
+    public async Task CorruptedExistingPacketCannotBeHiddenAsAlreadyNoted(
+        string corruption)
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var first = Journal(db, packets, notices, Attestation(command));
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(first, command));
+        await CorruptReceiptFixtureAsync(db, command.PacketId, corruption);
+
+        var newRequest = command with { RequestId = Guid.NewGuid() };
+        var attempt = Journal(db, packets, notices, Attestation(newRequest));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Record(attempt, newRequest));
+        Assert.Equal("TEST_PACKET_RECEIPT_CORRUPT", exception.Message);
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(corruption == "missing-audit" ? 0L : 1L,
+            await Count(db, "audit", command.PacketId));
+    }
+
+    [Theory]
+    [InlineData("audit-digest")]
+    [InlineData("receipt-digest")]
+    [InlineData("issuer-revision")]
+    [InlineData("command-json")]
+    [InlineData("missing-audit")]
+    public async Task CorruptHistoricalReceiptCannotBeReadOrReplayedAsValid(
+        string corruption)
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var journal = Journal(db, packets, notices, Attestation(command));
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(journal, command));
+        await CorruptReceiptFixtureAsync(db, command.PacketId, corruption);
+
+        var read = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await journal.ReadAsync(command.PacketId, TestContext.Current.CancellationToken));
+        Assert.Equal("TEST_PACKET_RECEIPT_CORRUPT", read.Message);
+        var replay = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Record(journal, command));
+        Assert.Equal("TEST_PACKET_RECEIPT_CORRUPT", replay.Message);
+        Assert.Equal(SyntheticReceiptHistoryStatus.HistoricalReceiptCorrupt,
+            await new PgSyntheticReceiptHistoryInspector(
+                journal, new TestSource(Attestation(command))).InspectAsync(
+                    command, TestContext.Current.CancellationToken));
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(corruption == "missing-audit" ? 0L : 1L,
+            await Count(db, "audit", command.PacketId));
+    }
+
+    [Fact]
+    public async Task CorruptReceiptOfAnotherPacketFailsClosedOnRequestReuse()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        var first = Journal(db, packets, notices, Attestation(command));
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(first, command));
+        await CorruptReceiptFixtureAsync(db, command.PacketId, "audit-digest");
+
+        var (anotherDb, anotherReader, otherNotices, otherPackets, otherNotice, second) =
+            await SetupAsync();
+        await using var otherDb = anotherDb; await using var otherReader = anotherReader;
+        var collision = second with { RequestId = command.RequestId };
+        var secondAttempt = Journal(anotherDb, otherPackets, otherNotices, Attestation(collision));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Record(secondAttempt, collision));
+        Assert.Equal("TEST_PACKET_RECEIPT_CORRUPT", exception.Message);
+        Assert.Equal(0L, await Count(anotherDb, "receipt", collision.PacketId));
+        Assert.Equal(0L, await Count(anotherDb, "audit", collision.PacketId));
+    }
+
+    [Fact]
+    public async Task ConcurrentNewRequestsCannotTurnCorruptPacketIntoSuccess()
+    {
+        var (db, reader, notices, packets, notice, command) = await SetupAsync();
+        await using var _ = db; await using var __ = reader;
+        Assert.Equal(TechnicalReceiptOutcome.SyntheticTechnicalReceiptRecorded,
+            await Record(Journal(db, packets, notices, Attestation(command)), command));
+        await CorruptReceiptFixtureAsync(db, command.PacketId, "issuer-revision");
+
+        var nextA = command with { RequestId = Guid.NewGuid() };
+        var nextB = command with { RequestId = Guid.NewGuid() };
+        var results = await Task.WhenAll(
+            RecordAndCaptureAsync(Journal(db, packets, notices, Attestation(nextA)), nextA),
+            RecordAndCaptureAsync(Journal(db, packets, notices, Attestation(nextB)), nextB));
+        Assert.All(results, result =>
+            Assert.Equal("TEST_PACKET_RECEIPT_CORRUPT", result));
+        Assert.Equal(1L, await Count(db, "receipt", command.PacketId));
+        Assert.Equal(1L, await Count(db, "audit", command.PacketId));
+    }
+
+    private static async Task<string> RecordAndCaptureAsync(
+        PgSyntheticPacketReceiptJournal store, TechnicalReceiptCommand command)
+    {
+        try
+        {
+            var unexpected = await Record(store, command);
+            return "UNEXPECTED_RESULT:" + unexpected;
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ex.Message;
+        }
     }
 
     [Fact]

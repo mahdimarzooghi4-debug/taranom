@@ -208,17 +208,15 @@ internal sealed class PgSyntheticPacketReceiptJournal(
             return TechnicalReceiptOutcome.SimulatedIssuerSnapshotChanged;
         }
 
-        // Exactly one accepted technical receipt per immutable packet.
-        await using (var existingPacket = new NpgsqlCommand("""
-            SELECT packet_id FROM internal_test_packet_receipt WHERE packet_id=@packet
-            """, cn, tx))
+        // A duplicate packet is historical only when its existing receipt
+        // AND paired audit validate. A bare row-exists check must not hide
+        // damaged persisted evidence behind AlreadyNotedForPacket.
+        // This check is still synthetic: privileged database owners can
+        // rewrite history and recompute an unhashed trust root.
+        if (await ReadLockedAsync(cn, tx, command.PacketId, ct) is not null)
         {
-            existingPacket.Parameters.AddWithValue("packet", command.PacketId);
-            if (await existingPacket.ExecuteScalarAsync(ct) is not null)
-            {
-                await tx.RollbackAsync(ct);
-                return TechnicalReceiptOutcome.AlreadyNotedForPacket;
-            }
+            await tx.RollbackAsync(ct);
+            return TechnicalReceiptOutcome.AlreadyNotedForPacket;
         }
 
         var json = JsonSerializer.Serialize(command);
