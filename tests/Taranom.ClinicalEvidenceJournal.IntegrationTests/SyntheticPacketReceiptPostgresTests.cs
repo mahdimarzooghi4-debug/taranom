@@ -31,7 +31,8 @@ public sealed class SyntheticPacketReceiptPostgresTests
     private static async Task<(NpgsqlDataSource Db, NpgsqlDataSource Reader,
         PgReviewerConflictDisclosureJournal Notices, PgUnverifiedConflictPacketJournal Packets,
         ConflictNoticeCommand Notice, TechnicalReceiptCommand Receipt)> SetupAsync(
-        string prefix = "center")
+        string prefix = "center", string? existingCenter = null,
+        string doctorRef = "test:doctor")
     {
         await ReviewJournalTestSchema.EnsureAsync().WaitAsync(TestContext.Current.CancellationToken);
         var db = NpgsqlDataSource.Create(Pg);
@@ -45,26 +46,26 @@ public sealed class SyntheticPacketReceiptPostgresTests
         var notes = new PgHumanReviewNoteJournal(db, frozen);
         var notices = new PgReviewerConflictDisclosureJournal(db, notes);
         var packets = new PgUnverifiedConflictPacketJournal(db, notices);
-        var center = "test:" + prefix + "-" + Guid.NewGuid().ToString("N");
-        var claim = new EvidenceSubmission(Guid.NewGuid(), 0, center, "test:doctor",
+        var center = existingCenter ?? "test:" + prefix + "-" + Guid.NewGuid().ToString("N");
+        var claim = new EvidenceSubmission(Guid.NewGuid(), 0, center, doctorRef,
             EvidenceSubjectKind.Physician,
             EvidenceKind.PhysicianProfessionalQualificationClaim,
             "test:source-submitter", "test:unverified-proof");
         Assert.Equal(EvidenceIntakeOutcome.ReviewWorkItemCreated,
-            (await evidence.SubmitAsync(center, "test:doctor",
+            (await evidence.SubmitAsync(center, doctorRef,
                 EvidenceSubjectKind.Physician, claim, TestContext.Current.CancellationToken)).Outcome);
         var snapshot = await frozen.CaptureAsync(center, null, TestContext.Current.CancellationToken);
-        var review = new HumanReviewNoteCommand(Guid.NewGuid(), 0, center, "test:doctor",
+        var review = new HumanReviewNoteCommand(Guid.NewGuid(), 0, center, doctorRef,
             EvidenceSubjectKind.Physician, 1, snapshot, 0, null,
             "test:claimed-reviewer", "test:unverified-rationale");
         Assert.Equal(HumanReviewNoteOutcome.PendingSourceVerificationRecorded,
             (await notes.RecordAsync(review, TestContext.Current.CancellationToken)).Outcome);
-        var notice = new ConflictNoticeCommand(Guid.NewGuid(), 0, center, "test:doctor",
+        var notice = new ConflictNoticeCommand(Guid.NewGuid(), 0, center, doctorRef,
             EvidenceSubjectKind.Physician, 1, review.RequestId,
             "test:conflict-reporter", "test:possible-relationship");
         Assert.Equal(ConflictNoticeOutcome.PotentialRelationshipRecorded,
             (await notices.RecordAsync(notice, TestContext.Current.CancellationToken)));
-        var packet = new ConflictPacketCommand(Guid.NewGuid(), center, "test:doctor",
+        var packet = new ConflictPacketCommand(Guid.NewGuid(), center, doctorRef,
             EvidenceSubjectKind.Physician, 1, review.RequestId, 1, "test:packet-initiator");
         Assert.Equal(ConflictPacketOutcome.UnverifiedPacketPrepared,
             (await packets.PrepareAsync(packet, TestContext.Current.CancellationToken)));
