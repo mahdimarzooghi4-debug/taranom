@@ -19,6 +19,7 @@ internal static class ReviewJournalTestSchema
                 "TARANOM_TEST_PG required for isolated synthetic CI");
         await using var owner = NpgsqlDataSource.Create(url);
         await PgClinicalEvidenceJournal.InitializeIsolatedTestSchemaAsync(owner);
+        await PgFrozenUnverifiedReviewQueue.InitializeTestSchemaAsync(owner);
         await using var cn = await owner.OpenConnectionAsync();
         await using var command = new NpgsqlCommand("""
             DO $block$ BEGIN
@@ -32,6 +33,19 @@ internal static class ReviewJournalTestSchema
             GRANT SELECT ON internal_test_review_case, internal_test_review_event,
               internal_test_review_work_item, internal_test_review_audit
               TO taranom_sprint11_review_reader;
+            DO $block$ BEGIN
+              IF NOT EXISTS (SELECT 1 FROM pg_roles
+                WHERE rolname = 'taranom_sprint12_snapshot_capture') THEN
+                CREATE ROLE taranom_sprint12_snapshot_capture LOGIN
+                  PASSWORD 'ephemeral_synthetic_snapshot_capture';
+              END IF;
+            END $block$;
+            GRANT USAGE ON SCHEMA public TO taranom_sprint12_snapshot_capture;
+            GRANT SELECT ON internal_test_review_case,internal_test_review_event,
+              internal_test_review_work_item,internal_test_review_audit
+              TO taranom_sprint12_snapshot_capture;
+            GRANT INSERT,SELECT ON internal_test_frozen_review_snapshot
+              TO taranom_sprint12_snapshot_capture;
             """, cn);
         await command.ExecuteNonQueryAsync();
     }
