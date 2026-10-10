@@ -115,7 +115,7 @@ jobs:
           test ! -e src/fixtures
           test ! -e src/mocks
           test ! -e src/auth-provider.ts
-          if grep -R -E -i 'localStorage\\.setItem|sessionStorage\\.setItem|/api/v1/|Bearer |fake(balance|login|token)' src; then
+          if grep -R -E -i 'localStorage\.setItem|sessionStorage\.setItem|/api/v1/|Bearer |fake(balance|login|token)' src; then
             echo 'Forbidden member-state adapter found' >&2
             exit 1
           fi
