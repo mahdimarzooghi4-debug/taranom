@@ -8,7 +8,7 @@ namespace Taranom.ClinicalEvidenceJournal.IntegrationTests;
 // GENUINE disposable CI PostgreSQL; synthetic cases only, never real users.
 public sealed class UnverifiedReviewQueuePostgresTests
 {
-    private static readonly Lazy<Task> Ready = new(InitializeAsync);
+    private static readonly Lazy<Task> Ready = new(() => ReviewJournalTestSchema.EnsureAsync());
     private const string ReaderUser = "taranom_sprint11_review_reader";
     private const string ReaderPassword = "ephemeral_synthetic_review_only";
     private const string Manager = "test:manager";
@@ -17,28 +17,6 @@ public sealed class UnverifiedReviewQueuePostgresTests
 
     private static string Pg => Environment.GetEnvironmentVariable("TARANOM_TEST_PG")
         ?? throw new InvalidOperationException("TARANOM_TEST_PG must point at isolated synthetic CI database");
-
-    private static async Task InitializeAsync()
-    {
-        await using var owner = NpgsqlDataSource.Create(Pg);
-        await PgClinicalEvidenceJournal.InitializeIsolatedTestSchemaAsync(
-            owner, TestContext.Current.CancellationToken);
-        await using var cn = await owner.OpenConnectionAsync(TestContext.Current.CancellationToken);
-        await using var cmd = new NpgsqlCommand("""
-            DO $block$ BEGIN
-              IF NOT EXISTS (SELECT 1 FROM pg_roles
-                WHERE rolname = 'taranom_sprint11_review_reader') THEN
-                CREATE ROLE taranom_sprint11_review_reader LOGIN
-                  PASSWORD 'ephemeral_synthetic_review_only';
-              END IF;
-            END $block$;
-            GRANT USAGE ON SCHEMA public TO taranom_sprint11_review_reader;
-            GRANT SELECT ON internal_test_review_case, internal_test_review_event,
-              internal_test_review_work_item, internal_test_review_audit
-              TO taranom_sprint11_review_reader;
-            """, cn);
-        await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-    }
 
     private static string NewCenter() =>
         "test:center-" + Guid.NewGuid().ToString("N");

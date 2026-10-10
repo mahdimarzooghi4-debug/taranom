@@ -7,16 +7,9 @@ namespace Taranom.ClinicalEvidenceJournal.IntegrationTests;
 
 public sealed class ReviewIntakePostgresTests
 {
-    private static readonly Lazy<Task> Ready = new(InitializeAsync);
+    private static readonly Lazy<Task> Ready = new(() => ReviewJournalTestSchema.EnsureAsync());
     private static string ConnectionString => Environment.GetEnvironmentVariable("TARANOM_TEST_PG")
         ?? throw new InvalidOperationException("TARANOM_TEST_PG required for synthetic CI PostgreSQL");
-
-    private static async Task InitializeAsync()
-    {
-        await using var admin = NpgsqlDataSource.Create(ConnectionString);
-        await PgClinicalEvidenceJournal.InitializeIsolatedTestSchemaAsync(
-            admin, TestContext.Current.CancellationToken);
-    }
 
     private static string Center(string prefix = "center") =>
         "test:" + prefix + "-" + Guid.NewGuid().ToString("N");
