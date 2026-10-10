@@ -353,3 +353,19 @@ test('CENTER-HTTP-03: Chromium cannot render an iframe of the built preview', as
   await expect(page.frameLocator('iframe').locator('#root')).toHaveCount(0);
   await expect(page.frameLocator('iframe').locator('main')).toHaveCount(0);
 });
+
+
+test('BUNDLE-01: built center shell fetches only local route, JS and CSS (no external resources)', async ({ page }) => {
+  const requested: string[] = [];
+  page.on('request', request => requested.push(request.url()));
+  await page.goto('/center/doctors');
+  await expect(page.getByRole('main')).toBeVisible();
+  expect(requested.length).toBeGreaterThanOrEqual(3);
+  const origin = new URL(page.url()).origin;
+  for (const fullUrl of requested) {
+    const target = new URL(fullUrl);
+    expect(target.origin).toBe(origin);
+    expect(target.pathname).toMatch(/^\/(?:center(?:\/.*)?|assets\/index-[a-zA-Z0-9_-]+\.(?:js|css))$/);
+    expect(target.pathname).not.toMatch(/\.map$/);
+  }
+});
