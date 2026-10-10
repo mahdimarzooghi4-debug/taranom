@@ -166,6 +166,14 @@ class BuiltBundleIntegrityTests(unittest.TestCase):
         (self.dist / "alias").symlink_to(self.dist / "assets", target_is_directory=True)
         self.reject()
 
+    def test_cli_rejects_symlinked_dist_root_before_resolving(self) -> None:
+        alias = self.root / "linked-dist"
+        alias.symlink_to(self.dist, target_is_directory=True)
+        output = self.root / "manifest.json"
+        self.assertEqual(1, main(["--dist", str(alias), "--surface", "member",
+                                  "--output", str(output)]))
+        self.assertFalse(output.exists())
+
     def test_malformed_js_encoding_is_denied(self) -> None:
         (self.dist / "assets/index-1234.js").write_bytes(b"\xff\xfe")
         self.reject()

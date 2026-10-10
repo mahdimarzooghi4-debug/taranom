@@ -210,6 +210,10 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--verify", type=Path)
     args = parser.parse_args(argv)
     try:
+        # Resolving a symlink would hide its identity from _files().
+        # Deny a linked dist root *before* canonical path resolution.
+        if args.dist.is_symlink():
+            raise ValueError("symlinked bundle root")
         dist = args.dist.resolve(strict=True)
         report = args.output if args.output is not None else args.verify
         assert report is not None
