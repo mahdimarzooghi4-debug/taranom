@@ -287,6 +287,49 @@ public sealed class ProofingJournalDatabaseTests
     }
 
     [Fact]
+    public async Task InvalidRequestAuditsDenialWithoutCreatingCase()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var key = NewCase();
+        var denied = await ApplyAsync(store, key,
+            Observe(Guid.Empty, 0, 0, ProofingObservation.Inconclusive));
+        Assert.Equal(ProofingJournalOutcome.InvalidCommand, denied.Outcome);
+        Assert.Equal(0L, await CountAsync(db, "internal_test_proofing_case", key));
+        Assert.Equal(0L, await CountAsync(db, "internal_test_proofing_event", key));
+        Assert.Equal(1L, await CountAsync(db, "internal_test_proofing_denial", key));
+    }
+
+    [Fact]
+    public async Task FailedDenialAuditThrowsAndDoesNotCreateCase()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var key = NewCase("abort-deny");
+        var error = await Assert.ThrowsAsync<PostgresException>(() =>
+            ApplyAsync(store, key, Observe(Guid.Empty, 0, 0,
+                ProofingObservation.VerifiedMatch)));
+        Assert.Equal("P0001", error.SqlState);
+        Assert.Equal("TEST_PROOFING_DENIAL_AUDIT_UNAVAILABLE", error.MessageText);
+        Assert.Equal(0L, await CountAsync(db, "internal_test_proofing_case", key));
+        Assert.Equal(0L, await CountAsync(db, "internal_test_proofing_denial", key));
+    }
+
+    [Fact]
+    public async Task ExactReplayDoesNotGenerateDenial()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var key = NewCase();
+        var request = Observe(Guid.NewGuid(), 0, 0, ProofingObservation.VerifiedMatch);
+        Assert.Equal(ProofingJournalOutcome.Applied,
+            (await ApplyAsync(store, key, request)).Outcome);
+        Assert.Equal(ProofingJournalOutcome.Replayed,
+            (await ApplyAsync(store, key, request)).Outcome);
+        Assert.Equal(0L, await CountAsync(db, "internal_test_proofing_denial", key));
+    }
+
+    [Fact]
     public async Task UnconnectedOrPersonalDataReferencesAreRejected()
     {
         var (db, store) = await ConnectAsync();
