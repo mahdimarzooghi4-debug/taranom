@@ -385,7 +385,7 @@ test('NETWORK-02: network qualification does not authorize treatment credit reci
   await expect(page.getByRole('heading', { name: 'گیرنده اعتبار درمان، قرارداد مستقل لازم دارد' })).toBeVisible();
   await expect(page.getByText(/قرارداد شبکه، جای قرارداد گیرنده پرداخت را نمی‌گیرد/)).toBeVisible();
   await expect(page.getByText(/هیچ ارائه‌دهنده، پروانه، قرارداد، دریافت‌کننده وجه یا خدمت واقعی/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'بررسی و فعال‌سازی شبکه — نیازمند مرجع قانونی و قرارداد واقعی' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'بررسی شواهد شبکه — نیازمند مرجع قانونی و قرارداد واقعی' })).toBeDisabled();
 });
 
 test('NETWORK-03: center network page stays disconnected through navigation and back', async ({ page }) => {
@@ -400,7 +400,7 @@ test('NETWORK-03: center network page stays disconnected through navigation and 
   await page.goBack();
   await expect(page.getByRole('heading', { level: 1, name: 'نمای کلی مرکز' })).toBeFocused();
   await page.goForward();
-  await expect(page.getByRole('button', { name: 'بررسی و فعال‌سازی شبکه — نیازمند مرجع قانونی و قرارداد واقعی' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'بررسی شواهد شبکه — نیازمند مرجع قانونی و قرارداد واقعی' })).toBeDisabled();
   expect(prohibited).toEqual([]);
   expect(await page.evaluate(() => ({
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
