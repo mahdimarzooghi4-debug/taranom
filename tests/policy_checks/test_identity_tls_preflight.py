@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import socket
 import ssl
@@ -251,6 +252,152 @@ class IdentityTlsPreflightTests(unittest.TestCase):
         report = preflight.inspect("AUTHENTICATION_IDP", "user:token@" + PUBLIC)
         self.assertNotIn("token", json.dumps(report))
         self.assertNotIn(PUBLIC, json.dumps(report))
+
+
+    def _private_cli_fixture(self, work):
+        root = pathlib.Path(work)
+        public = root / "public-repo"
+        public.mkdir()
+        target = root / "private-target.txt"
+        target.write_text(PUBLIC + "\n", encoding="ascii")
+        target.chmod(0o600)
+        report = root / "private-report.json"
+        return public, target, report
+
+    def _run_private_cli(self, public, target, report):
+        return preflight.main([
+            "--purpose", "AUTHENTICATION_IDP", "--root", str(public),
+            "--target-file", str(target), "--report-json", str(report)
+        ])
+
+    def test_plaintext_host_command_line_is_rejected_without_dns(self):
+        with tempfile.TemporaryDirectory() as work, \
+             patch.object(preflight.socket, "getaddrinfo", side_effect=AssertionError):
+            out = pathlib.Path(work) / "report.json"
+            rc = preflight.main([
+                "--purpose", "AUTHENTICATION_IDP", "--host", PUBLIC,
+                "--report-json", str(out)
+            ])
+            self.assertEqual(rc, 2)
+            self.assertFalse(out.exists())
+
+    def test_private_target_file_with_secure_permissions_can_probe(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            with patch.object(preflight.socket, "getaddrinfo",
+                              return_value=answers(GOOD)), \
+                 patch.object(preflight.socket, "create_connection",
+                              return_value=FakeStream()), \
+                 patch.object(preflight.ssl, "create_default_context",
+                              return_value=FakeContext()):
+                rc = self._run_private_cli(public, target, out)
+            self.assertEqual(rc, 0)
+            self.assertEqual(json.loads(out.read_text())["status"],
+                             "TLS_TRANSPORT_REACHABLE_ONLY")
+            self.assertFalse(json.loads(out.read_text())["national_release_allowed"])
+            self.assertNotIn(PUBLIC, out.read_text())
+            self.assertEqual(out.stat().st_mode & 0o777, 0o600)
+
+    def test_private_target_world_readable_is_rejected_before_dns(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            target.chmod(0o644)
+            with patch.object(preflight.socket, "getaddrinfo",
+                              side_effect=AssertionError):
+                self.assertEqual(self._run_private_cli(public, target, out), 1)
+            self.assertFalse(out.exists())
+
+    def test_private_target_group_access_is_rejected(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            target.chmod(0o640)
+            self.assertEqual(self._run_private_cli(public, target, out), 1)
+            self.assertFalse(out.exists())
+
+    def test_hardlinked_target_is_rejected(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            os.link(target, pathlib.Path(work) / "another-name.txt")
+            self.assertEqual(self._run_private_cli(public, target, out), 1)
+            self.assertFalse(out.exists())
+
+    def test_symlinked_private_target_is_rejected(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            link = pathlib.Path(work) / "target-link"
+            link.symlink_to(target)
+            self.assertEqual(self._run_private_cli(public, link, out), 1)
+            self.assertFalse(out.exists())
+
+    def test_private_target_inside_public_repo_is_rejected(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            inside = public / "target.txt"
+            target.replace(inside)
+            self.assertEqual(self._run_private_cli(public, inside, out), 1)
+            self.assertFalse(out.exists())
+
+    def test_public_report_destination_rejected_before_dns(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            public_report = public / "leak.json"
+            with patch.object(preflight.socket, "getaddrinfo",
+                              side_effect=AssertionError):
+                self.assertEqual(
+                    self._run_private_cli(public, target, public_report), 1)
+            self.assertFalse(public_report.exists())
+
+    def test_existing_private_report_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            out.write_text("existing private review")
+            with patch.object(preflight.socket, "getaddrinfo",
+                              side_effect=AssertionError):
+                self.assertEqual(self._run_private_cli(public, target, out), 1)
+            self.assertEqual(out.read_text(), "existing private review")
+
+    def test_symlinked_private_output_is_rejected(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            out.symlink_to(target)
+            self.assertEqual(self._run_private_cli(public, target, out), 1)
+            self.assertEqual(target.read_text().strip(), PUBLIC)
+
+    def test_multiline_target_cannot_inject_second_host(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            target.write_text(PUBLIC + "\nother.vendor.com")
+            with patch.object(preflight.socket, "getaddrinfo",
+                              side_effect=AssertionError):
+                self.assertEqual(self._run_private_cli(public, target, out), 1)
+            self.assertFalse(out.exists())
+
+    def test_private_target_unsafe_hostname_rejected_no_network(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            target.write_text("http://user:secret@127.0.0.1/\n")
+            with patch.object(preflight.socket, "getaddrinfo",
+                              side_effect=AssertionError):
+                self.assertEqual(self._run_private_cli(public, target, out), 1)
+            self.assertFalse(out.exists())
+
+    def test_missing_private_target_is_rejected(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            target.unlink()
+            self.assertEqual(self._run_private_cli(public, target, out), 1)
+            self.assertFalse(out.exists())
+
+    def test_symlinked_private_report_parent_rejected(self):
+        with tempfile.TemporaryDirectory() as work:
+            public, target, out = self._private_cli_fixture(work)
+            real_dir = pathlib.Path(work) / "reports"
+            real_dir.mkdir()
+            alias = pathlib.Path(work) / "alias"
+            alias.symlink_to(real_dir, target_is_directory=True)
+            self.assertEqual(self._run_private_cli(public, target,
+                                                    alias / "out.json"), 1)
+            self.assertFalse((real_dir / "out.json").exists())
 
 
 if __name__ == "__main__":

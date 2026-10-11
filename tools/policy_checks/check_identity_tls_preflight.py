@@ -10,6 +10,9 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import os
+from pathlib import Path
+import stat
 import re
 import socket
 import ssl
@@ -150,19 +153,127 @@ def inspect(purpose: str, host: str | None = None) -> dict:
     return report
 
 
+
+def _inside_public(path: Path, repo: Path) -> bool:
+    return (path.absolute().is_relative_to(repo.absolute())
+            or path.resolve().is_relative_to(repo.resolve()))
+
+
+def _no_symlink_parent(path: Path) -> bool:
+    # Trusted local POSIX operator environment; this check and descriptor
+    # verification reduce swaps, not a guarantee against privileged mounts.
+    return not any(p.is_symlink() for p in path.parents)
+
+
+def _read_private_target(path: Path, repo: Path) -> str:
+    """Read ONLY a local owner-private one-line hostname; never command argv.
+
+    A target file is an operator instruction, not independent evidence of
+    authority, provider contract, DNS ownership or permission to use an IdP.
+    """
+    path = path.absolute()
+    if (_inside_public(path, repo) or path.is_symlink()
+            or not _no_symlink_parent(path)):
+        raise ProbeError("PRIVATE_TARGET_OUTSIDE_PUBLIC_REPOSITORY_REQUIRED")
+    fd = None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_size < 1 or before.st_size > 254
+                or before.st_uid != os.getuid()
+                or stat.S_IMODE(before.st_mode) & 0o077):
+            raise ProbeError("UNSAFE_PRIVATE_TARGET_FILE")
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            data = stream.read(255)
+        after = os.fstat(fd)
+        named = os.stat(path, follow_symlinks=False)
+        def identity(s):
+            return (s.st_dev, s.st_ino, s.st_size,
+                    s.st_mtime_ns, s.st_ctime_ns)
+        if (identity(before) != identity(after)
+                or (named.st_dev, named.st_ino) != (after.st_dev, after.st_ino)
+                or len(data) > 254):
+            raise ProbeError("PRIVATE_TARGET_CHANGED_DURING_READ")
+        # Permit exactly one trailing LF to support a private hostname file.
+        value = data.removesuffix(b"\n")
+        if not value or b"\n" in value or b"\r" in value:
+            raise ProbeError("INVALID_PRIVATE_TARGET_CONTENT")
+        try:
+            host = value.decode("ascii")
+        except UnicodeError as error:
+            raise ProbeError("INVALID_PRIVATE_TARGET_CONTENT") from error
+        return _validate_host(host)
+    except ProbeError:
+        raise
+    except (OSError, TypeError, ValueError) as error:
+        raise ProbeError("PRIVATE_TARGET_UNVERIFIABLE") from error
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+def _write_private_report(path: Path, repo: Path, report: dict) -> None:
+    """Never overwrite a preexisting file or write into the public checkout."""
+    path = path.absolute()
+    if (_inside_public(path, repo) or path.is_symlink()
+            or not _no_symlink_parent(path)):
+        raise ProbeError("PRIVATE_REPORT_OUTSIDE_PUBLIC_REPOSITORY_REQUIRED")
+    fd = None
+    try:
+        # Atomic exclusive create: defeats malicious pre-created symlink and
+        # prevents overwriting preexisting private evidence or reports.
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            fd = None
+            stream.write(json.dumps(report, sort_keys=True, indent=2) + "\n")
+    except OSError as error:
+        raise ProbeError("PRIVATE_REPORT_UNWRITABLE_OR_ALREADY_EXISTS") from error
+    finally:
+        if fd is not None:
+            os.close(fd)
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--purpose", choices=PURPOSES, required=True)
-    parser.add_argument("--host",
-                        help="operator-approved public DNS hostname only; no URL/IP/credentials")
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2],
+                        help="the public repository root for private ingress checks")
+    parser.add_argument("--target-file", type=Path,
+                        help="owner-private 0600 single-hostname file outside public Git; never argv host")
+    # Suppress the legacy option from help and never echo its supplied value.
+    parser.add_argument("--host", help=argparse.SUPPRESS)
     parser.add_argument("--report-json", required=True)
     args = parser.parse_args(argv)
-    result = inspect(args.purpose, args.host)
-    from pathlib import Path
-    path = Path(args.report_json)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n",
-                    encoding="utf-8")
+    if args.host is not None:
+        print("DENIED: PLAINTEXT_COMMAND_LINE_HOST_FORBIDDEN", file=sys.stderr)
+        return 2
+    repo = args.root.resolve()
+    report_path = Path(args.report_json)
+    if args.target_file is not None:
+        try:
+            # Validate BOTH private storage boundaries before any DNS/network.
+            if (_inside_public(report_path.absolute(), repo)
+                    or report_path.is_symlink()
+                    or not _no_symlink_parent(report_path.absolute())):
+                raise ProbeError("PRIVATE_REPORT_OUTSIDE_PUBLIC_REPOSITORY_REQUIRED")
+            if report_path.exists():
+                raise ProbeError("PRIVATE_REPORT_UNWRITABLE_OR_ALREADY_EXISTS")
+            name = _read_private_target(args.target_file, repo)
+        except ProbeError as error:
+            print("DENIED: " + error.code, file=sys.stderr)
+            return 1
+        result = inspect(args.purpose, name)
+        try:
+            _write_private_report(report_path, repo, result)
+        except ProbeError as error:
+            print("DENIED: " + error.code, file=sys.stderr)
+            return 1
+    else:
+        # Public CI still cannot call any external identity service by default.
+        result = inspect(args.purpose)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(result, sort_keys=True, indent=2)
+                               + "\n", encoding="utf-8")
     print(f"Identity TLS preflight: {result['status']}; "
           "no authentication/proofing/legal approval; release_allowed=false.")
     if result["errors"]:
