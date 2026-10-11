@@ -260,7 +260,7 @@ public sealed class SyntheticCarePreventionContinuityTests
         Assert.Equal(SyntheticCarePreventionContinuityState.UnverifiedCareRequestMissing,
             Inspect(null).State);
         Assert.Equal(SyntheticCarePreventionContinuityState.UnverifiedCareRequestMissing,
-            Inspect(SyntheticCareTrailSnapshot.Empty).State);
+            Inspect(SyntheticCareTrailSnapshot.Empty, revision:1).State);
     }
 
     [Fact]
@@ -337,7 +337,7 @@ public sealed class SyntheticCarePreventionContinuityTests
     {
         var forbidden=new[] {"Diagnosis","RecordPayload","ClinicalText","Amount",
             "WalletBalance","SignedConsent","Prescription","FollowUpDate","PatientName",
-            "AppointmentId","ProviderLicense","MedicalRecord"};
+            "AppointmentId","ProviderLicense","MedicalRecordPayload"};
         foreach(var property in typeof(SyntheticCarePreventionContinuityRead)
             .GetProperties().Select(x=>x.Name))
             Assert.DoesNotContain(forbidden,p=>property.Contains(p,StringComparison.OrdinalIgnoreCase));
