@@ -630,14 +630,14 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: only_synthetic_ci
-          POSTGRES_DB: taranom_sprint65_center
+          POSTGRES_DB: taranom_sprint64_center
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d taranom_sprint65_center"
+          --health-cmd "pg_isready -U postgres -d taranom_sprint64_center"
           --health-interval 5s --health-timeout 5s --health-retries 15
     env:
-      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint65_center;Username=postgres;Password=only_synthetic_ci;Pooling=false
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint64_center;Username=postgres;Password=only_synthetic_ci;Pooling=false
       TARANOM_CENTER_DEMO_TEST_ONLY: CI_EPHEMERAL_ONLY
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
