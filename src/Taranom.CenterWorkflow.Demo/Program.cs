@@ -57,6 +57,11 @@ app.MapPost("/internal/demo/v1/support/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.WriteAsync);
 
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
+// Exact local member entrypoint is required: the generic root fallback must
+// never silently render the CENTER HTML for a MEMBER browser path.
+app.MapGet("/member-demo/", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+        "member-demo", "index.html"), "text/html; charset=utf-8"));
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFallbackToFile("index.html");

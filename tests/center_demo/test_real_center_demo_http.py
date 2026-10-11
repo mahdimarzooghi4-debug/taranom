@@ -32,6 +32,20 @@ def command(version, kind, department=None, doctor=None, request=None):
     }
 
 
+def verify_split_browser_entrypoints():
+    from urllib.request import urlopen
+    for path, should_contain, must_not_contain in (
+        ("/", "ترنم | گردش آزمایشی مرکز", "پنل آزمایشی پشتیبانی عضو"),
+        ("/member-demo/", "ترنم | پنل آزمایشی پشتیبانی عضو", "گردش آزمایشی مرکز"),
+    ):
+        with urlopen("http://127.0.0.1:4320" + path, timeout=5) as res:
+            assert res.status == 200 and "text/html" in res.headers["Content-Type"]
+            body = res.read().decode("utf-8")
+            assert should_contain in body, "WRONG_BROWSER_ENTRYPOINT"
+            assert must_not_contain not in body, "CROSS_SURFACE_HTML_MIXUP"
+    print("PASS: separate real center/member HTML entrypoints on identical localhost HTTP host")
+
+
 def main():
     case = "test:center-http-" + uuid4().hex
     dept = "test:dep-" + uuid4().hex
@@ -231,6 +245,7 @@ if __name__ == "__main__":
     try:
         main()
         verify_support()
+        verify_split_browser_entrypoints()
     except Exception:
         print("DENIED: EPHEMERAL_CENTER_HTTP_INTEGRATION_FAILED", file=sys.stderr)
         raise SystemExit(1)
