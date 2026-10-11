@@ -58,3 +58,7 @@ Actual integration remains **BLOCKED**. [TRN-TECH-012](../technical/12-member-se
 ## TRN-SP-41 refinement — TRN-EP-07/09/13 (2026-10-11)
 
 Following the accepted TRN-BIZ-048/049/050, authorize only a **test-only after-service source-lineage read boundary**, not operational insurance/billing. [TRN-TECH-050](../technical/50-unified-billing-source-lineage.md) and [TRN-SP-41](../sprints/49-sprint-41-unified-billing-source-lineage.md) pin five source/authority categories and corrected/disputed/withdrawn provenance with independent browser checks. Sprint28's **nonbinding pre-treatment estimate** remains separate. Official insurer decisions, lawful invoices, actual credit balance, settlement, contract and real API remain externally gated; national launch still denied by default.
+
+## Sprint 42 refinement — TRN-EP-01/02/06/13 (2026-10-11)
+
+The accepted TRN-BIZ-035/036 requires member-controlled *clinical need* access without sponsor privileges or implicit AI/research consent. [TRN-TECH-051](../technical/51-member-clinical-record-sharing-boundary.md) and [TRN-SP-42](../sprints/50-sprint-42-clinical-record-sharing.md) define a **synthetic-only** clinician/tenant/member/service/data-category scoped prerequisite gate, separate from existing member self-read and research-consent tests, and a richer `/member/records` disconnected RTL view. No legal emergency exception, real identity, FHIR source, actual medical record, data use or grant is designed or enabled. Release remains blocked.
