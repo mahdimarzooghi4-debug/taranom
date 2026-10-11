@@ -123,6 +123,31 @@ const consentBoundaries = [
     explanation: 'نوع داده، هدف، حفاظت، نگهداری و آثار انصراف باید جداگانه احراز شوند.' },
 ] as const;
 
+// TRN-BIZ-036/037/038/039: these are *categories of protections*, not
+// running AI, trusted datasets, approved committees or member opt-in.
+const secondaryAiLifecycle = [
+  {
+    key: 'consent',
+    label: 'رضایت آگاهانه و مستقل برای پژوهش و AI',
+    rule: 'انتخاب عضو باید برای هدف مشخص، مستقل از درمان و عضویت و با نسخه و وضعیت لغو معتبر احراز شود.'
+  },
+  {
+    key: 'source',
+    label: 'منشأ قانونی و حفاظت داده سلامت',
+    rule: 'حق استفاده، نسخه منبع، کیفیت، حداقل داده و مجوز قانونی باید جداگانه بررسی شوند؛ هیچ پرونده‌ای منتقل نشده است.'
+  },
+  {
+    key: 'partitions',
+    label: 'تفکیک داده آموزش و ارزیابی مستقل',
+    rule: 'منابع تکراری نباید بین آموزش و ارزیابی جابه‌جا شوند؛ هیچ Dataset واقعی یا سیاست آموزش آماده نیست.'
+  },
+  {
+    key: 'governance',
+    label: 'کاندید، کمیته مشترک و تأیید نهایی انسانی',
+    rule: 'ساخت کاندید خودکار مجوز استفاده عملیاتی نیست؛ بررسی مشترک پزشکی و فنی و تصویب مسئول انسانی دو گیت مستقل‌اند.'
+  }
+] as const;
+
 // Accepted TRN-BIZ-028/029 only describe possible payer arrangements;
 // these are NOT active subscriptions, verified contracts or payer records.
 // TRN-BIZ-035: a member self-view, clinician-limited disclosure and
@@ -514,6 +539,36 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="secondary-consent-limits">
                     ثبت یا تغییر رضایت — نیازمند احراز هویت و قرارداد قانونی
                   </button>
+                  <section aria-labelledby="ai-lifecycle-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">داده پژوهشی فقط با مجوز مستقل، مدل فقط با گیت انسانی</p>
+                        <h2 id="ai-lifecycle-title">مراحل حفاظت داده تا بررسی نسخه هوش مصنوعی</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ داده یا نسخه‌ای فعال نیست</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="مراحل مستقل حاکمیت داده و AI">
+                      {secondaryAiLifecycle.map((item) => (
+                        <article className="status-card" role="listitem" key={item.key}>
+                          <p className="status-card-label">{item.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{item.rule}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p id="ai-lifecycle-limit" className="quiet">
+                      صرف حضور در درمان، پرداخت اشتراک یا ثبت رضایت درمانی به معنی اجازه
+                      استفاده از پرونده در آموزش هوش مصنوعی نیست. حتی بررسی موفق منابع و
+                      ساخت کاندید، تأیید مدل یا فعال‌سازی خودکار Production محسوب نمی‌شود.
+                      سرویس هوش مصنوعی خارجی در اجرای ترنم مجاز نیست.
+                    </p>
+                    <button type="button" disabled aria-describedby="ai-lifecycle-limit">
+                      مشاهده وضعیت رضایت و استفاده پژوهشی — نیازمند منبع و مجوز واقعی
+                    </button>
+                    <button type="button" disabled aria-describedby="ai-lifecycle-limit">
+                      بررسی نسخه هوش مصنوعی — فقط مرجع پزشکی و فنی صاحب‌اختیار
+                    </button>
+                  </section>
                 </section>
               ) : null}
               {page.key === 'costs' ? (

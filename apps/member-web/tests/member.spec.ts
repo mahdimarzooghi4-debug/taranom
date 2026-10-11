@@ -734,3 +734,64 @@ test('CREDIT-PERIOD-04: credit and membership history are private and disconnect
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('AI-DATA-01: consent page shows four separate unknown AI data and governance lanes', async ({ page }) => {
+  await page.goto('/member/consents');
+  await expect(page.getByRole('heading', { name: 'مراحل حفاظت داده تا بررسی نسخه هوش مصنوعی' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'مراحل مستقل حاکمیت داده و AI' });
+  await expect(list.getByRole('listitem')).toHaveCount(4);
+  for (const title of [
+    'رضایت آگاهانه و مستقل برای پژوهش و AI',
+    'منشأ قانونی و حفاظت داده سلامت',
+    'تفکیک داده آموزش و ارزیابی مستقل',
+    'کاندید، کمیته مشترک و تأیید نهایی انسانی'
+  ]) {
+    await expect(list.getByText(title, { exact: true })).toBeVisible();
+  }
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(4);
+  await expect(page.getByText('هیچ داده یا نسخه‌ای فعال نیست')).toBeVisible();
+});
+
+test('AI-DATA-02: care, paid subscription and training remain independent and never auto promote', async ({ page }) => {
+  await page.goto('/member/consents?research=true&opt_in=yes&candidate=approved');
+  await expect(page.getByText(/صرف حضور در درمان، پرداخت اشتراک یا ثبت رضایت درمانی/)).toBeVisible();
+  await expect(page.getByText(/ساخت کاندید، تأیید مدل یا فعال‌سازی خودکار Production محسوب نمی‌شود/))
+    .toBeVisible();
+  await expect(page.getByText(/سرویس هوش مصنوعی خارجی در اجرای ترنم مجاز نیست/)).toBeVisible();
+  await expect(page.getByRole('button',
+    { name: 'مشاهده وضعیت رضایت و استفاده پژوهشی — نیازمند منبع و مجوز واقعی' })).toBeDisabled();
+  await expect(page.getByRole('button',
+    { name: 'بررسی نسخه هوش مصنوعی — فقط مرجع پزشکی و فنی صاحب‌اختیار' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /شروع آموزش|فعال‌سازی مدل|ارسال پرونده/ })).toHaveCount(0);
+});
+
+test('AI-DATA-03: absent legal provenance and no data partitions cannot imply ready AI', async ({ page }) => {
+  await page.goto('/member/consents');
+  const list = page.getByRole('list', { name: 'مراحل مستقل حاکمیت داده و AI' });
+  await expect(list.getByText(/هیچ پرونده‌ای منتقل نشده است/)).toBeVisible();
+  await expect(list.getByText(/هیچ Dataset واقعی یا سیاست آموزش آماده نیست/)).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('این بخش هنوز به سرویس واقعی متصل نیست');
+  await expect(page.getByRole('button',
+    { name: 'ثبت یا تغییر رضایت — نیازمند احراز هویت و قرارداد قانونی' })).toBeDisabled();
+});
+
+test('AI-DATA-04: AI data explanations remain disconnected across member navigation and history', async ({ page }) => {
+  const privateRequests: string[] = [];
+  page.on('request', req => {
+    if (['/api/', '/training/', '/dataset/', '/models/', '/inference/', '/consent/', '/health/']
+      .some(x => req.url().includes(x))) privateRequests.push(req.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'رضایت‌ها و حریم خصوصی' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'رضایت‌ها و حریم خصوصی' })).toBeFocused();
+  await page.getByRole('link', { name: 'سوابق سلامت' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'سوابق سلامت' })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'مراحل حفاظت داده تا بررسی نسخه هوش مصنوعی' })).toBeVisible();
+  await expect(page.getByRole('button',
+    { name: 'بررسی نسخه هوش مصنوعی — فقط مرجع پزشکی و فنی صاحب‌اختیار' })).toBeDisabled();
+  expect(privateRequests).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});
