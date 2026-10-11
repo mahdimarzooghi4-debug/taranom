@@ -564,3 +564,58 @@ test('PREVENTION-04: new member route remains disconnected and preserves browser
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('BILLING-01: post-service legal-source view keeps five missing amounts genuinely unknown', async ({ page }) => {
+  await page.goto('/member/billing');
+  await expect(page.getByRole('heading', { name: 'اسناد و سهم‌های صورتحساب درمان' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'منشأهای مستقل صورتحساب پس از خدمت' });
+  await expect(list.getByRole('listitem')).toHaveCount(5);
+  for (const heading of [
+    'هزینه خدمت در سند درمان', 'سهم بیمه پایه در صورتحساب',
+    'سهم بیمه تکمیلی در صورتحساب', 'سهم کیف پول درمانی در صورتحساب',
+    'سهم نهایی عضو در صورتحساب'
+  ]) {
+    await expect(list.getByText(heading, { exact: true })).toBeVisible();
+  }
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(5);
+  await expect(page.getByText('هیچ سندی تأیید نشده است')).toBeVisible();
+});
+
+test('BILLING-02: dispute and correction claims cannot mutate credit or activate a payment', async ({ page }) => {
+  const attempted: string[] = [];
+  page.on('request', req => {
+    if (['/api/', '/billing/', '/claims/', '/payment/', '/wallet/']
+      .some(p => req.url().includes(p))) attempted.push(req.url());
+  });
+  await page.goto('/member/billing');
+  await expect(page.getByText(/ثبت اعتراض موجب اصلاح،/)).toBeVisible();
+  await expect(page.getByText(/رزرو، برداشت یا تسویه خودکار کیف پول عضو نمی‌شود/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'پیگیری اختلاف یا اصلاح — نیازمند سند و مرجع قانونی' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'دریافت صورتحساب رسمی — نیازمند صادرکننده معتبر' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /پرداخت اکنون|تسویه بدهی|تأیید سهم بیمه/ })).toHaveCount(0);
+  expect(attempted).toEqual([]);
+});
+
+test('BILLING-03: sponsor and employer see no member bill and no fabricated source identity', async ({ page }) => {
+  await page.goto('/member/billing?payer=employer&insured=true');
+  await expect(page.getByText(/نهاد حامی یا کارفرما صرفاً به‌دلیل پرداخت اشتراک/)).toBeVisible();
+  await expect(page.getByText(/به صورتحساب،/)).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('این بخش هنوز به سرویس واقعی متصل نیست');
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+  await expect(page.getByText(/مبلغ قابل پرداخت[:：]\s*[۰-۹0-9]/)).toHaveCount(0);
+});
+
+test('BILLING-04: member navigates estimates and bills without conflating official documents', async ({ page }) => {
+  await page.goto('/member/costs');
+  await expect(page.getByRole('heading', { name: 'اجزای برآورد غیرقطعی' })).toBeVisible();
+  await page.getByRole('link', { name: 'صورتحساب‌ها' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'صورتحساب‌ها' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'اسناد و سهم‌های صورتحساب درمان' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'برآورد هزینه' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'اسناد و سهم‌های صورتحساب درمان' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'دریافت صورتحساب رسمی — نیازمند صادرکننده معتبر' })).toBeDisabled();
+});

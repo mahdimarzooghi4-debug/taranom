@@ -47,6 +47,21 @@ const costShares = [
   { key: 'member', label: 'سهم احتمالی عضو', owner: 'اسناد معتبر نهایی مراجع مربوط' },
 ] as const;
 
+// Post-service source categories are independent from the pre-service estimate.
+// This disconnected shell has NO invoices, issuers, insured shares or credit.
+const billingSources = [
+  { key: 'service', label: 'هزینه خدمت در سند درمان',
+    authority: 'صادرکننده قانونی سند درمان در مرکز یا ارائه‌دهنده مجاز' },
+  { key: 'primary', label: 'سهم بیمه پایه در صورتحساب',
+    authority: 'بیمه‌گر پایه یا مرجع صاحب‌اختیار' },
+  { key: 'supplemental', label: 'سهم بیمه تکمیلی در صورتحساب',
+    authority: 'بیمه‌گر تکمیلی یا مرجع صاحب‌اختیار' },
+  { key: 'credit', label: 'سهم کیف پول درمانی در صورتحساب',
+    authority: 'متولی قانونی و دارای مجوز اعتبار درمانی' },
+  { key: 'remainder', label: 'سهم نهایی عضو در صورتحساب',
+    authority: 'سند معتبر ارائه‌دهنده با لحاظ سهم‌های تأییدشده قانونی' },
+] as const;
+
 // Two legally distinct paths share a future member-facing contact point, but
 // neither a medical verdict nor an insurer decision can be issued here.
 const supportPaths = [
@@ -387,6 +402,50 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="cost-awareness-limits">
                     ثبت آگاهی و انتخاب — نیازمند اتصال امن
                   </button>
+                </section>
+              ) : null}
+              {page.key === 'billing' ? (
+                <section aria-labelledby="billing-source-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">صورتحساب پس از خدمت، مستقل از برآورد پیش از درمان</p>
+                      <h2 id="billing-source-title">اسناد و سهم‌های صورتحساب درمان</h2>
+                    </div>
+                    <span className="readonly-pill">هیچ سندی تأیید نشده است</span>
+                  </div>
+                  <p className="quiet">
+                    این صفحه جای سند رسمی نیست. برآورد غیرقطعی پیش از خدمت در بخش «برآورد هزینه»
+                    جداگانه نمایش داده می‌شود؛ برآورد، فاکتور نهایی یا بدهی قطعی عضو نیست.
+                  </p>
+                  <div className="status-grid" role="list" aria-label="منشأهای مستقل صورتحساب پس از خدمت">
+                    {billingSources.map((source) => (
+                      <article className="status-card" role="listitem" key={source.key}>
+                        <p className="status-card-label">{source.label}</p>
+                        <h3>اطلاعات موجود نیست</h3>
+                        <p>مرجع مورد انتظار: {source.authority}</p>
+                        <p>اصل سند، نسخه و منشأ معتبر هنوز دریافت یا بررسی نشده است.</p>
+                      </article>
+                    ))}
+                  </div>
+                  <p className="quiet" id="billing-correction-limit">
+                    سهم بیمه و پوشش را فقط بیمه‌گر یا مرجع قانونی تعیین می‌کند. اختلاف، رد یا
+                    اصلاح سند باید با منشأ و نسخه معتبر پیگیری شود؛ ثبت اعتراض موجب اصلاح،
+                    رزرو، برداشت یا تسویه خودکار کیف پول عضو نمی‌شود.
+                  </p>
+                  <button type="button" disabled aria-describedby="billing-correction-limit">
+                    پیگیری اختلاف یا اصلاح — نیازمند سند و مرجع قانونی
+                  </button>
+                  <button type="button" disabled aria-describedby="billing-correction-limit">
+                    دریافت صورتحساب رسمی — نیازمند صادرکننده معتبر
+                  </button>
+                  <p className="quiet">
+                    نهاد حامی یا کارفرما صرفاً به‌دلیل پرداخت اشتراک به صورتحساب،
+                    سابقه درمان یا اعتبار شخصی عضو دسترسی ندارد. سهم پرداختی عضو نیز
+                    بدون اسناد رسمی و تأیید منابع صالح قابل تعیین نیست.
+                  </p>
+                  <p className="emergency-note">
+                    در فوریت پزشکی دریافت کمک درمانی را به مشاهده صورتحساب یا بررسی بیمه موکول نکنید.
+                  </p>
                 </section>
               ) : null}
               {page.key === 'prevention' ? (
