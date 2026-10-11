@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
 type PageKey =
   | 'overview' | 'membership' | 'credit' | 'consents' | 'care'
-  | 'records' | 'costs' | 'billing' | 'support';
+  | 'records' | 'costs' | 'billing' | 'support' | 'prevention';
 
 type MemberPage = {
   key: PageKey;
@@ -25,6 +25,8 @@ export const memberPages: readonly MemberPage[] = [
     detail: 'مجوزهای درمان، اشتراک داده و پژوهش هوش مصنوعی مستقل‌اند و بدون شواهد معتبر فعال نمی‌شوند.', symbol: '⊙' },
   { key: 'care', path: '/member/care', label: 'هماهنگی درمان', subtitle: 'پیگیری خدمات سلامت', owner: 'هماهنگی درمان',
     detail: 'ارجاع و خدمات واقعی به اتصال معتبر شبکه ارائه‌دهندگان و تصمیم متخصص مجاز نیاز دارد.', symbol: '✳' },
+  { key: 'prevention', path: '/member/prevention', label: 'آموزش و پیشگیری', subtitle: 'مشارکت اختیاری و مراقبت مستمر', owner: 'آموزش سلامت و تیم درمانی واجدصلاحیت',
+    detail: 'مشارکت واقعی، محتوای دارای اعتبار علمی و مراقبت مستمر به منابع و مجوزهای مستقل نیاز دارند.', symbol: '✦' },
   { key: 'records', path: '/member/records', label: 'سوابق سلامت', subtitle: 'دسترسی‌های مجاز بالینی', owner: 'سوابق سلامت',
     detail: 'هیچ اطلاعات بالینی تا زمان احراز هویت و دریافت مجوز قانونی نمایش داده نمی‌شود.', symbol: '▤' },
   { key: 'costs', path: '/member/costs', label: 'برآورد هزینه', subtitle: 'آگاهی از هزینه پیش از خدمت', owner: 'هزینه و هماهنگی بیمه',
@@ -68,6 +70,29 @@ const careResponsibilitySteps = [
   { key: 'followup', label: 'پیگیری پس از خدمت',
     owner: 'ترنم: هماهنگی تجربه؛ متخصص مجاز: تصمیم مراقبت و پیگیری بالینی',
     restriction: 'هیچ مراجعه، برنامه مراقبتی یا وضعیت تکمیل خدمت تأیید نشده است.' },
+] as const;
+
+// TRN-BIZ-047 defines ownership and duties, never real approved health
+// advice, running programs, treatment plans or an assumed participation choice.
+const preventionResponsibilities = [
+  {
+    key: 'education',
+    title: 'آموزش سلامت',
+    owner: 'ترنم: ارائه محتوای دارای اعتبار علمی و حقوق انتشار',
+    boundary: 'محتوا، منبع، مجوز استفاده و تأیید تخصصی هنوز دریافت نشده‌اند.'
+  },
+  {
+    key: 'coordination',
+    title: 'هماهنگی فعالیت‌های پیشگیرانه',
+    owner: 'ترنم: هماهنگی تجربه و درخواست اختیاری عضو',
+    boundary: 'هیچ مشارکت، خدمت یا برنامه پیشگیرانه واقعی فعال نشده است.'
+  },
+  {
+    key: 'continuity',
+    title: 'مراقبت مستمر بالینی',
+    owner: 'پزشک یا تیم درمانی مجاز: تصمیم، طرح مراقبت و تغییرات بالینی',
+    boundary: 'هیچ تیم، پروانه، طرح مراقبتی یا پیگیری پزشکی تأیید نشده است.'
+  }
 ] as const;
 
 // These are independently required *categories of evidence*, NOT effective
@@ -362,6 +387,53 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="cost-awareness-limits">
                     ثبت آگاهی و انتخاب — نیازمند اتصال امن
                   </button>
+                </section>
+              ) : null}
+              {page.key === 'prevention' ? (
+                <section aria-labelledby="prevention-responsibility-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">پیشگیری و آموزش، بدون تصمیم خودکار درمانی</p>
+                      <h2 id="prevention-responsibility-title">سه مسیر مستقل پیشگیری و مراقبت</h2>
+                    </div>
+                    <span className="readonly-pill">هیچ برنامه فعالی وجود ندارد</span>
+                  </div>
+                  <div className="status-grid" role="list" aria-label="مسیرهای آموزش پیشگیری و مراقبت">
+                    {preventionResponsibilities.map((item) => (
+                      <article key={item.key} className="status-card" role="listitem">
+                        <p className="status-card-label">{item.title}</p>
+                        <h3>شواهد معتبر موجود نیست</h3>
+                        <p>{item.owner}</p>
+                        <p>{item.boundary}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">کنترل و انتخاب با خود عضو</p>
+                      <h2 id="prevention-participation-title">مشارکت اختیاری و رضایت مستقل</h2>
+                    </div>
+                    <span className="readonly-pill">انتخاب عضو نامعلوم است</span>
+                  </div>
+                  <p className="quiet" id="prevention-consent-boundary">
+                    عضو می‌تواند در آینده درخواست مشارکت کند یا پیشنهاد تیم درمانی واجدصلاحیت را بررسی کند.
+                    هیچ پیشنهاد، ثبت‌نام، رضایت درمانی یا اشتراک‌گذاری پرونده به صورت خودکار پذیرفته نمی‌شود.
+                    مشارکت در آموزش یا مراقبت، رضایت مستقل پژوهش و آموزش هوش مصنوعی نیست.
+                  </p>
+                  <button type="button" disabled aria-describedby="prevention-consent-boundary">
+                    درخواست مشارکت — نیازمند هویت و رضایت معتبر
+                  </button>
+                  <p className="quiet" id="prevention-care-limit">
+                    برنامه مراقبت مستمر فقط با ارزیابی و تصمیم متخصص مجاز قابل شروع یا تغییر است.
+                    هیچ پایش خودکار دائمی، تشخیص پزشکی یا محتوای آموزشیِ تأییدشده در این نسخه ارائه نمی‌شود.
+                  </p>
+                  <button type="button" disabled aria-describedby="prevention-care-limit">
+                    مشاهده پیشنهاد تیم درمانی — نیازمند مرجع بالینی معتبر
+                  </button>
+                  <p className="emergency-note">
+                    در احتمال فوریت، دریافت کمک فوری پزشکی را به محتوای آموزشی،
+                    هماهنگی پیشگیری یا مراقبت پیگیری‌شده در این سامانه موکول نکنید.
+                  </p>
                 </section>
               ) : null}
               {page.key === 'care' ? (

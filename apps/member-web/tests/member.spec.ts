@@ -83,9 +83,9 @@ test('WEB-11: mobile navigation is accessible and collapses after selecting a ro
   await expect(page.getByRole('button', { name: 'باز کردن فهرست بخش‌ها' })).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('all nine member routes are shell-only and unknown routes render safe 404', async ({ page }) => {
+test('all ten member routes are shell-only and unknown routes render safe 404', async ({ page }) => {
   const routes = ['/member', '/member/membership', '/member/credit', '/member/consents', '/member/care',
-    '/member/records', '/member/costs', '/member/billing', '/member/support'];
+    '/member/records', '/member/costs', '/member/billing', '/member/support', '/member/prevention'];
   for (const route of routes) {
     await page.goto(route);
     await expect(page.getByRole('main')).toBeVisible();
@@ -509,6 +509,56 @@ test('PAYER-04: member funding preview does not contact private services or writ
   await expect(page.getByRole('heading', { level: 1, name: 'اعتبار درمان' })).toBeFocused();
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'مسیرهای سه‌گانه تأمین هزینه عضویت' })).toBeVisible();
+  expect(privateRequests).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});
+
+test('PREVENTION-01: member sees three separate unverified education/prevention/clinical responsibilities', async ({ page }) => {
+  await page.goto('/member/prevention');
+  await expect(page.getByRole('heading', { level: 1, name: 'آموزش و پیشگیری' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'سه مسیر مستقل پیشگیری و مراقبت' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'مسیرهای آموزش پیشگیری و مراقبت' });
+  await expect(list.getByRole('listitem')).toHaveCount(3);
+  for (const name of ['آموزش سلامت', 'هماهنگی فعالیت‌های پیشگیرانه', 'مراقبت مستمر بالینی']) {
+    await expect(list.getByText(name, { exact: true })).toBeVisible();
+  }
+  await expect(list.getByRole('heading', { name: 'شواهد معتبر موجود نیست' })).toHaveCount(3);
+});
+
+test('PREVENTION-02: member consent and research/AI consent are not inferred from participation', async ({ page }) => {
+  await page.goto('/member/prevention');
+  await expect(page.getByRole('heading', { name: 'مشارکت اختیاری و رضایت مستقل' })).toBeVisible();
+  await expect(page.getByText('انتخاب عضو نامعلوم است')).toBeVisible();
+  await expect(page.getByText(/مشارکت در آموزش یا مراقبت، رضایت مستقل پژوهش و آموزش هوش مصنوعی نیست/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'درخواست مشارکت — نیازمند هویت و رضایت معتبر' })).toBeDisabled();
+  await page.getByRole('link', { name: 'رضایت‌ها و حریم خصوصی' }).click();
+  await expect(page.getByRole('heading', { name: 'مرزهای مستقل رضایت و حفاظت داده' })).toBeVisible();
+});
+
+test('PREVENTION-03: clinical continuity decisions never appear as automatic care plans', async ({ page }) => {
+  await page.goto('/member/prevention');
+  await expect(page.getByText(/برنامه مراقبت مستمر فقط با ارزیابی و تصمیم متخصص مجاز/)).toBeVisible();
+  await expect(page.getByText(/هیچ پایش خودکار دائمی، تشخیص پزشکی یا محتوای آموزشیِ تأییدشده/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'مشاهده پیشنهاد تیم درمانی — نیازمند مرجع بالینی معتبر' })).toBeDisabled();
+  await expect(page.getByText(/در احتمال فوریت، دریافت کمک فوری پزشکی را/)).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('این بخش هنوز به سرویس واقعی متصل نیست');
+});
+
+test('PREVENTION-04: new member route remains disconnected and preserves browser focus/back state', async ({ page }) => {
+  const privateRequests: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/patient/', '/medical/', '/health/', '/research/', '/training/', '/program/']
+      .some(path => request.url().includes(path))) privateRequests.push(request.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'آموزش و پیشگیری' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'آموزش و پیشگیری' })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', { name: 'درخواست مشارکت — نیازمند هویت و رضایت معتبر' })).toBeDisabled();
   expect(privateRequests).toEqual([]);
   expect(await page.evaluate(() => ({
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
