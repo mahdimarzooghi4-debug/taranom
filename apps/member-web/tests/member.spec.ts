@@ -1135,3 +1135,64 @@ test('RECORD-TRANSPARENCY-04: access trace UI remains disconnected, accessible a
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('REVENUE-SOURCES-01: six approved origins, including subscription inside source six, appear without real values', async ({ page }) => {
+  await page.goto('/member/credit');
+  await expect(page.getByRole('heading', { name: 'شش منشأ درآمد برای تأمین اعتبار درمانی' })).toBeVisible();
+  const origins = page.getByRole('list', { name: 'شش منشأ مستقل تأمین اعتبار درمانی' });
+  await expect(origins.getByRole('listitem')).toHaveCount(6);
+  for (const name of [
+    'سهم ترنم از سود صندوق توسعه درمان',
+    'سهم ترنم از سود صندوق توسعه سلامت',
+    'کش‌بک ترنم از کارمزد مدیریت صندوق درآمد ثابت',
+    'کارمزد معرفی بیمه تکمیلی',
+    'کارمزد فاکتور بیمارستانی',
+    'درآمد مستقیم ترنم، شامل حق اشتراک اعضا'
+  ]) await expect(origins.getByText(name, { exact: true })).toBeVisible();
+  await expect(origins.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(6);
+});
+
+test('REVENUE-SOURCES-02: fee is not a seventh source and source evidence never credits wallet', async ({ page }) => {
+  await page.goto('/member/credit?subscription=paid&revenue=confirmed&profit=guaranteed');
+  await expect(page.getByText('هیچ درآمد یا تخصیص واقعی تأیید نشده است')).toBeVisible();
+  await expect(page.getByText(/حق اشتراک جزئی از منبع ششم است، نه منبع هفتم/)).toBeVisible();
+  await expect(page.getByText(/صرف دریافت حق اشتراک، سود تضمینی یا افزایش خودکار کیف پول/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'مشاهده تخصیص واقعی — نیازمند احراز استحقاق و سیاست مالی مصوب'
+  })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /تأیید سود|افزایش کیف پول|توزیع درآمد|پرداخت بازده/ })).toHaveCount(0);
+});
+
+test('REVENUE-SOURCES-03: duplicate evidence and missing source are neither counted twice nor assumed zero', async ({ page }) => {
+  await page.goto('/member/credit');
+  await expect(page.getByText(/شواهد تکراری از یک رویداد درآمدی نیازمند بررسی مستقل/)).toBeVisible();
+  await expect(page.getByText(/نبود سند یک منبع به معنی درآمد صفر نیست/)).toBeVisible();
+  await expect(page.getByText(/نه تأیید مبلغ، درصد یکسان برای هر شش منبع/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'بررسی منشأ درآمدها — نیازمند دفاتر و متولی مالی مجاز'
+  })).toBeDisabled();
+  await expect(page.getByText(/اعتبار درمان نقدشدنی نیست/)).toBeVisible();
+});
+
+test('REVENUE-SOURCES-04: member wallet source preview remains private and disconnected', async ({ page }) => {
+  const privateCalls: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/finance/', '/revenue/', '/income/', '/wallet/', '/funds/',
+      '/bank/', '/investment/', '/payment/'].some(x => request.url().includes(x)))
+      privateCalls.push(request.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'اعتبار درمان' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'اعتبار درمان' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'شش منشأ درآمد برای تأمین اعتبار درمانی' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', {
+    name: 'مشاهده تخصیص واقعی — نیازمند احراز استحقاق و سیاست مالی مصوب'
+  })).toBeDisabled();
+  expect(privateCalls).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

@@ -252,6 +252,24 @@ const clinicalAccessTransparencyStages = [
   }
 ] as const;
 
+// TRN-BIZ-004/025/026/027: exactly six planned financial source
+// CATEGORIES. No bank, fund, commission, allocation, realized return or
+// member amount has been verified or connected to this offline web preview.
+const sixIncomeOriginStages = [
+  { key: 'treatment-fund', label: 'سهم ترنم از سود صندوق توسعه درمان',
+    detail: 'وجود و میزان سود قابل تخصیص فقط با قرارداد و دفاتر مالی معتبر احراز می‌شود.' },
+  { key: 'health-fund', label: 'سهم ترنم از سود صندوق توسعه سلامت',
+    detail: 'سهم سود صندوق دیگر، منبع مستقلی است و دوباره‌شماری آن مجاز فرض نمی‌شود.' },
+  { key: 'fixed-fund', label: 'کش‌بک ترنم از کارمزد مدیریت صندوق درآمد ثابت',
+    detail: 'کش‌بک کارمزد با اصل سرمایه یا کل بازده صندوق یکسان نیست.' },
+  { key: 'insurance', label: 'کارمزد معرفی بیمه تکمیلی',
+    detail: 'شناسایی این درآمد به قرارداد مجاز بیمه و سند مالی مستقل نیاز دارد.' },
+  { key: 'hospital', label: 'کارمزد فاکتور بیمارستانی',
+    detail: 'کارمزد فاکتور بیمارستانی جایگزین هزینه درمان یا سهم عضو نیست.' },
+  { key: 'direct', label: 'درآمد مستقیم ترنم، شامل حق اشتراک اعضا',
+    detail: 'حق اشتراک جزئی از منبع ششم است، نه منبع هفتم و نه واریز مستقیم به کیف پول پرداخت‌کننده.' }
+] as const;
+
 // TRN-BIZ-035: a member self-view, clinician-limited disclosure and
 // legal/emergency exception are DIFFERENT authority channels. None active.
 const recordVisibilityLanes = [
@@ -599,6 +617,37 @@ export function MemberApp() {
                   <button type="button" disabled>
                     مشاهده گردش اعتبار — نیازمند احراز هویت و منبع مالی معتبر
                   </button>
+                  <section aria-labelledby="six-revenue-origins-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">شش منشأ کسب درآمد، یک کیف پول درمانی فردی</p>
+                        <h2 id="six-revenue-origins-title">شش منشأ درآمد برای تأمین اعتبار درمانی</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ درآمد یا تخصیص واقعی تأیید نشده است</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="شش منشأ مستقل تأمین اعتبار درمانی">
+                      {sixIncomeOriginStages.map((source) => (
+                        <article className="status-card" role="listitem" key={source.key}>
+                          <p className="status-card-label">{source.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{source.detail}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="six-revenue-evidence-boundary">
+                      برابری سهم قابل‌تخصیص میان اعضای واجدشرایط یک اصل مصوب است،
+                      نه تأیید مبلغ، درصد یکسان برای هر شش منبع، دوره استحقاق یا واریز واقعی.
+                      شواهد تکراری از یک رویداد درآمدی نیازمند بررسی مستقل برای پرهیز از
+                      دوباره‌شماری‌اند. نبود سند یک منبع به معنی درآمد صفر نیست.
+                      صرف دریافت حق اشتراک، سود تضمینی یا افزایش خودکار کیف پول عضو ایجاد نمی‌کند.
+                    </p>
+                    <button type="button" disabled aria-describedby="six-revenue-evidence-boundary">
+                      بررسی منشأ درآمدها — نیازمند دفاتر و متولی مالی مجاز
+                    </button>
+                    <button type="button" disabled aria-describedby="six-revenue-evidence-boundary">
+                      مشاهده تخصیص واقعی — نیازمند احراز استحقاق و سیاست مالی مصوب
+                    </button>
+                  </section>
                   <section aria-labelledby="credit-history-title">
                     <div className="section-header">
                       <div>
