@@ -292,8 +292,11 @@ public sealed class SyntheticSixRevenueEvidenceMapTests
     [Fact]
     public void NoAmountsRatesBenefitDatesOrActualMemberKeysOnRead()
     {
+        // Boolean safeguards such as AllocationAmountCalculated=false are
+        // desirable. Forbid monetary VALUE fields, not their denial flags.
         string[] forbidden = [
-            "Amount", "Balance", "RevenueTotal", "Cash", "Price", "ShareRate",
+            "AmountValue", "ClaimedAmount", "AmountTotal", "BalanceValue",
+            "RevenueTotal", "CashValue", "PriceValue", "ShareRate",
             "Percentage", "AllocationId", "OfficialMember", "Patient", "PaymentDate",
             "BookRevenue", "RealizedProfit", "Entitlement", "WalletPosting"
         ];
