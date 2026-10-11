@@ -247,7 +247,15 @@ class EvidenceCustodyTests(unittest.TestCase):
                 return chunk
 
         with patch.object(custody.os, "fdopen", side_effect=SwappingStream):
-            self.assert_denied("ARTIFACT_PATH_CHANGED")
+            # Renaming a POSIX file can also change the opened descriptor's
+            # ctime. Either metadata-mutation or pathname-identity detection
+            # proves the same unsafe swap is rejected before approval.
+            result = self.check()
+            self.assertEqual(result["status"], "DENIED_INVALID_INTAKE")
+            self.assertTrue(set(result["errors"]) & {
+                "ARTIFACT_PATH_CHANGED", "ARTIFACT_MUTATED_DURING_READ"
+            })
+            self.assertFalse(result["release_allowed"])
 
     def test_private_manifest_alias_inside_public_repo_rejected(self):
         public_alias = self.repo / "private-alias.json"
