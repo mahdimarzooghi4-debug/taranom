@@ -84,5 +84,5 @@ test('CENTER-DEMO-05: no verified rights or real identity even after successful 
   expect(json.doctors).toHaveLength(0);
   expect(json.eventCount).toBe(1);
   expect(outside).toEqual([]);
-  await expect(page.getByRole('note')).toContainText('بدون');
+  await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
 });
