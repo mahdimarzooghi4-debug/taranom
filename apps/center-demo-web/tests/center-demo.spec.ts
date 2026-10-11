@@ -10,14 +10,14 @@ async function setup(page: import('@playwright/test').Page) {
   await page.getByLabel('شناسه بخش آزمایشی').fill(department);
   await page.getByLabel('شناسه پزشک آزمایشی').fill(doctor);
   await page.getByRole('button', { name: 'بازخوانی مرکز از PostgreSQL' }).click();
-  await expect(page.getByRole('status')).toContainText('PostgreSQL خوانده شد');
+  await expect(page.getByRole('status').first()).toContainText('PostgreSQL خوانده شد');
   return { center, department, doctor };
 }
 test('CENTER-DEMO-01: true PostgreSQL write/read, versioned complete center workflow', async ({ page }) => {
   const keys = await setup(page);
   await expect(page.getByText('نسخه ثبت‌شده:')).toContainText('نسخه ثبت‌شده:');
   await page.getByRole('button', { name: 'ثبت بخش آزمایشی' }).click();
-  await expect(page.getByRole('status')).toContainText('فقط در پایگاه آزمایشی ثبت شد');
+  await expect(page.getByRole('status').first()).toContainText('فقط در پایگاه آزمایشی ثبت شد');
   await page.getByRole('button', { name: 'ثبت وابستگی تأییدنشده پزشک آزمایشی' }).click();
   await expect(page.getByText('در انتظار بررسی مستقل')).toBeVisible();
   await page.getByRole('button', { name: 'تخصیص آزمایشی پزشک به بخش' }).click();
@@ -33,14 +33,14 @@ test('CENTER-DEMO-02: invalid references blocked before contacting journal', asy
   await page.goto('/center-demo');
   await page.getByLabel('شناسه مرکز آزمایشی').fill('real:center');
   await page.getByRole('button', { name: 'بازخوانی مرکز از PostgreSQL' }).click();
-  await expect(page.getByRole('status')).toContainText('فقط شناسه‌های آزمایشی');
+  await expect(page.getByRole('status').first()).toContainText('فقط شناسه‌های آزمایشی');
   await expect(page.getByRole('button', { name: 'ثبت بخش آزمایشی' })).toBeDisabled();
 });
 test('CENTER-DEMO-03: network loss clears privileged-looking state', async ({ page }) => {
   await setup(page);
   await page.route('**/internal/demo/v1/centers/**', route => route.abort());
   await page.getByRole('button', { name: 'بازخوانی مرکز از PostgreSQL' }).click();
-  await expect(page.getByRole('status')).toContainText('وضعیت معتبر فرض نمی‌شود');
+  await expect(page.getByRole('status').first()).toContainText('وضعیت معتبر فرض نمی‌شود');
   await expect(page.getByRole('button', { name: 'پایان وابستگی آزمایشی پزشک' })).toBeDisabled();
 });
 test('CENTER-DEMO-04: HTTP scope and replay are durable and deny real center data', async ({ request }) => {
