@@ -232,7 +232,7 @@ public sealed class SyntheticUrgentSafetyTrailTests
     {
         var root = Root();
         var opened = Apply(SyntheticUrgentSafetySnapshot.Empty, root);
-        var fake = Receipt(root, Request(root));
+        var fake = Receipt(root, Request(root), 1);
         Assert.Equal(SyntheticUrgentSafetyOutcome.ReferralRequestMissing,
             Apply(opened.Snapshot, fake).Outcome);
     }
