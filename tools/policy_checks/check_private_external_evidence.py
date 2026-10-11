@@ -115,7 +115,10 @@ def _hash_private_file(evidence_root: Path, name: str, public_root: Path) -> str
             is_last = index == len(name.split("/")) - 1
             # An explicit precheck supplies the accurate denial reason. The
             # O_NOFOLLOW at open also rejects a symlink installed afterwards.
-            current = os.stat(segment, dir_fd=parent_fd, follow_symlinks=False)
+            try:
+                current = os.stat(segment, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError as error:
+                raise ValueError("ARTIFACT_UNAVAILABLE") from error
             if stat.S_ISLNK(current.st_mode):
                 raise ValueError("SYMLINKED_ARTIFACT_FORBIDDEN")
             flags = os.O_RDONLY | os.O_NOFOLLOW
@@ -198,6 +201,10 @@ def inspect(public_root: Path, evidence_root: Path, manifest: Path) -> dict:
         if set(slots) != REQUIRED:
             raise ValueError("SOURCE_BLOCKER_INVENTORY_INVALID")
 
+        # A public-repository alias to a private manifest must never become
+        # an accepted reference, even when O_NOFOLLOW rejects the alias.
+        if manifest.is_symlink() and _inside(manifest, public_root):
+            raise ValueError("PRIVATE_MANIFEST_INSIDE_PUBLIC_REPO")
         data, _ = _read_json(manifest)
         if set(data) != ROOT_FIELDS or type(data.get("schema_version")) is not int or data["schema_version"] != 1:
             raise ValueError("INTAKE_SCHEMA_INVALID")

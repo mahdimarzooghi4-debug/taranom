@@ -224,6 +224,7 @@ class EvidenceCustodyTests(unittest.TestCase):
         # cannot identify this post-open pathname replacement.
         original_fdopen = os.fdopen
         payload = self.payload
+        original_inode = payload.stat().st_ino
         swapped = []
 
         class SwappingStream:
@@ -238,7 +239,8 @@ class EvidenceCustodyTests(unittest.TestCase):
 
             def read(self, size):
                 chunk = self.stream.read(size)
-                if chunk and not swapped:
+                if (chunk and not swapped and
+                        os.fstat(self.stream.fileno()).st_ino == original_inode):
                     swapped.append(True)
                     payload.rename(payload.parent / "moved.pdf")
                     payload.write_bytes(chunk)
