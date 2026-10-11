@@ -675,3 +675,62 @@ test('RECORD-04: record route is disconnected, stores nothing and keeps browser 
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('CREDIT-PERIOD-01: membership route explains official initial 90-day wait and nonrenewal boundaries', async ({ page }) => {
+  await page.goto('/member/membership');
+  await expect(page.getByRole('heading', { name: 'مرزهای زمانی عضویت و اعتبار درمانی' })).toBeVisible();
+  const steps = page.getByRole('list', { name: 'قواعد مصوب چرخه عضویت' });
+  await expect(steps.getByRole('listitem')).toHaveCount(4);
+  for (const label of ['آغاز رسمی عضویت', 'انتظار اولیه ۹۰ روز کامل',
+    'عدم تمدید و دوره وقفه', 'فعال‌سازی دوباره اشتراک']) {
+    await expect(steps.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(steps.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(4);
+  await expect(page.getByText('تاریخ رسمی موجود نیست')).toBeVisible();
+});
+
+test('CREDIT-PERIOD-02: credit route separates retained wallet, nonrenewal gap and late review', async ({ page }) => {
+  await page.goto('/member/credit');
+  const list = page.getByRole('list', { name: 'مرزهای تاریخچه اعتبار عضو' });
+  await expect(list.getByRole('listitem')).toHaveCount(3);
+  for (const label of ['اعتبار درمانی قبلی در کیف پول شخصی',
+    'درآمد منتسب به دوره وقفه', 'منفعت دیرثبت‌شده مربوط به عضویت معتبر قبلی']) {
+    await expect(list.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+  await expect(page.getByText('هیچ مبلغی بررسی یا تأیید نشده است')).toBeVisible();
+  await expect(page.getByRole('button',
+    { name: 'بررسی منافع دیرثبت‌شده — نیازمند اسناد و مرجع مالی معتبر' })).toBeDisabled();
+});
+
+test('CREDIT-PERIOD-03: no source claim creates an automatic wallet credit or new waiting policy', async ({ page }) => {
+  await page.goto('/member/credit');
+  await expect(page.getByText(/صرف ادعای منبع درآمد،/)).toBeVisible();
+  await expect(page.getByText(/موجودی یا اعتبار قابل‌مصرف ایجاد نمی‌کند/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /تأیید واریز|برداشت نقدی|پرداخت به من|افزایش خودکار اعتبار/ })).toHaveCount(0);
+  await page.getByRole('link', { name: 'عضویت من' }).click();
+  await expect(page.getByText(/انتظار تازه‌ای برای اعتبار قبلی فرض نمی‌شود/)).toBeVisible();
+  await expect(page.getByRole('button',
+    { name: 'مشاهده تاریخچه معتبر عضویت — نیازمند هویت و منبع رسمی' })).toBeDisabled();
+});
+
+test('CREDIT-PERIOD-04: credit and membership history are private and disconnected', async ({ page }) => {
+  const privateCalls: string[] = [];
+  page.on('request', req => {
+    if (['/api/', '/finance/', '/payment/', '/wallet/', '/membership/', '/subscription/']
+      .some(value => req.url().includes(value))) privateCalls.push(req.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'عضویت من' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'عضویت من' })).toBeFocused();
+  await page.getByRole('link', { name: 'اعتبار درمان' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'اعتبار درمان' })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'مرزهای زمانی عضویت و اعتبار درمانی' })).toBeVisible();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'منشأ زمانی منافع و حفظ اعتبار قبلی' })).toBeVisible();
+  expect(privateCalls).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

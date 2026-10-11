@@ -160,6 +160,28 @@ const membershipFundingRoutes = [
     restriction: 'هیچ کارفرما یا تعهد پرداخت واقعی تأیید نشده است.' },
 ] as const;
 
+// Business-approved lifecycle semantics, NOT a live membership timetable.
+// Dates, legal activation, policy entitlement and amounts remain unavailable.
+const membershipLifecycle = [
+  { key: 'activation', label: 'آغاز رسمی عضویت',
+    rule: 'مبدأ عضویت و شمارش انتظار تنها فعال‌سازی رسمی و معتبر است؛ ثبت‌نام یا پرداخت به‌تنهایی آن را شروع نمی‌کند.' },
+  { key: 'wait', label: 'انتظار اولیه ۹۰ روز کامل',
+    rule: '۹۰ بازه ۲۴ساعته از زمان فعال‌سازی رسمی؛ سپری‌شدن انتظار به‌تنهایی مجوز برداشت یا مصرف نیست.' },
+  { key: 'lapse', label: 'عدم تمدید و دوره وقفه',
+    rule: 'اعتبار درمانی قبلی حذف نمی‌شود؛ برای دوره وقفه بدون عضویت اعتبار جدید انباشته نمی‌شود.' },
+  { key: 'return', label: 'فعال‌سازی دوباره اشتراک',
+    rule: 'انباشت جدید فقط از فعال‌سازی مجدد شروع می‌شود؛ انتظار تازه‌ای برای اعتبار قبلی فرض نمی‌شود.' },
+] as const;
+
+const creditLifecycle = [
+  { key: 'prior', label: 'اعتبار درمانی قبلی در کیف پول شخصی',
+    rule: 'یک کیف پول غیرنقدی برای خود عضو باقی می‌ماند؛ عدم تمدید به‌تنهایی اعتبار قبلی را از بین نمی‌برد.' },
+  { key: 'gap', label: 'درآمد منتسب به دوره وقفه',
+    rule: 'برای دوره‌ای که عضویت تمدید نشده اعتبار تازه ایجاد نمی‌شود؛ بازفعال‌سازی آن دوره را به عقب پوشش نمی‌دهد.' },
+  { key: 'late', label: 'منفعت دیرثبت‌شده مربوط به عضویت معتبر قبلی',
+    rule: 'تنها پس از احراز استحقاق و بازبینی مستندات توسط مرجع واقعی، انتساب احتمالی به همان کیف پول بررسی می‌شود.' },
+] as const;
+
 const descriptions = [
   { label: 'هویت و دسترسی', value: 'اتصال برقرار نیست', help: 'احراز هویت واقعی هنوز پیاده‌سازی نشده است.' },
   { label: 'اطلاعات درمانی', value: 'در دسترس نیست', help: 'بدون دسترسی مجاز هیچ پرونده‌ای نمایش داده نمی‌شود.' },
@@ -351,6 +373,31 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="membership-ownership-boundary">
                     درخواست یا پرداخت عضویت — نیازمند قرارداد و سرویس معتبر
                   </button>
+                  <section aria-labelledby="membership-lifecycle-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">چرخه حق عضویت جدا از ایجاد اعتبار واقعی</p>
+                        <h2 id="membership-lifecycle-title">مرزهای زمانی عضویت و اعتبار درمانی</h2>
+                      </div>
+                      <span className="readonly-pill">تاریخ رسمی موجود نیست</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="قواعد مصوب چرخه عضویت">
+                      {membershipLifecycle.map((item) => (
+                        <article className="status-card" key={item.key} role="listitem">
+                          <p className="status-card-label">{item.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{item.rule}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="membership-lifecycle-warning">
+                      هیچ عضویت، پرداخت، تاریخ فعال‌سازی، مدت انتظار سپری‌شده یا استحقاق واقعی
+                      عضو تأیید نشده است. تأیید همه شرایط عضویت نیازمند منابع قانونی مستقل است.
+                    </p>
+                    <button type="button" disabled aria-describedby="membership-lifecycle-warning">
+                      مشاهده تاریخچه معتبر عضویت — نیازمند هویت و منبع رسمی
+                    </button>
+                  </section>
                 </section>
               ) : null}
               {page.key === 'credit' ? (
@@ -370,6 +417,32 @@ export function MemberApp() {
                   <button type="button" disabled>
                     مشاهده گردش اعتبار — نیازمند احراز هویت و منبع مالی معتبر
                   </button>
+                  <section aria-labelledby="credit-history-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">انتساب دیرهنگام جدا از ایجاد اعتبار در وقفه</p>
+                        <h2 id="credit-history-title">منشأ زمانی منافع و حفظ اعتبار قبلی</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ مبلغی بررسی یا تأیید نشده است</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="مرزهای تاریخچه اعتبار عضو">
+                      {creditLifecycle.map((item) => (
+                        <article className="status-card" key={item.key} role="listitem">
+                          <p className="status-card-label">{item.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{item.rule}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="credit-history-limit">
+                      زمان ثبت منفعت با دوره تعلق آن یکسان نیست. صرف ادعای منبع درآمد،
+                      مشاهده سابقه عضویت یا ثبت یادداشت بررسی، موجودی یا اعتبار قابل‌مصرف ایجاد نمی‌کند.
+                      برداشت نقدی، انتقال و پرداخت واقعی فعال نیست.
+                    </p>
+                    <button type="button" disabled aria-describedby="credit-history-limit">
+                      بررسی منافع دیرثبت‌شده — نیازمند اسناد و مرجع مالی معتبر
+                    </button>
+                  </section>
                 </section>
               ) : null}
               {page.key === 'records' ? (
