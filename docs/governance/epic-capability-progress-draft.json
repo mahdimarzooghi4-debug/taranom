@@ -1,0 +1,531 @@
+{
+  "schema_version": 1,
+  "scope": "COMPREHENSIVE_NATIONAL_PRODUCT_EPIC_MEASUREMENT",
+  "baseline_status": "DRAFT_UNAPPROVED",
+  "weights_status": "NOT_APPROVED",
+  "method": "THREE_CANDIDATE_ACCEPTANCE_CHECKS_PER_EPIC_NOT_FINAL_SCOPE",
+  "capabilities": [
+    {
+      "epic_id": "TRN-EP-01",
+      "capability_id": "TRN-CAP-01-01",
+      "capability": "Identity proofing case review (test-only)",
+      "decision_refs": [
+        "TRN-BIZ-018",
+        "TRN-BIZ-019"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/IdentityProofingReview.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/IdentityProofingReviewTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-01",
+      "capability_id": "TRN-CAP-01-02",
+      "capability": "Authorized real member authentication and subject mapping",
+      "decision_refs": [
+        "TRN-BIZ-018",
+        "TRN-BIZ-019"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-01",
+      "capability_id": "TRN-CAP-01-03",
+      "capability": "Synthetic access denial and resource isolation",
+      "decision_refs": [
+        "TRN-BIZ-018",
+        "TRN-BIZ-019"
+      ],
+      "implementation_ref": "src/Taranom.SyntheticFoundation/Access.cs",
+      "test_ref": "tests/Taranom.ContractTests/AccessPolicyTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-02",
+      "capability_id": "TRN-CAP-02-01",
+      "capability": "Separate test-only scoped consent",
+      "decision_refs": [
+        "TRN-BIZ-035",
+        "TRN-BIZ-036"
+      ],
+      "implementation_ref": "src/Taranom.SyntheticFoundation/SyntheticConsentStore.cs",
+      "test_ref": "tests/Taranom.ContractTests/ConsentContractTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-02",
+      "capability_id": "TRN-CAP-02-02",
+      "capability": "Real lawful health-data sharing, withdrawal and rights enforcement",
+      "decision_refs": [
+        "TRN-BIZ-035",
+        "TRN-BIZ-036"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-02",
+      "capability_id": "TRN-CAP-02-03",
+      "capability": "Secondary-use consent boundary (synthetic)",
+      "decision_refs": [
+        "TRN-BIZ-035",
+        "TRN-BIZ-036"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticSecondaryUseEvidenceGate.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticSecondaryUseEvidenceGateTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-03",
+      "capability_id": "TRN-CAP-03-01",
+      "capability": "Evidence boundary for official activation (synthetic)",
+      "decision_refs": [
+        "TRN-BIZ-015",
+        "TRN-BIZ-016",
+        "TRN-BIZ-024"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticMembershipActivationEvidenceGate.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticMembershipActivationEvidenceGateTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-03",
+      "capability_id": "TRN-CAP-03-02",
+      "capability": "Membership waiting-period computation isolated from live events",
+      "decision_refs": [
+        "TRN-BIZ-015",
+        "TRN-BIZ-016",
+        "TRN-BIZ-024"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/MembershipWaitingPeriod.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/MembershipWaitingPeriodTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-03",
+      "capability_id": "TRN-CAP-03-03",
+      "capability": "Synthetic coverage windows and renewal history",
+      "decision_refs": [
+        "TRN-BIZ-015",
+        "TRN-BIZ-016",
+        "TRN-BIZ-024"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticMembershipCoverageWindow.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticMembershipCoverageWindowTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-04",
+      "capability_id": "TRN-CAP-04-01",
+      "capability": "Provider network evidence gate (synthetic)",
+      "decision_refs": [
+        "TRN-BIZ-043",
+        "TRN-BIZ-044"
+      ],
+      "implementation_ref": "src/Taranom.ClinicalCenterGovernance/SyntheticProviderNetworkEvidenceGate.cs",
+      "test_ref": "tests/Taranom.ClinicalCenterGovernance.Tests/SyntheticProviderNetworkEvidenceGateTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-04",
+      "capability_id": "TRN-CAP-04-02",
+      "capability": "Internal center authority boundary (test only)",
+      "decision_refs": [
+        "TRN-BIZ-043",
+        "TRN-BIZ-044"
+      ],
+      "implementation_ref": "src/Taranom.CenterAuthorityBoundary/CenterAuthorityGate.cs",
+      "test_ref": "tests/Taranom.CenterAuthorityBoundary.Tests/CenterAuthorityGateTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-04",
+      "capability_id": "TRN-CAP-04-03",
+      "capability": "Real licensed contracted provider registry and verified nationwide coverage",
+      "decision_refs": [
+        "TRN-BIZ-043",
+        "TRN-BIZ-044"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-05",
+      "capability_id": "TRN-CAP-05-01",
+      "capability": "Synthetic care coordination trajectory",
+      "decision_refs": [
+        "TRN-BIZ-034",
+        "TRN-BIZ-046",
+        "TRN-BIZ-047"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticCareCoordinationTrail.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticCareCoordinationTrailTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-05",
+      "capability_id": "TRN-CAP-05-02",
+      "capability": "Synthetic urgent referral safety distinction",
+      "decision_refs": [
+        "TRN-BIZ-034",
+        "TRN-BIZ-046",
+        "TRN-BIZ-047"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticUrgentSafetyTrail.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticUrgentSafetyTrailTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-05",
+      "capability_id": "TRN-CAP-05-03",
+      "capability": "Care and prevention continuity in test context",
+      "decision_refs": [
+        "TRN-BIZ-034",
+        "TRN-BIZ-046",
+        "TRN-BIZ-047"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticCarePreventionContinuity.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticCarePreventionContinuityTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-06",
+      "capability_id": "TRN-CAP-06-01",
+      "capability": "Synthetic clinical disclosure access gate",
+      "decision_refs": [
+        "TRN-BIZ-035",
+        "TRN-BIZ-041"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticClinicalRecordDisclosureGate.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticClinicalRecordDisclosureGateTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-06",
+      "capability_id": "TRN-CAP-06-02",
+      "capability": "Test-only clinical access transparency lineage",
+      "decision_refs": [
+        "TRN-BIZ-035",
+        "TRN-BIZ-041"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticClinicalAccessTransparencyTrail.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticClinicalAccessTransparencyTrailTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-06",
+      "capability_id": "TRN-CAP-06-03",
+      "capability": "Authorized real clinical record source integration",
+      "decision_refs": [
+        "TRN-BIZ-035",
+        "TRN-BIZ-041"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-07",
+      "capability_id": "TRN-CAP-07-01",
+      "capability": "Real insurer entitlement authoritative verification",
+      "decision_refs": [
+        "TRN-BIZ-048",
+        "TRN-BIZ-049"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-07",
+      "capability_id": "TRN-CAP-07-02",
+      "capability": "Synthetic insurance dispute trail",
+      "decision_refs": [
+        "TRN-BIZ-048",
+        "TRN-BIZ-049"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticInsuranceDisputeTrail.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticInsuranceDisputeTrailTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-07",
+      "capability_id": "TRN-CAP-07-03",
+      "capability": "Contracted insurer integration and binding adjudication",
+      "decision_refs": [
+        "TRN-BIZ-048",
+        "TRN-BIZ-049"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-08",
+      "capability_id": "TRN-CAP-08-01",
+      "capability": "Real backed noncashable member wallet and direct-settlement ledger",
+      "decision_refs": [
+        "TRN-BIZ-026",
+        "TRN-BIZ-042"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-08",
+      "capability_id": "TRN-CAP-08-02",
+      "capability": "Synthetic member credit period review",
+      "decision_refs": [
+        "TRN-BIZ-026",
+        "TRN-BIZ-042"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticCreditPeriodReviewProjector.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticCreditPeriodReviewProjectorTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-08",
+      "capability_id": "TRN-CAP-08-03",
+      "capability": "Six revenue source evidence map (synthetic)",
+      "decision_refs": [
+        "TRN-BIZ-026",
+        "TRN-BIZ-042"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticSixRevenueEvidenceMap.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticSixRevenueEvidenceMapTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-09",
+      "capability_id": "TRN-CAP-09-01",
+      "capability": "Synthetic nonbinding cost-choice continuity",
+      "decision_refs": [
+        "TRN-BIZ-050",
+        "TRN-BIZ-051",
+        "TRN-BIZ-052"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticCostChoiceContinuity.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticCostChoiceContinuityTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-09",
+      "capability_id": "TRN-CAP-09-02",
+      "capability": "Synthetic estimate-versus-bill comparison",
+      "decision_refs": [
+        "TRN-BIZ-050",
+        "TRN-BIZ-051",
+        "TRN-BIZ-052"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticEstimateBillComparison.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticEstimateBillComparisonTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-09",
+      "capability_id": "TRN-CAP-09-03",
+      "capability": "Real official invoice/insurer settlement and authorized acknowledgment",
+      "decision_refs": [
+        "TRN-BIZ-050",
+        "TRN-BIZ-051",
+        "TRN-BIZ-052"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-10",
+      "capability_id": "TRN-CAP-10-01",
+      "capability": "Synthetic member support intake",
+      "decision_refs": [
+        "TRN-BIZ-044",
+        "TRN-BIZ-045"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticSupportIntake.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticSupportIntakeTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-10",
+      "capability_id": "TRN-CAP-10-02",
+      "capability": "Synthetic provider quality incident evidence",
+      "decision_refs": [
+        "TRN-BIZ-044",
+        "TRN-BIZ-045"
+      ],
+      "implementation_ref": "src/Taranom.ClinicalCenterGovernance/SyntheticProviderQualityTrail.cs",
+      "test_ref": "tests/Taranom.ClinicalCenterGovernance.Tests/SyntheticProviderQualityTrailTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-10",
+      "capability_id": "TRN-CAP-10-03",
+      "capability": "Independent legally authorized complaint resolution",
+      "decision_refs": [
+        "TRN-BIZ-044",
+        "TRN-BIZ-045"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-11",
+      "capability_id": "TRN-CAP-11-01",
+      "capability": "Synthetic internal AI dataset eligibility boundary",
+      "decision_refs": [
+        "TRN-BIZ-036",
+        "TRN-BIZ-037",
+        "TRN-BIZ-038",
+        "TRN-BIZ-039"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticAiDatasetBoundary.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticAiDatasetBoundaryTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-11",
+      "capability_id": "TRN-CAP-11-02",
+      "capability": "Synthetic human-controlled AI release evidence trail",
+      "decision_refs": [
+        "TRN-BIZ-036",
+        "TRN-BIZ-037",
+        "TRN-BIZ-038",
+        "TRN-BIZ-039"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/SyntheticAiReleaseEvidenceTrail.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/SyntheticAiReleaseEvidenceTrailTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-11",
+      "capability_id": "TRN-CAP-11-03",
+      "capability": "Real governed internal AI dataset, evaluation and approved runtime",
+      "decision_refs": [
+        "TRN-BIZ-036",
+        "TRN-BIZ-037",
+        "TRN-BIZ-038",
+        "TRN-BIZ-039"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-12",
+      "capability_id": "TRN-CAP-12-01",
+      "capability": "Offline public CI workflow-security guard",
+      "decision_refs": [
+        "TRN-BIZ-030",
+        "TRN-BIZ-040"
+      ],
+      "implementation_ref": "tools/policy_checks/check_public_ci_workflow_trust.py",
+      "test_ref": "tests/policy_checks/test_public_ci_workflow_trust.py",
+      "evidence_class": "OFFLINE_POLICY_ONLY",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-12",
+      "capability_id": "TRN-CAP-12-02",
+      "capability": "Real Stage and Production hosting/monitoring admission",
+      "decision_refs": [
+        "TRN-BIZ-030",
+        "TRN-BIZ-040"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-12",
+      "capability_id": "TRN-CAP-12-03",
+      "capability": "Actual backup, restore and recovery verification",
+      "decision_refs": [
+        "TRN-BIZ-030",
+        "TRN-BIZ-040"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-13",
+      "capability_id": "TRN-CAP-13-01",
+      "capability": "Disconnected member browser experience",
+      "decision_refs": [
+        "TRN-BIZ-030",
+        "TRN-BIZ-035"
+      ],
+      "implementation_ref": "apps/member-web/src/member-app.tsx",
+      "test_ref": "apps/member-web/tests/member.spec.ts",
+      "evidence_class": "DISCONNECTED_UI_ONLY",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-13",
+      "capability_id": "TRN-CAP-13-02",
+      "capability": "Test-only protected member self-read gate",
+      "decision_refs": [
+        "TRN-BIZ-030",
+        "TRN-BIZ-035"
+      ],
+      "implementation_ref": "src/Taranom.MemberGovernance/MemberSelfReadBoundary.cs",
+      "test_ref": "tests/Taranom.MemberGovernance.Tests/MemberSelfReadBoundaryTests.cs",
+      "evidence_class": "SYNTHETIC_INTERNAL",
+      "formal_acceptance_observed": false
+    },
+    {
+      "epic_id": "TRN-EP-13",
+      "capability_id": "TRN-CAP-13-03",
+      "capability": "Real authenticated server session and governed member reads",
+      "decision_refs": [
+        "TRN-BIZ-030",
+        "TRN-BIZ-035"
+      ],
+      "implementation_ref": null,
+      "test_ref": null,
+      "evidence_class": "NO_EVIDENCE",
+      "formal_acceptance_observed": false
+    }
+  ]
+}
