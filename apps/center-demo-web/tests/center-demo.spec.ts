@@ -4,7 +4,7 @@ function unique(prefix: string) {
   return 'test:' + prefix + '-' + crypto.randomUUID().replaceAll('-', '');
 }
 async function setup(page: import('@playwright/test').Page) {
-  await page.goto('/center-demo');
+  await page.goto('/');
   const center = unique('center'), department = unique('dept'), doctor = unique('doctor');
   await page.getByLabel('شناسه مرکز آزمایشی').fill(center);
   await page.getByLabel('شناسه بخش آزمایشی').fill(department);
@@ -30,7 +30,7 @@ test('CENTER-DEMO-01: true PostgreSQL write/read, versioned complete center work
   await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
 });
 test('CENTER-DEMO-02: invalid references blocked before contacting journal', async ({ page }) => {
-  await page.goto('/center-demo');
+  await page.goto('/');
   await page.getByLabel('شناسه مرکز آزمایشی').fill('real:center');
   await page.getByRole('button', { name: 'بازخوانی مرکز از PostgreSQL' }).click();
   await expect(page.getByRole('status').first()).toContainText('فقط شناسه‌های آزمایشی');
