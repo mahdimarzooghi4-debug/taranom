@@ -141,6 +141,29 @@ class PublicSourceHistoryGuardTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(is_sensitive_path(path))
 
+    def test_known_synthetic_test_property_is_narrowly_permitted(self) -> None:
+        value = 'only_synthetic_untrusted_postgres_fixture_password'
+        self.commit('tests/SyntheticJournalTests.cs', 'Password = "' + value + '";\n')
+        self.assertEqual('PASS_LIMITED_SCOPE', scan(self.root)['status'])
+
+    def test_synthetic_looking_literal_in_production_source_remains_denied(self) -> None:
+        value = 'only_synthetic_untrusted_postgres_fixture_password'
+        self.commit('src/Production.cs', 'Password = "' + value + '";\n')
+        self.assertIn('LONG_LITERAL_CREDENTIAL_ASSIGNMENT',
+                      self.finding_rules(scan(self.root)))
+
+    def test_synthetic_looking_mixed_password_in_tests_remains_denied(self) -> None:
+        value = 'synthetic_Extra123_' + 'T' * 38
+        self.commit('tests/More.cs', 'Password = "' + value + '";\n')
+        self.assertIn('LONG_LITERAL_CREDENTIAL_ASSIGNMENT',
+                      self.finding_rules(scan(self.root)))
+
+    def test_production_password_name_in_tests_remains_denied(self) -> None:
+        value = 'only_synthetic_untrusted_postgres_fixture_password'
+        self.commit('tests/Other.cs', 'PRODUCTION_PASSWORD = "' + value + '";\n')
+        self.assertIn('LONG_LITERAL_CREDENTIAL_ASSIGNMENT',
+                      self.finding_rules(scan(self.root)))
+
     def test_scanner_does_not_flag_ordinary_decision_or_sha(self) -> None:
         self.commit('business.md', '# TRN-BIZ-040\n' + 'f' * 64 + '\n')
         self.assertEqual('PASS_LIMITED_SCOPE', scan(self.root)['status'])

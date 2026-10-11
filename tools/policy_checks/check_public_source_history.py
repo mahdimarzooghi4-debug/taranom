@@ -40,7 +40,7 @@ ASSIGNMENT = re.compile(
     rb'(?im)^\s*(?:export\s+)?["\']?([A-Za-z][A-Za-z0-9_.-]{0,79})["\']?\s*[:=]\s*["\']?([A-Za-z0-9_+\-/=]{28,})["\']?\s*(?:[#;,}]|$)'
 )
 KEY_NAME = re.compile(rb'(?:^|[_\-.])(?:api[_-]?key|token|secret|password|private[_-]?key|client[_-]?secret)(?:$|[_\-.])', re.I)
-META_NAME = re.compile(rb'(?:hash|digest|sha|fingerprint|revision|placeholder|example|fixture|fake|test|synthetic)', re.I)
+META_NAME = re.compile(rb'(?:hash|digest|sha|fingerprint|revision)', re.I)
 
 
 def _git(root: Path, *args: str) -> bytes:
@@ -69,7 +69,16 @@ def inspect_blob(path: str, data: bytes) -> list[str]:
         if pattern.search(data):
             found.append(rule)
     for match in ASSIGNMENT.finditer(data):
-        if KEY_NAME.search(match.group(1)) and not META_NAME.search(match.group(1)):
+        key, literal = match.group(1), match.group(2)
+        # The project's long, plain lowercase synthetic PostgreSQL fixture
+        # passwords occur only in isolated test source. Limit this exception
+        # to exact Password property names and unmistakably synthetic shape.
+        # Signature-based token patterns above always run, even in tests.
+        synthetic_fixture = (path.startswith('tests/') and key == b'Password'
+                             and re.fullmatch(rb'[a-z_]{28,80}', literal) is not None
+                             and b'synthetic' in literal and b'_' in literal)
+        if (KEY_NAME.search(key) and not META_NAME.search(key)
+                and not synthetic_fixture):
             found.append('LONG_LITERAL_CREDENTIAL_ASSIGNMENT')
             break
     return sorted(set(found))
