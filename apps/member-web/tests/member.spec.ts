@@ -619,3 +619,59 @@ test('BILLING-04: member navigates estimates and bills without conflating offici
   await expect(page.getByRole('heading', { name: 'اسناد و سهم‌های صورتحساب درمان' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'دریافت صورتحساب رسمی — نیازمند صادرکننده معتبر' })).toBeDisabled();
 });
+
+test('RECORD-01: record sharing presents three legally distinct unavailable paths', async ({ page }) => {
+  await page.goto('/member/records');
+  await expect(page.getByRole('heading', { name: 'مسیرهای مجزای مشاهده و اشتراک پرونده' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'حدود مجاز دسترسی به پرونده سلامت' });
+  await expect(list.getByRole('listitem')).toHaveCount(3);
+  for (const label of [
+    'مشاهده شخصی سوابق سلامت عضو', 'اشتراک محدود با متخصص درمانگر',
+    'استثنای قانونی یا فوریت پزشکی'
+  ]) {
+    await expect(list.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+  await expect(page.getByText('هیچ دسترسی فعالی وجود ندارد')).toBeVisible();
+});
+
+test('RECORD-02: employer and sponsor never receive care records through subscription payment', async ({ page }) => {
+  await page.goto('/member/records?employer=true&authorized=true');
+  await expect(page.getByText(/پرداخت اشتراک توسط کارفرما یا نهاد حمایتی مجوز مشاهده پرونده سلامت نیست/))
+    .toBeVisible();
+  await expect(page.getByText(/بدون نیاز درمانی مشخص، صلاحیت مستقل/)).toBeVisible();
+  for (const name of [
+    'مشاهده پرونده شخصی — نیازمند هویت و منبع معتبر',
+    'مدیریت دامنه اشتراک با متخصص — نیازمند رضایت و بررسی قانونی',
+    'سوابق دسترسی به پرونده — نیازمند ممیزی معتبر'
+  ]) {
+    await expect(page.getByRole('button', { name })).toBeDisabled();
+  }
+});
+
+test('RECORD-03: clinical sharing never implies secondary AI consent or emergency record disclosure', async ({ page }) => {
+  await page.goto('/member/records');
+  await expect(page.getByText(/اشتراک برای درمان رضایت پژوهش یا آموزش هوش مصنوعی نیست/)).toBeVisible();
+  await expect(page.getByText(/هشدار فوریت پزشکی به‌خودی‌خود مجوز افشای اطلاعات ایجاد نمی‌کند/)).toBeVisible();
+  await expect(page.getByText(/در فوریت پزشکی دریافت کمک فوری را/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /تأیید دسترسی پزشک|افشای اضطراری|رضایت آموزش AI/ })).toHaveCount(0);
+});
+
+test('RECORD-04: record route is disconnected, stores nothing and keeps browser history/focus', async ({ page }) => {
+  const privateCalls: string[] = [];
+  page.on('request', req => {
+    if (['/api/', '/health/', '/records/', '/patient/', '/clinical/', '/identity/', '/consent/']
+      .some(prefix => req.url().includes(prefix))) privateCalls.push(req.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'سوابق سلامت' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'سوابق سلامت' })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'مسیرهای مجزای مشاهده و اشتراک پرونده' })).toBeVisible();
+  expect(privateCalls).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

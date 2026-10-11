@@ -125,6 +125,29 @@ const consentBoundaries = [
 
 // Accepted TRN-BIZ-028/029 only describe possible payer arrangements;
 // these are NOT active subscriptions, verified contracts or payer records.
+// TRN-BIZ-035: a member self-view, clinician-limited disclosure and
+// legal/emergency exception are DIFFERENT authority channels. None active.
+const recordVisibilityLanes = [
+  {
+    key: 'self',
+    label: 'مشاهده شخصی سوابق سلامت عضو',
+    authority: 'عضو پس از احراز هویت و کنترل دسترسی اختصاصی',
+    limit: 'هیچ پرونده، منبع رسمی یا نشست معتبر عضو متصل نیست.'
+  },
+  {
+    key: 'clinician',
+    label: 'اشتراک محدود با متخصص درمانگر',
+    authority: 'متخصص دارای صلاحیت با نیاز درمانی مشخص و محدوده مورد تأیید عضو',
+    limit: 'هویت متخصص، خدمت مرتبط، دسته داده و مجوز جاری تأیید نشده‌اند.'
+  },
+  {
+    key: 'exception',
+    label: 'استثنای قانونی یا فوریت پزشکی',
+    authority: 'مرجع قانونی و بالینی صاحب‌اختیار، فقط مطابق سازوکار جداگانه مصوب',
+    limit: 'هیچ استثنا یا اختیار افشای اضطراری در این نسخه تعیین یا فعال نشده است.'
+  }
+] as const;
+
 const membershipFundingRoutes = [
   { key: 'public', label: 'عموم مردم',
     payer: 'خود عضو، در مسیر عضویت مستقیم',
@@ -347,6 +370,49 @@ export function MemberApp() {
                   <button type="button" disabled>
                     مشاهده گردش اعتبار — نیازمند احراز هویت و منبع مالی معتبر
                   </button>
+                </section>
+              ) : null}
+              {page.key === 'records' ? (
+                <section aria-labelledby="records-sharing-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">کنترل عضو، کمینه‌سازی داده و نیاز درمانی</p>
+                      <h2 id="records-sharing-title">مسیرهای مجزای مشاهده و اشتراک پرونده</h2>
+                    </div>
+                    <span className="readonly-pill">هیچ دسترسی فعالی وجود ندارد</span>
+                  </div>
+                  <div className="status-grid" role="list" aria-label="حدود مجاز دسترسی به پرونده سلامت">
+                    {recordVisibilityLanes.map((lane) => (
+                      <article key={lane.key} role="listitem" className="status-card">
+                        <p className="status-card-label">{lane.label}</p>
+                        <h3>اطلاعات موجود نیست</h3>
+                        <p>{lane.authority}</p>
+                        <p>{lane.limit}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <p id="records-legal-boundary" className="quiet">
+                    پرداخت اشتراک توسط کارفرما یا نهاد حمایتی مجوز مشاهده پرونده سلامت نیست.
+                    هماهنگ‌کننده یا شبکه درمانی نیز بدون نیاز درمانی مشخص، صلاحیت مستقل،
+                    مجوز جاری عضو و محدودیت نوع داده حق دسترسی فراگیر ندارد.
+                  </p>
+                  <button type="button" disabled aria-describedby="records-legal-boundary">
+                    مشاهده پرونده شخصی — نیازمند هویت و منبع معتبر
+                  </button>
+                  <button type="button" disabled aria-describedby="records-legal-boundary">
+                    مدیریت دامنه اشتراک با متخصص — نیازمند رضایت و بررسی قانونی
+                  </button>
+                  <button type="button" disabled aria-describedby="records-legal-boundary">
+                    سوابق دسترسی به پرونده — نیازمند ممیزی معتبر
+                  </button>
+                  <p className="quiet" id="records-research-boundary">
+                    اشتراک برای درمان رضایت پژوهش یا آموزش هوش مصنوعی نیست. لغو، محدودسازی
+                    یا تغییر رضایت باید جداگانه و بر اساس شواهد و قرارداد معتبر بررسی شود.
+                    هشدار فوریت پزشکی به‌خودی‌خود مجوز افشای اطلاعات ایجاد نمی‌کند.
+                  </p>
+                  <p className="emergency-note">
+                    در فوریت پزشکی دریافت کمک فوری را به احراز دسترسی پرونده یا تکمیل درخواست اشتراک موکول نکنید.
+                  </p>
                 </section>
               ) : null}
               {page.key === 'consents' ? (
