@@ -112,8 +112,8 @@ public sealed class SyntheticCreditPeriodReviewProjectorTests
     [Fact]
     public void InitialWaitIsNotRestartedByReactivation()
     {
-        var view = Build([Claim(March.AddDays(1), March.AddDays(4))],
-            observed: April.AddDays(2));
+        var view = Build([Claim(March.AddDays(1), March.AddDays(4),
+            recorded: April.AddDays(1))], observed: April.AddDays(2));
         Assert.Equal(January.AddDays(90), view.HypotheticalInitialWait!.Value.ThresholdUtc);
     }
 
