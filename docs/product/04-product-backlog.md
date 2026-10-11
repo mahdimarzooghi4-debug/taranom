@@ -120,3 +120,8 @@ Across TRN-EP-01…13, the three required markets and national coverage, the den
 ## Sprint 56 refinement — private evidence path-race hardening (2026-10-11)
 
 TRN-TECH-065 and Sprint56 build on the real external-file custody mechanism from Sprint55, addressing a documented file-path time-of-check/time-of-use risk: safely anchored POSIX descriptors, no-follow path traversal and inode/metadata/path rechecks protect private evidence intake from accidental or adversarial pathname substitution. A private intake report may no longer be written inside the Public repository. These controls make the future *local operator verification mechanism* safer, not the authenticity, legal admissibility, signer identity, medical/financial authority or readiness of any submitted evidence. All 17 national blockers and the full three-market launch remain DENIED_BY_DEFAULT.
+
+
+## Sprint 57 refinement — protect public GitHub CI workflow source (2026-10-11)
+
+For TRN-EP-01/02/11/12, after public Git history audit and private external-evidence custody hardening, the next real technical risk is mutable GitHub Actions workflows in a Public repository. [TRN-TECH-066](../technical/66-public-ci-workflow-trust-guard.md) / [Sprint57](../sprints/65-sprint-57-public-ci-workflow-trust-guard.md) enforce a narrow, fail-closed policy across actual workflow source: SHA-pinned approved actions, read-only tokens, safe checkout and triggers, and no unreviewed deployment/secret contexts. The new guard runs with inherited backend/Postgres/built Chromium and national DENY-ONLY tests; passing static checks cannot authenticate external evidence or authorize launch. Real partner, IDP, legal, clinical, finance and Production integrations remain blocked until external proof and separate approval.
