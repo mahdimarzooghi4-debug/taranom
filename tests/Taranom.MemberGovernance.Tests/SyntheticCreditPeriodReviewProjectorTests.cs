@@ -120,7 +120,8 @@ public sealed class SyntheticCreditPeriodReviewProjectorTests
     [Fact]
     public void InitialWaitIsOnlyATemporalReadNeverWalletSpendingPermission()
     {
-        var view = Build(Array.Empty<SyntheticCreditPeriodClaim>(), observed: January.AddDays(40));
+        var view = Build(Array.Empty<SyntheticCreditPeriodClaim>(),
+            history: Timeline()[..2], observed: January.AddDays(40));
         Assert.Equal(WaitingPeriodState.StillWaiting, view.HypotheticalInitialWait!.Value.State);
         Assert.Empty(view.Claims);
         Assert.DoesNotContain(Enum.GetNames<SyntheticCreditPortfolioState>(),
