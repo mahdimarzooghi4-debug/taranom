@@ -83,6 +83,9 @@ JS = """
         if (show) matching++;
       }
       epic.hidden = matching === 0;
+      if (matching && (needle || kind.value !== 'ALL')) {
+        epic.querySelector('details').open = true;
+      }
       if (matching) { visibleEpics++; visibleCandidates += matching; }
     }
     result.textContent = visibleEpics + ' Epic و ' + visibleCandidates + ' قابلیت پیشنهادی در این فیلتر دیده می‌شوند؛ هیچ قابلیت عملیاتی تأیید نشده است.';

@@ -63,7 +63,7 @@ class ConsoleTests(unittest.TestCase):
         page = self.html.read_text()
         dom = Tags()
         dom.feed(page)
-        epics = [attrs for tag, attrs in dom.seen if attrs.get("data-epic") is not None]
+        epics = [attrs for tag, attrs in dom.seen if "data-epic" in attrs]
         self.assertEqual(len(epics), 13)
         for idx in range(1, 14):
             self.assertIn(f"TRN-EP-{idx:02d}", page)
@@ -105,7 +105,7 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn("evidence", ids)
         self.assertIn("filter-result", ids)
         self.assertEqual(
-            len([a for _, a in parser.seen if a.get("data-capability") is not None]), 39)
+            len([a for _, a in parser.seen if "data-capability" in a]), 39)
 
     def test_file_and_test_refs_visible_without_reclassifying_acceptance(self):
         self.assertEqual(self.invoke(), 0)
