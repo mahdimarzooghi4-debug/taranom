@@ -1,14 +1,18 @@
 """Regression for PRIVATE external evidence custody; no real external evidence."""
 import hashlib
 import json
+import os
+import subprocess
 from pathlib import Path
 import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "policy_checks"))
+import check_private_external_evidence as custody  # noqa: E402
 from check_private_external_evidence import inspect, SCOPE  # noqa: E402
 
 
@@ -182,6 +186,97 @@ class EvidenceCustodyTests(unittest.TestCase):
     def test_nonfinite_json_rejected(self):
         self.manifest.write_text('{"oops":NaN}', encoding="utf-8")
         self.assert_denied("NONFINITE_JSON")
+
+
+    def test_nested_real_private_artifact_is_accepted_without_approval(self):
+        folder = self.private / "nested"
+        folder.mkdir()
+        target = folder / self.payload.name
+        self.payload.replace(target)
+        self.write([dict(self.entry, artifact="nested/legal-proof.pdf")])
+        result = self.check()
+        self.assertEqual(result["status"], "INTACT_FILES_UNREVIEWED")
+        self.assertFalse(result["release_allowed"])
+
+    def test_intermediate_directory_symlink_rejected(self):
+        nested = self.private / "original"
+        nested.mkdir()
+        (nested / "legal-proof.pdf").write_bytes(self.payload.read_bytes())
+        (self.private / "alias").symlink_to(nested, target_is_directory=True)
+        self.write([dict(self.entry, artifact="alias/legal-proof.pdf")])
+        self.assert_denied("SYMLINKED_ARTIFACT_FORBIDDEN")
+
+    def test_symlinked_private_root_rejected(self):
+        alias = self.top / "private-alias"
+        alias.symlink_to(self.private, target_is_directory=True)
+        result = inspect(self.repo, alias, self.manifest)
+        self.assertIn("PRIVATE_EVIDENCE_ROOT_UNAVAILABLE", result["errors"])
+
+    def test_hardlinked_artifact_rejected(self):
+        linked = self.private / "linked.pdf"
+        os.link(self.payload, linked)
+        self.write([dict(self.entry, artifact="linked.pdf")])
+        self.assert_denied("HARDLINKED_ARTIFACT_FORBIDDEN")
+
+    def test_replaced_path_during_read_is_rejected(self):
+        # Deterministically replace the directory entry while the opened
+        # descriptor continues to read the original bytes. A hash alone
+        # cannot identify this post-open pathname replacement.
+        original_fdopen = os.fdopen
+        payload = self.payload
+        swapped = []
+
+        class SwappingStream:
+            def __init__(self, fd, mode):
+                self.stream = original_fdopen(fd, mode)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return self.stream.__exit__(*args)
+
+            def read(self, size):
+                chunk = self.stream.read(size)
+                if chunk and not swapped:
+                    swapped.append(True)
+                    payload.rename(payload.parent / "moved.pdf")
+                    payload.write_bytes(chunk)
+                return chunk
+
+        with patch.object(custody.os, "fdopen", side_effect=SwappingStream):
+            self.assert_denied("ARTIFACT_PATH_CHANGED")
+
+    def test_private_manifest_alias_inside_public_repo_rejected(self):
+        public_alias = self.repo / "private-alias.json"
+        public_alias.symlink_to(self.manifest)
+        result = inspect(self.repo, self.private, public_alias)
+        self.assertIn("PRIVATE_MANIFEST_INSIDE_PUBLIC_REPO", result["errors"])
+
+    def test_private_report_must_not_be_written_into_public_tree(self):
+        leaked_report = self.repo / "would-leak.json"
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tools/policy_checks/check_private_external_evidence.py"),
+             "--root", str(self.repo), "--evidence-root", str(self.private),
+             "--manifest", str(self.manifest), "--report-json", str(leaked_report)],
+            capture_output=True, text=True, check=False)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("PRIVATE_REPORT_OUTSIDE_PUBLIC_REPO_REQUIRED", proc.stderr)
+        self.assertFalse(leaked_report.exists())
+
+    def test_real_private_cli_report_stays_redacted_and_denied(self):
+        out = self.top / "private-report.json"
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tools/policy_checks/check_private_external_evidence.py"),
+             "--root", str(self.repo), "--evidence-root", str(self.private),
+             "--manifest", str(self.manifest), "--report-json", str(out)],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        contents = out.read_text()
+        self.assertNotIn(self.entry["artifact"], contents)
+        self.assertNotIn(self.entry["sha256"], contents)
+        self.assertNotIn(self.entry["custodian_ref"], contents)
+        self.assertFalse(json.loads(contents)["release_allowed"])
 
 
 if __name__ == "__main__":

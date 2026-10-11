@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import stat
 from pathlib import Path, PurePosixPath
 import re
 import sys
@@ -40,10 +42,26 @@ def _reject_constant(_value):
     raise ValueError("NONFINITE_JSON")
 
 
+def _file_identity(st):
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
 def _read_json(path: Path) -> tuple[dict, bytes]:
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_MANIFEST:
-        raise ValueError("INVALID_MANIFEST_FILE")
-    raw = path.read_bytes()
+    """Read bounded, anchored JSON; do not follow a replaced symlink."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_size > MAX_MANIFEST:
+            raise ValueError("INVALID_MANIFEST_FILE")
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            raw = stream.read(MAX_MANIFEST + 1)
+        after = os.fstat(fd)
+        if (len(raw) > MAX_MANIFEST or _file_identity(before) != _file_identity(after)
+                or _file_identity(after) != _file_identity(
+                    os.stat(path, follow_symlinks=False))):
+            raise ValueError("MANIFEST_CHANGED_DURING_READ")
+    finally:
+        os.close(fd)
     try:
         data = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_pairs,
                           parse_constant=_reject_constant)
@@ -55,7 +73,10 @@ def _read_json(path: Path) -> tuple[dict, bytes]:
 
 
 def _inside(path: Path, root: Path) -> bool:
-    return path.resolve().is_relative_to(root.resolve())
+    # Catch public lexical paths even when a symlink redirects outside, as well
+    # as external-looking aliases that actually resolve into the public tree.
+    return (path.absolute().is_relative_to(root.absolute())
+            or path.resolve().is_relative_to(root.resolve()))
 
 
 def _valid_artifact_name(name) -> bool:
@@ -67,27 +88,77 @@ def _valid_artifact_name(name) -> bool:
 
 
 def _hash_private_file(evidence_root: Path, name: str, public_root: Path) -> str:
+    """Open each component relative to an anchored directory FD (Linux/POSIX).
+
+    No check-then-open path traversal; reject symlinks and hardlinks. The
+    directory entries and file metadata must still identify the opened
+    objects after hashing, even if an attacker moves a name during reading.
+    """
     if not _valid_artifact_name(name):
         raise ValueError("UNSAFE_ARTIFACT_REFERENCE")
     if evidence_root.is_symlink() or not evidence_root.is_dir():
         raise ValueError("PRIVATE_EVIDENCE_ROOT_UNAVAILABLE")
-    current = evidence_root
-    for segment in name.split("/"):
-        current = current / segment
-        if current.is_symlink():
-            raise ValueError("SYMLINKED_ARTIFACT_FORBIDDEN")
-    if not current.is_file() or not _inside(current, evidence_root):
-        raise ValueError("ARTIFACT_UNAVAILABLE")
-    if _inside(current, public_root):
+    if _inside(evidence_root, public_root):
         raise ValueError("PUBLIC_REPOSITORY_EVIDENCE_FORBIDDEN")
-    size = current.stat().st_size
-    if not 0 < size <= MAX_ARTIFACT:
-        raise ValueError("ARTIFACT_SIZE_UNVERIFIABLE")
-    h = hashlib.sha256()
-    with current.open("rb") as stream:
-        while data := stream.read(65536):
-            h.update(data)
-    return h.hexdigest()
+    if not all(hasattr(os, flag) for flag in ("O_NOFOLLOW", "O_DIRECTORY")):
+        raise ValueError("SECURE_DESCRIPTOR_OPEN_UNAVAILABLE")
+
+    root_fd = os.open(evidence_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    descriptors = [root_fd]
+    chain = []
+    try:
+        root_before = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_before.st_mode):
+            raise ValueError("PRIVATE_EVIDENCE_ROOT_UNAVAILABLE")
+        parent_fd = root_fd
+        for index, segment in enumerate(name.split("/")):
+            is_last = index == len(name.split("/")) - 1
+            # An explicit precheck supplies the accurate denial reason. The
+            # O_NOFOLLOW at open also rejects a symlink installed afterwards.
+            current = os.stat(segment, dir_fd=parent_fd, follow_symlinks=False)
+            if stat.S_ISLNK(current.st_mode):
+                raise ValueError("SYMLINKED_ARTIFACT_FORBIDDEN")
+            flags = os.O_RDONLY | os.O_NOFOLLOW
+            flags |= os.O_NONBLOCK if is_last else os.O_DIRECTORY
+            child_fd = os.open(segment, flags, dir_fd=parent_fd)
+            descriptors.append(child_fd)
+            chain.append((parent_fd, segment, child_fd))
+            parent_fd = child_fd
+
+        fd = parent_fd
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("ARTIFACT_UNAVAILABLE")
+        # Hardlinks can expose public tracked bytes outside the public pathname.
+        if before.st_nlink != 1:
+            raise ValueError("HARDLINKED_ARTIFACT_FORBIDDEN")
+        if not 0 < before.st_size <= MAX_ARTIFACT:
+            raise ValueError("ARTIFACT_SIZE_UNVERIFIABLE")
+
+        digest = hashlib.sha256()
+        read_length = 0
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            while chunk := stream.read(65536):
+                read_length += len(chunk)
+                if read_length > MAX_ARTIFACT:
+                    raise ValueError("ARTIFACT_SIZE_UNVERIFIABLE")
+                digest.update(chunk)
+        after = os.fstat(fd)
+        if read_length != before.st_size or _file_identity(before) != _file_identity(after):
+            raise ValueError("ARTIFACT_MUTATED_DURING_READ")
+
+        root_after = os.stat(evidence_root, follow_symlinks=False)
+        if _file_identity(root_before)[:2] != _file_identity(root_after)[:2]:
+            raise ValueError("ARTIFACT_PATH_CHANGED")
+        for parent, segment, child in chain:
+            named = os.stat(segment, dir_fd=parent, follow_symlinks=False)
+            opened = os.fstat(child)
+            if (named.st_dev, named.st_ino) != (opened.st_dev, opened.st_ino):
+                raise ValueError("ARTIFACT_PATH_CHANGED")
+        return digest.hexdigest()
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
 
 
 def inspect(public_root: Path, evidence_root: Path, manifest: Path) -> dict:
@@ -197,7 +268,9 @@ def inspect(public_root: Path, evidence_root: Path, manifest: Path) -> dict:
             "UNKNOWN_LAUNCH_DIMENSION", "UNMAPPED_EXTERNAL_BLOCKER",
             "SELF_APPROVAL_FORBIDDEN", "INVALID_OPAQUE_CUSTODIAN_REF",
             "INVALID_ARTIFACT_DIGEST", "DUPLICATE_EVIDENCE_RECORD",
-            "ARTIFACT_SHA256_MISMATCH",
+            "ARTIFACT_SHA256_MISMATCH", "MANIFEST_CHANGED_DURING_READ",
+            "SECURE_DESCRIPTOR_OPEN_UNAVAILABLE", "ARTIFACT_PATH_CHANGED",
+            "ARTIFACT_MUTATED_DURING_READ", "HARDLINKED_ARTIFACT_FORBIDDEN",
         }
         errors.append(known if known in allowed else "INTAKE_UNVERIFIABLE")
     report["errors"] = sorted(set(errors))
@@ -211,7 +284,14 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--report-json", type=Path, required=True)
     args = parser.parse_args()
-    report = inspect(args.root.resolve(), args.evidence_root, args.manifest)
+    # Real private manifests must not write any report in this public repo,
+    # even when reports currently contain only anonymous counts and enums.
+    if not _inside(args.manifest.absolute(), args.root.resolve()) and _inside(
+            args.report_json.absolute(), args.root.resolve()):
+        print("DENIED: PRIVATE_REPORT_OUTSIDE_PUBLIC_REPO_REQUIRED", file=sys.stderr)
+        return 1
+    report = inspect(args.root.resolve(), args.evidence_root.absolute(),
+                     args.manifest.absolute())
     args.report_json.parent.mkdir(parents=True, exist_ok=True)
     args.report_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("External-evidence custody: " + report["status"] +
