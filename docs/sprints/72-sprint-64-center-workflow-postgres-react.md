@@ -1,0 +1,7 @@
+# TRN-SP-64 — One substantial, fully integrated center workflow package
+
+**Date:** 2026-10-11. **Parent baseline:** Sprint63 PR #71 Draft/Open/unmerged, exact SHA \`ff13666ab37a6a79b479eb1c64e5cd51471018a8\` with Push and PR 13/13 green; preliminary COMMENT-only review.
+
+**Substantive outcome:** reuse existing test-only center business reducer and PostgreSQL transactional journal, expose a strictly constrained localhost-only test port, connect a real compiled RTL React UI, and run a four-command workflow through the database. Integrated capabilities: section definition → record unverified doctor affiliation → assign to department → end doctor affiliation; exact persisted readback, append-only event/version history, replay/no duplicate effects, stale/conflict denials, per-center isolation, malformed/real reference denial, unavailable backend fail closed. No new arbitrary clinical authority is created. CI executes actual .NET + PostgreSQL + React + Python HTTP + Chromium and all 13 inherited jobs for a total of 14.
+
+**Gates and scope:** This is a test-only development simulator with explicit \`test:\` refs, ephemeral locked local DB, explicit startup guard and never an authenticated provider application. No official identity, licensing, clinical record, legal consent, finance, settlement, real production APIs or external service. No Stage/QA Gate/Ready/Merge/Production without owner approval. First full national three-market release remains DENIED_BY_DEFAULT; all 17 external blockers remain BLOCKED_UNVERIFIED.
