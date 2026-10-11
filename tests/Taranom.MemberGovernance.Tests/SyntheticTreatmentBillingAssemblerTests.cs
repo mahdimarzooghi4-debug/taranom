@@ -201,12 +201,12 @@ public sealed class SyntheticTreatmentBillingAssemblerTests
     }
 
     [Theory]
-    [InlineData(SyntheticBillEvidenceChange.Disputed)]
-    [InlineData(SyntheticBillEvidenceChange.Withdrawn)]
-    public void DisputeAndWithdrawalCannotCarryNumericClaims(SyntheticBillEvidenceChange change)
+    [InlineData(2)]
+    [InlineData(3)]
+    public void DisputeAndWithdrawalCannotCarryNumericClaims(int changeCode)
     {
         var first = Claim(SyntheticBillLane.SupplementalInsurance);
-        var invalid = Later(first, change, 5m, "IRR");
+        var invalid = Later(first, (SyntheticBillEvidenceChange)changeCode, 5m, "IRR");
         Assert.Equal(SyntheticBillViewState.Invalid, Build(new[] { first, invalid }).State);
     }
 
