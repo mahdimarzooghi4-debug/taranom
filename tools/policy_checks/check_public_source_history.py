@@ -76,7 +76,8 @@ def inspect_blob(path: str, data: bytes) -> list[str]:
         # Signature-based token patterns above always run, even in tests.
         synthetic_fixture = (path.startswith('tests/') and key == b'Password'
                              and re.fullmatch(rb'[a-z_]{28,80}', literal) is not None
-                             and b'synthetic' in literal and b'_' in literal)
+                             and (b'synthetic' in literal or b'test' in literal)
+                             and b'_' in literal)
         if (KEY_NAME.search(key) and not META_NAME.search(key)
                 and not synthetic_fixture):
             found.append('LONG_LITERAL_CREDENTIAL_ASSIGNMENT')

@@ -146,6 +146,16 @@ class PublicSourceHistoryGuardTests(unittest.TestCase):
         self.commit('tests/SyntheticJournalTests.cs', 'Password = "' + value + '";\n')
         self.assertEqual('PASS_LIMITED_SCOPE', scan(self.root)['status'])
 
+    def test_test_only_plain_fixture_password_is_scoped_to_test_source(self) -> None:
+        value = 'only_test_untrusted_postgres_local_password'
+        self.commit('tests/SyntheticDbTests.cs', 'Password = "' + value + '";\n')
+        self.assertEqual('PASS_LIMITED_SCOPE', scan(self.root)['status'])
+
+    def test_test_only_plain_fixture_password_outside_test_source_denied(self) -> None:
+        value = 'only_test_untrusted_postgres_local_password'
+        self.commit('src/Production.cs', 'Password = "' + value + '";\n')
+        self.assertIn('LONG_LITERAL_CREDENTIAL_ASSIGNMENT', self.finding_rules(scan(self.root)))
+
     def test_synthetic_looking_literal_in_production_source_remains_denied(self) -> None:
         value = 'only_synthetic_untrusted_postgres_fixture_password'
         self.commit('src/Production.cs', 'Password = "' + value + '";\n')
