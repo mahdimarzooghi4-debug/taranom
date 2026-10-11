@@ -87,6 +87,26 @@ const billingSources = [
     authority: 'سند معتبر ارائه‌دهنده با لحاظ سهم‌های تأییدشده قانونی' },
 ] as const;
 
+// TRN-BIZ-050/051/052: no live price, bill, insurer determination
+// or authenticated cross-document service linkage. These are EXPLANATIONS.
+const estimateBillComparisonStages = [
+  {
+    key: 'estimate',
+    label: 'برآورد پیش از درمان: غیرقطعی و وابسته به پنج منشأ',
+    owner: 'ترنم تنها سهم‌های احتمالی دارای منشأ را نمایش می‌دهد؛ پیش‌برآورد تضمین قیمت یا تعهد هزینه نیست.'
+  },
+  {
+    key: 'bill',
+    label: 'صورتحساب پس از خدمت: اسناد مستقل مراجع قانونی',
+    owner: 'صادرکننده خدمت، بیمه‌گران و متولی اعتبار باید هر سهم را جداگانه از منبع معتبر اعلام کنند.'
+  },
+  {
+    key: 'review',
+    label: 'مقایسه اختلاف‌ها بدون حکم مالی یا پزشکی',
+    owner: 'برابر یا متفاوت بودن دو ادعای مبلغ، اثبات اضافه‌دریافت، پوشش، بدهی یا استحقاق بازپرداخت نیست.'
+  }
+] as const;
+
 // Two legally distinct paths share a future member-facing contact point, but
 // neither a medical verdict nor an insurer decision can be issued here.
 const supportPaths = [
@@ -771,6 +791,37 @@ export function MemberApp() {
                       </article>
                     ))}
                   </div>
+                  <section aria-labelledby="estimate-bill-compare-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">مقایسه اطلاعات غیرقطعی، نه صدور حکم مالی</p>
+                        <h2 id="estimate-bill-compare-title">برآورد پیش از خدمت در برابر صورتحساب پس از خدمت</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ تطبیق رسمی انجام نشده است</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="مرزهای مقایسه برآورد و صورتحساب">
+                      {estimateBillComparisonStages.map((stage) => (
+                        <article className="status-card" role="listitem" key={stage.key}>
+                          <p className="status-card-label">{stage.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{stage.owner}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="estimate-bill-compare-limit">
+                      پیوند پیش‌برآورد و خدمت درمانی بدون منبع و هویت معتبر تأیید نشده است.
+                      مبلغ نامعلوم با صفر برابر نیست؛ سهم بیمه مورد اختلاف نیز مبلغ قطعی نیست.
+                      برابری یا تفاوت دو ادعای مبلغ، تصمیم قطعی اضافه‌دریافت، جریمه،
+                      طلب عضو، تأیید بیمه یا مجوز برداشت و استرداد اعتبار ایجاد نمی‌کند.
+                      انتخاب اعلام‌شده عضو درباره برآورد، رضایت درمانی یا تعهد رسمی پرداخت نیست.
+                    </p>
+                    <button type="button" disabled aria-describedby="estimate-bill-compare-limit">
+                      مقایسه سندها — نیازمند برآورد و صورتحساب معتبر
+                    </button>
+                    <button type="button" disabled aria-describedby="estimate-bill-compare-limit">
+                      درخواست اصلاح حقوقی — فقط با مرجع مسئول و شواهد واقعی
+                    </button>
+                  </section>
                   <p className="quiet" id="billing-correction-limit">
                     سهم بیمه و پوشش را فقط بیمه‌گر یا مرجع قانونی تعیین می‌کند. اختلاف، رد یا
                     اصلاح سند باید با منشأ و نسخه معتبر پیگیری شود؛ ثبت اعتراض موجب اصلاح،

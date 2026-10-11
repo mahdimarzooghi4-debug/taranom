@@ -232,7 +232,13 @@ public sealed class SyntheticEstimateBillComparisonTests
         string? treatment = Treatment;
         var packet = Packet;
         var revision = 1L;
-        if (mode == "no-bill") b = null!;
+        if (mode == "no-bill")
+        {
+            var missing = SyntheticEstimateBillComparison.Inspect(
+                p, History(p), Treatment, Link, Packet, 1, null);
+            Assert.Equal(SyntheticEstimateBillComparisonState.InvalidSource, missing.State);
+            return;
+        }
         if (mode == "invalid-bill-version") revision = 0;
         if (mode == "no-treatment") treatment = null;
         if (mode == "no-packet") packet = Guid.Empty;

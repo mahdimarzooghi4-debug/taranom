@@ -1020,3 +1020,60 @@ test('COST-CONTINUITY-04: preview remains disconnected and back-forward navigati
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('ESTIMATE-BILL-01: independent estimate, after-service bill and nonbinding comparison appear', async ({ page }) => {
+  await page.goto('/member/billing');
+  await expect(page.getByRole('heading', { name: 'برآورد پیش از خدمت در برابر صورتحساب پس از خدمت' })).toBeVisible();
+  const stages = page.getByRole('list', { name: 'مرزهای مقایسه برآورد و صورتحساب' });
+  await expect(stages.getByRole('listitem')).toHaveCount(3);
+  for (const title of [
+    'برآورد پیش از درمان: غیرقطعی و وابسته به پنج منشأ',
+    'صورتحساب پس از خدمت: اسناد مستقل مراجع قانونی',
+    'مقایسه اختلاف‌ها بدون حکم مالی یا پزشکی'
+  ]) await expect(stages.getByText(title, { exact: true })).toBeVisible();
+  await expect(stages.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+});
+
+test('ESTIMATE-BILL-02: equal/different claimed amounts never authorize refund or overcharge judgment', async ({ page }) => {
+  await page.goto('/member/billing?bill=paid&refund=approved&estimate=matched');
+  await expect(page.getByText('هیچ تطبیق رسمی انجام نشده است')).toBeVisible();
+  await expect(page.getByText(/برابری یا تفاوت دو ادعای مبلغ، تصمیم قطعی اضافه‌دریافت/)).toBeVisible();
+  await expect(page.getByText(/طلب عضو، تأیید بیمه یا مجوز برداشت و استرداد اعتبار ایجاد نمی‌کند/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'درخواست اصلاح حقوقی — فقط با مرجع مسئول و شواهد واقعی'
+  })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /استرداد موفق|پرداخت انجام شد|مطالبه قطعی/ })).toHaveCount(0);
+});
+
+test('ESTIMATE-BILL-03: missing and contested insurance never become zero or clinical consent', async ({ page }) => {
+  await page.goto('/member/billing');
+  await expect(page.getByText(/مبلغ نامعلوم با صفر برابر نیست/)).toBeVisible();
+  await expect(page.getByText(/سهم بیمه مورد اختلاف نیز مبلغ قطعی نیست/)).toBeVisible();
+  await expect(page.getByText(/انتخاب اعلام‌شده عضو درباره برآورد، رضایت درمانی یا تعهد رسمی پرداخت نیست/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'مقایسه سندها — نیازمند برآورد و صورتحساب معتبر'
+  })).toBeDisabled();
+  await expect(page.getByText(/در فوریت پزشکی دریافت کمک درمانی را به مشاهده صورتحساب/)).toBeVisible();
+});
+
+test('ESTIMATE-BILL-04: billing comparison remains disconnected and navigable to/from estimates', async ({ page }) => {
+  const forbidden: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/insurance/', '/billing/', '/wallet/', '/refund/',
+      '/payment/', '/patient/', '/health/'].some(s => request.url().includes(s))) {
+      forbidden.push(request.url());
+    }
+  });
+  await page.goto('/member/costs');
+  await page.getByRole('link', { name: 'صورتحساب‌ها' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'صورتحساب‌ها' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'برآورد پیش از خدمت در برابر صورتحساب پس از خدمت' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'برآورد هزینه' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', { name: 'مقایسه سندها — نیازمند برآورد و صورتحساب معتبر' })).toBeDisabled();
+  expect(forbidden).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});
