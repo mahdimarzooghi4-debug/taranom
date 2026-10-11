@@ -795,3 +795,58 @@ test('AI-DATA-04: AI data explanations remain disconnected across member navigat
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('URGENT-01: safety guidance, proposed referral and receipt are separate', async ({ page }) => {
+  await page.goto('/member/care');
+  await expect(page.getByRole('heading', { name: 'سه مرز ایمنی در احتمال فوریت پزشکی' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'مرزهای راهنمایی فوری و ارجاع موازی' });
+  await expect(list.getByRole('listitem')).toHaveCount(3);
+  for (const title of [
+    'راهنمایی غیرتشخیصی برای دریافت کمک فوری',
+    'درخواست ارجاع هم‌زمان به تیم بالینی مجاز',
+    'تأیید مستقل دریافت و پیگیری بالینی'
+  ]) await expect(list.getByText(title, { exact: true })).toBeVisible();
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+});
+
+test('URGENT-02: urgent assistance never waits for member coordination, coverage or dispatch', async ({ page }) => {
+  await page.goto('/member/care');
+  await expect(page.getByText(/در احتمال فوریت پزشکی، دریافت کمک فوری را/)).toBeVisible();
+  await expect(page.getByText(/منتظر هماهنگی، بیمه، پرداخت یا شکایت نمانید/)).toBeVisible();
+  await expect(page.getByText('هیچ ارجاع یا دریافت واقعی ثبت نشده است')).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'آغاز ارجاع پزشکی — نیازمند احراز اختیار و پروتکل بالینی معتبر'
+  })).toBeDisabled();
+});
+
+test('URGENT-03: paper record never claims actual delivery, diagnosis or 24-hour monitoring', async ({ page }) => {
+  await page.goto('/member/care');
+  const list = page.getByRole('list', { name: 'مرزهای راهنمایی فوری و ارجاع موازی' });
+  await expect(list.getByText(/داشتن یادداشت درخواست، به‌معنای ارسال، تحویل، دریافت یا درمان موفق نیست/)).toBeVisible();
+  await expect(page.getByText(/خدمت پایش شبانه‌روزی ارائه نمی‌کند/)).toBeVisible();
+  await expect(page.getByText(/هیچ هشدار شخصی‌سازی‌شده، تشخیص پزشکی یا تضمین رسیدگی صادر نشده است/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'بررسی رسید ارجاع بالینی — نیازمند تیم و سامانه واقعی'
+  })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /تشخیص|تجویز|ارجاع موفق|تأیید فوریت/ })).toHaveCount(0);
+});
+
+test('URGENT-04: safety explanation stays disconnected and keyboard/history safe', async ({ page }) => {
+  const prohibited: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/urgent/', '/emergency/', '/triage/', '/referral/', '/clinical/', '/ai/']
+      .some(x => request.url().includes(x))) prohibited.push(request.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'هماهنگی درمان' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'هماهنگی درمان' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'سه مرز ایمنی در احتمال فوریت پزشکی' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'سه مرز ایمنی در احتمال فوریت پزشکی' })).toBeVisible();
+  expect(prohibited).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

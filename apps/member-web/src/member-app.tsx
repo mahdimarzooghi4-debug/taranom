@@ -87,6 +87,20 @@ const careResponsibilitySteps = [
     restriction: 'هیچ مراجعه، برنامه مراقبتی یا وضعیت تکمیل خدمت تأیید نشده است.' },
 ] as const;
 
+// TRN-BIZ-034: urgent advice must never wait for an administrative
+// or clinical receipt. This is NOT active AI triage or emergency dispatch.
+const urgentSafetyLanes = [
+  { key: 'warning', label: 'راهنمایی غیرتشخیصی برای دریافت کمک فوری',
+    owner: 'در احتمال فوریت، از کمک فوری پزشکی مناسب بدون انتظار برای پاسخ سامانه استفاده شود.',
+    limit: 'هیچ ارزیابی خطر، شماره اورژانس منطقه‌ای یا پیام شخصی‌سازی‌شده ارائه نمی‌شود.' },
+  { key: 'referral', label: 'درخواست ارجاع هم‌زمان به تیم بالینی مجاز',
+    owner: 'ارجاع تخصصی و مسئولیت درمان تنها با تیم دارای مجوز و قرارداد واقعی قابل اجراست.',
+    limit: 'هیچ درخواست ارجاع واقعی صادر نشده و هیچ تیم کشیک یا کانال امن متصل نیست.' },
+  { key: 'receipt', label: 'تأیید مستقل دریافت و پیگیری بالینی',
+    owner: 'دریافت و قبول مسئولیت باید جدا از درخواست و با شواهد تیم درمانی مجاز احراز شود.',
+    limit: 'داشتن یادداشت درخواست، به‌معنای ارسال، تحویل، دریافت یا درمان موفق نیست.' }
+] as const;
+
 // TRN-BIZ-047 defines ownership and duties, never real approved health
 // advice, running programs, treatment plans or an assumed participation choice.
 const preventionResponsibilities = [
@@ -718,6 +732,37 @@ export function MemberApp() {
                   <p className="emergency-note">
                     در احتمال فوریت پزشکی، دریافت کمک فوری را به هماهنگی غیراضطراری یا پاسخ پزشک در سامانه موکول نکنید.
                   </p>
+                  <section aria-labelledby="urgent-safety-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">راهنمایی فوری و پیگیری متخصص، دو مسئولیت مستقل</p>
+                        <h2 id="urgent-safety-title">سه مرز ایمنی در احتمال فوریت پزشکی</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ ارجاع یا دریافت واقعی ثبت نشده است</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="مرزهای راهنمایی فوری و ارجاع موازی">
+                      {urgentSafetyLanes.map((lane) => (
+                        <article className="status-card" role="listitem" key={lane.key}>
+                          <p className="status-card-label">{lane.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{lane.owner}</p>
+                          <p>{lane.limit}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="urgent-no-service-warning">
+                      ترنم در این نسخه به سامانه اورژانس عمومی، شبکه پزشک کشیک یا
+                      مسیر ارسال و دریافت ارجاع متصل نیست و خدمت پایش شبانه‌روزی ارائه نمی‌کند.
+                      هیچ هشدار شخصی‌سازی‌شده، تشخیص پزشکی یا تضمین رسیدگی صادر نشده است.
+                      در احتمال فوریت، منتظر هماهنگی، بیمه، پرداخت یا شکایت نمانید.
+                    </p>
+                    <button type="button" disabled aria-describedby="urgent-no-service-warning">
+                      بررسی رسید ارجاع بالینی — نیازمند تیم و سامانه واقعی
+                    </button>
+                    <button type="button" disabled aria-describedby="urgent-no-service-warning">
+                      آغاز ارجاع پزشکی — نیازمند احراز اختیار و پروتکل بالینی معتبر
+                    </button>
+                  </section>
                 </section>
               ) : null}
               {page.key === 'support' ? (
