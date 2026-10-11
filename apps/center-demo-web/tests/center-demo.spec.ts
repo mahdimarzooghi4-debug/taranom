@@ -197,3 +197,113 @@ test('CENTER-HISTORY-05: network failure and new write clear stale history/old p
   await expect(page.getByRole('status').last()).toContainText('یکپارچگی داده تأیید نشد');
   await expect(page.getByRole('region', { name: 'رخدادهای صفحه فعلی' })).toHaveCount(0);
 });
+
+
+async function newSupport(page: import('@playwright/test').Page) {
+  const caseRef = unique('support-case'), memberRef = unique('member');
+  const evidenceRef = unique('evidence'), claimedSubmitterRef = unique('submitter');
+  await page.goto('/center-demo');
+  await page.getByLabel('پرونده آزمایشی').fill(caseRef);
+  await page.getByLabel('شناسه عضو فرضی').fill(memberRef);
+  await page.getByLabel('ارجاع مدرک تأییدنشده').fill(evidenceRef);
+  await page.getByLabel('ثبت‌کننده ادعایی').fill(claimedSubmitterRef);
+  await page.getByRole('button', { name: 'بازخوانی پرونده پشتیبانی آزمایشی' }).click();
+  await expect(page.getByTestId('support-status')).toContainText('PostgreSQL خوانده شد');
+  return { caseRef, memberRef, evidenceRef, claimedSubmitterRef };
+}
+test('SUPPORT-01: real PostgreSQL browser submission, follow-up and reread', async ({ page }) => {
+  const keys = await newSupport(page);
+  await page.getByRole('button', { name: 'ثبت درخواست اولیه آزمایشی' }).click();
+  await expect(page.getByTestId('support-status')).toContainText('فقط ارجاع آزمایشی ثبت شد');
+  const current = page.getByRole('region', { name: 'وضعیت پرونده پشتیبانی آزمایشی' });
+  await expect(current).toContainText('نسخه: 1');
+  await expect(current).toContainText('نارضایتی از خدمت پزشکی');
+  const note = unique('note');
+  await page.getByLabel('ارجاع یادداشت پیگیری تأییدنشده').fill(note);
+  await page.getByRole('button', { name: 'ثبت ارجاع پیگیری آزمایشی' }).click();
+  await expect(current).toContainText('نسخه: 2');
+  await expect(current).toContainText(note);
+  await expect(current).toContainText('شکایت رسمی: خیر');
+  await page.getByRole('button', { name: 'بازخوانی پرونده پشتیبانی آزمایشی' }).click();
+  await expect(current).toContainText('نسخه: 2');
+  await expect(current).toContainText('پیگیری‌های تأییدنشده: 1');
+  await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
+  expect(keys.caseRef).toContain('test:');
+});
+test('SUPPORT-02: read-only missing synthetic case and disallow real identifiers', async ({ request }) => {
+  const base = '/internal/demo/v1/support/';
+  const empty = await request.get(base + encodeURIComponent(unique('empty')));
+  expect(empty.status()).toBe(200);
+  const data = await empty.json();
+  expect(data.revision).toBe(0);
+  expect(data.followUpCount).toBe(0);
+  expect(data.syntheticOnly).toBe(true);
+  expect(data.complaintLegallySubmitted).toBe(false);
+  expect(data.insurerContacted).toBe(false);
+  expect((await request.get(base + 'real:complaint')).status()).toBe(400);
+  expect((await request.get(base + encodeURIComponent(unique('case')) + '?approved=true')).status()).toBe(400);
+});
+test('SUPPORT-03: original topic immutable, conflicts and replay preserve revision', async ({ request }) => {
+  const caseRef = unique('scope'), url = '/internal/demo/v1/support/' + encodeURIComponent(caseRef);
+  const payload = {
+    requestId: crypto.randomUUID(), expectedRevision: 0, action: 'SUBMIT_UNVERIFIED',
+    memberRef: unique('member'), topic: 'INSURANCE_COVERAGE_DISPUTE',
+    unverifiedEvidenceRef: unique('evidence'), claimedSubmitterRef: unique('submitter'),
+    originalSubmissionRequestId: '00000000-0000-0000-0000-000000000000',
+    claimedFollowUpActorRef: null, unverifiedFollowUpNoteRef: null
+  };
+  const first = await request.post(url + '/commands', { data: payload });
+  expect(first.status()).toBe(200);
+  expect((await first.json()).revision).toBe(1);
+  const replay = await request.post(url + '/commands', { data: payload });
+  expect(replay.status()).toBe(200);
+  expect((await replay.json()).outcome).toBe('Replayed');
+  expect((await request.post(url + '/commands', { data: {
+    ...payload, memberRef: unique('other')
+  } })).status()).toBe(409);
+  expect((await request.post(url + '/commands', { data: {
+    ...payload, requestId: crypto.randomUUID()
+  } })).status()).toBe(409);
+  const follow = { ...payload, requestId: crypto.randomUUID(), expectedRevision: 1,
+    action: 'FOLLOW_UP_UNVERIFIED', originalSubmissionRequestId: payload.requestId,
+    claimedFollowUpActorRef: unique('actor'), unverifiedFollowUpNoteRef: unique('note') };
+  expect((await request.post(url + '/commands', { data: follow })).status()).toBe(200);
+  const illegal = await request.post(url + '/commands', { data: {
+    ...follow, requestId: crypto.randomUUID(), expectedRevision: 2,
+    topic: 'MEDICAL_SERVICE_COMPLAINT'
+  }});
+  expect(illegal.status()).toBe(409);
+  const end = await (await request.get(url)).json();
+  expect(end.revision).toBe(2);
+  expect(end.followUpCount).toBe(1);
+  expect(end.topic).toBe('InsuranceCoverageDispute');
+  expect(end.insurerContacted).toBe(false);
+});
+test('SUPPORT-04: extra fields, wrong origin and free-text are not accepted', async ({ request }) => {
+  const path = '/internal/demo/v1/support/' + encodeURIComponent(unique('denied')) + '/commands';
+  const standard = {
+    requestId: crypto.randomUUID(), expectedRevision: 0, action: 'SUBMIT_UNVERIFIED',
+    memberRef: unique('member'), topic: 'MEDICAL_SERVICE_COMPLAINT',
+    unverifiedEvidenceRef: unique('evidence'), claimedSubmitterRef: unique('submitter'),
+    originalSubmissionRequestId: '00000000-0000-0000-0000-000000000000',
+    claimedFollowUpActorRef: null, unverifiedFollowUpNoteRef: null
+  };
+  const extra = await request.post(path, { data: {...standard, insuranceApproved: true} });
+  expect(extra.status()).toBe(400);
+  const text = await request.post(path, { data: {...standard, unverifiedEvidenceRef: 'patient name and actual diagnosis'} });
+  expect(text.status()).toBe(400);
+  const origin = await request.post(path, { data: standard, headers: {Origin: 'https://not-trusted.example'} });
+  expect(origin.status()).toBe(403);
+  expect((await origin.json()).memberAuthenticated).toBe(false);
+  expect((await (await request.get(path.replace('/commands',''))).json()).revision).toBe(0);
+});
+test('SUPPORT-05: backend network failure clears stale case and disables commands', async ({ page }) => {
+  await newSupport(page);
+  await page.getByRole('button', { name: 'ثبت درخواست اولیه آزمایشی' }).click();
+  await expect(page.getByRole('button', { name: 'ثبت ارجاع پیگیری آزمایشی' })).toBeEnabled();
+  await page.route('**/internal/demo/v1/support/**', route => route.abort());
+  await page.getByRole('button', { name: 'بازخوانی پرونده پشتیبانی آزمایشی' }).click();
+  await expect(page.getByTestId('support-status')).toContainText('هیچ وضعیت قبلی معتبر فرض نمی‌شود');
+  await expect(page.getByRole('button', { name: 'ثبت ارجاع پیگیری آزمایشی' })).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'وضعیت پرونده پشتیبانی آزمایشی' })).toHaveCount(0);
+});

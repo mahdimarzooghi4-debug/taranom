@@ -3,5 +3,6 @@
   <ItemGroup>
     <ProjectReference Include="../Taranom.ClinicalCenterJournal.Postgres/Taranom.ClinicalCenterJournal.Postgres.csproj" />
     <ProjectReference Include="../Taranom.ClinicalCenterGovernance/Taranom.ClinicalCenterGovernance.csproj" />
+    <ProjectReference Include="../Taranom.MemberGovernance/Taranom.MemberGovernance.csproj" />
   </ItemGroup>
 </Project>

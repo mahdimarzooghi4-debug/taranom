@@ -16,6 +16,7 @@ if (connection.Database != "taranom_sprint64_center" ||
 
 await using var dataSource = NpgsqlDataSource.Create(connection.ConnectionString);
 await PgClinicalCenterJournal.InitializeIsolatedTestSchemaAsync(dataSource);
+await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
 var store = new PgClinicalCenterJournal(dataSource);
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,6 +47,14 @@ app.MapGet("/internal/demo/v1/centers/{centerRef}/history",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CenterHistoryHttp.ListAsync);
 app.MapGet("/internal/demo/v1/centers/{centerRef}/versions/{version}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CenterHistoryHttp.AtVersionAsync);
+
+// Separate synthetic-only member support case; no actual member/insurer/provider.
+Taranom.CenterWorkflow.Demo.SupportHttp.Store =
+    new Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal(dataSource);
+app.MapGet("/internal/demo/v1/support/{caseRef}",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.ReadAsync);
+app.MapPost("/internal/demo/v1/support/{caseRef}/commands",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.WriteAsync);
 
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 app.UseDefaultFiles();

@@ -1,3 +1,4 @@
+import { MemberSupportDemo } from './member-support-demo';
 import { useEffect, useState } from 'react';
 
 type Doctor = { doctorRef: string; affiliation: 'PendingIndependentVerification' | 'Ended'; departmentRefs: string[] };
@@ -313,6 +314,7 @@ export function CenterDemo() {
           <p>تأیید مدیر: خیر | صلاحیت پزشکی: تأییدنشده | مجوز انتشار: خیر</p>
         </section>}
       </section>
+      <MemberSupportDemo />
       <footer>TRN-TECH-073/074 | پایگاه‌داده موقت | فقط محیط localhost | بدون احراز هویت یا پذیرش واقعی</footer>
     </main>
   </>;

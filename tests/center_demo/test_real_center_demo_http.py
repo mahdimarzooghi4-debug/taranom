@@ -140,9 +140,97 @@ def main():
     print("PASS: actual ASP.NET/PostgreSQL journal 4-step center case, replay, stale and fail-close")
 
 
+
+
+def support_call(case_ref, command_data=None, origin=None):
+    address = "http://127.0.0.1:4320/internal/demo/v1/support/" + case_ref
+    headers = {"Accept": "application/json"}
+    if command_data is not None:
+        address += "/commands"
+        headers["Content-Type"] = "application/json"
+    if origin:
+        headers["Origin"] = origin
+    request = Request(address, method="POST" if command_data else "GET",
+                      data=json.dumps(command_data).encode() if command_data else None,
+                      headers=headers)
+    try:
+        with urlopen(request, timeout=8) as response:
+            return response.status, json.loads(response.read())
+    except HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
+def support_payload(case_ref, member, evidence, submitter, req_id,
+                    revision=0, action="SUBMIT_UNVERIFIED",
+                    topic="MEDICAL_SERVICE_COMPLAINT", original=None,
+                    actor=None, note=None):
+    return {"requestId": req_id, "expectedRevision": revision,
+            "action": action, "memberRef": member, "topic": topic,
+            "unverifiedEvidenceRef": evidence, "claimedSubmitterRef": submitter,
+            "originalSubmissionRequestId": original or "00000000-0000-0000-0000-000000000000",
+            "claimedFollowUpActorRef": actor, "unverifiedFollowUpNoteRef": note}
+
+
+def verify_support():
+    case_ref = "test:support-" + uuid4().hex
+    member, evidence, submitter = ["test:" + uuid4().hex for _ in range(3)]
+    code, empty = support_call(case_ref)
+    assert code == 200 and empty["revision"] == 0 and empty["followUpCount"] == 0
+    assert empty["memberAuthenticated"] is False
+    assert empty["complaintLegallySubmitted"] is False
+    assert empty["insurerContacted"] is False
+    assert empty["clinicalReviewCompleted"] is False
+    assert empty["nationalReleaseAllowed"] is False
+
+    initial_id = str(uuid4())
+    original = support_payload(case_ref, member, evidence, submitter, initial_id)
+    code, created = support_call(case_ref, original)
+    assert code == 200 and created["revision"] == 1
+    assert created["outcome"] == "RecordedUnverified"
+    assert created["topic"] == "MedicalServiceComplaint"
+    assert created["originalRequestId"] == initial_id
+    code, replay = support_call(case_ref, original)
+    assert code == 200 and replay["outcome"] == "Replayed" and replay["revision"] == 1
+    code, collision = support_call(case_ref, dict(original, memberRef="test:different"))
+    assert code == 409 and collision["outcome"] == "ConflictingReplay"
+    code, stale = support_call(case_ref, dict(original, requestId=str(uuid4())))
+    assert code == 409 and stale["outcome"] == "StaleRevision"
+
+    follow_id = str(uuid4())
+    note = "test:note-" + uuid4().hex
+    follow = support_payload(case_ref, member, evidence, submitter, follow_id, 1,
+                             "FOLLOW_UP_UNVERIFIED", original=initial_id,
+                             actor="test:claimed-actor", note=note)
+    code, logged = support_call(case_ref, follow)
+    assert code == 200 and logged["revision"] == 2 and logged["followUpCount"] == 1
+    assert logged["followUps"][0]["noteRef"] == note
+    code, after = support_call(case_ref)
+    assert code == 200 and after["revision"] == 2
+    assert after["followUps"][0]["revision"] == 2
+    code, wrong_topic = support_call(case_ref, dict(
+        follow, requestId=str(uuid4()), expectedRevision=2,
+        topic="INSURANCE_COVERAGE_DISPUTE"))
+    assert code == 409 and wrong_topic["outcome"] == "ScopeMismatch"
+    code, rejected = support_call(case_ref, dict(follow, requestId=str(uuid4()),
+                                                  expectedRevision=2, clinicalApproved=True))
+    assert code == 400 and rejected["clinicalReviewCompleted"] is False
+    code, origin_denied = support_call(case_ref, dict(follow, requestId=str(uuid4()),
+                                                      expectedRevision=2),
+                                       origin="https://external.invalid")
+    assert code == 403 and origin_denied["nationalReleaseAllowed"] is False
+    code, real_denied = support_call("real:complaint")
+    assert code == 400 and real_denied["memberAuthenticated"] is False
+    code, independent = support_call("test:independent-" + uuid4().hex)
+    assert code == 200 and independent["revision"] == 0
+    code, final = support_call(case_ref)
+    assert code == 200 and final["revision"] == 2
+    print("PASS: canonical synthetic support submit/followup persisted, replay-safe, rights denied")
+
+
 if __name__ == "__main__":
     try:
         main()
+        verify_support()
     except Exception:
         print("DENIED: EPHEMERAL_CENTER_HTTP_INTEGRATION_FAILED", file=sys.stderr)
         raise SystemExit(1)
