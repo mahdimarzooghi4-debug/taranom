@@ -34,14 +34,32 @@ app.Use(async (context, next) =>
     await next();
 });
 
+CenterHttp.Store = store;
 app.MapGet("/internal/demo/v1/centers/{centerRef}",
-    (Func<string, Task<IResult>>)(async centerRef =>
+    (Func<HttpContext, Task<IResult>>)CenterHttp.ReadAsync);
+app.MapPost("/internal/demo/v1/centers/{centerRef}/commands",
+    (Func<HttpContext, Task<IResult>>)CenterHttp.WriteAsync);
+
+app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.MapFallbackToFile("index.html");
+app.Run();
+
+// Handler methods deliberately use HttpContext RequestDelegate bindings;
+// this avoids generated analyzer fragility for captured route lambdas.
+internal static class CenterHttp
+{
+    internal static PgClinicalCenterJournal Store { get; set; } = null!;
+
+    internal static async Task<IResult> ReadAsync(HttpContext context)
     {
+        var centerRef = context.Request.RouteValues["centerRef"]?.ToString();
         if (!ClinicalCenterJournal.IsSyntheticRef(centerRef))
             return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_REFERENCE");
         try
         {
-            var snapshot = await store.ReadAsync(centerRef);
+            var snapshot = await Store.ReadAsync(centerRef!);
             return Results.Json(SnapshotDto.From(snapshot, "READ"));
         }
         catch (Exception e) when (e is NpgsqlException or InvalidOperationException
@@ -49,11 +67,11 @@ app.MapGet("/internal/demo/v1/centers/{centerRef}",
         {
             return Denied(StatusCodes.Status503ServiceUnavailable, "TEST_JOURNAL_UNVERIFIABLE");
         }
-    }));
+    }
 
-app.MapPost("/internal/demo/v1/centers/{centerRef}/commands",
-    (Func<HttpContext, string, Task<IResult>>)(async (context, centerRef) =>
+    internal static async Task<IResult> WriteAsync(HttpContext context)
     {
+        var centerRef = context.Request.RouteValues["centerRef"]?.ToString();
         if (!ClinicalCenterJournal.IsSyntheticRef(centerRef))
             return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_REFERENCE");
         var origin = context.Request.Headers.Origin.ToString();
@@ -71,10 +89,10 @@ app.MapPost("/internal/demo/v1/centers/{centerRef}/commands",
             var domain = new CenterCommand(command.Value.RequestId,
                 command.Value.ExpectedVersion, command.Value.Kind, centerRef, centerRef,
                 command.Value.DepartmentRef, command.Value.DoctorRef,
-                // These are synthetic evidence conditions in a test-only port.
-                // They MUST NEVER be mistaken for authenticated manager authority.
+                // Only a synthetic test harness may assert these inputs; no actual
+                // manager or medical professional is ever authenticated here.
                 CenterEvidence.Confirmed, CenterEvidence.Confirmed);
-            var change = await store.ApplyAsync(centerRef, domain);
+            var change = await Store.ApplyAsync(centerRef!, domain);
             var status = change.Outcome switch
             {
                 CenterOutcome.Applied or CenterOutcome.Replayed => StatusCodes.Status200OK,
@@ -92,19 +110,14 @@ app.MapPost("/internal/demo/v1/centers/{centerRef}/commands",
         {
             return Denied(StatusCodes.Status503ServiceUnavailable, "TEST_JOURNAL_UNVERIFIABLE");
         }
-    }));
+    }
 
-app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
-app.UseDefaultFiles();
-app.UseStaticFiles();
-app.MapFallbackToFile("index.html");
-app.Run();
-
-static IResult Denied(int status, string code) =>
-    Results.Json(new { contract = "TRN-TECH-073", outcome = code,
-        syntheticOnly = true, managerAuthenticated = false,
-        professionalQualificationVerified = false, nationalReleaseAllowed = false },
-        statusCode: status);
+    private static IResult Denied(int status, string code) =>
+        Results.Json(new { contract = "TRN-TECH-073", outcome = code,
+            syntheticOnly = true, managerAuthenticated = false,
+            professionalQualificationVerified = false, nationalReleaseAllowed = false },
+            statusCode: status);
+}
 
 internal readonly record struct TestCommand(
     Guid RequestId, long ExpectedVersion, CenterCommandKind Kind,
