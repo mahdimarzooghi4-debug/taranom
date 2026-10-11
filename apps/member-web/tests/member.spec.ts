@@ -1196,3 +1196,60 @@ test('REVENUE-SOURCES-04: member wallet source preview remains private and disco
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('CARE-CONTINUITY-01: care route separates follow-up, optional prevention and clinician treatment decisions', async ({ page }) => {
+  await page.goto('/member/care');
+  await expect(page.getByRole('heading', { name: 'پیوستگی ایمن پیگیری درمان و پیشگیری' })).toBeVisible();
+  const stages = page.getByRole('list', { name: 'مراحل مستقل پیگیری و مشارکت عضو' });
+  await expect(stages.getByRole('listitem')).toHaveCount(3);
+  for (const name of [
+    'پیگیری تجربه عضو پس از خدمت، بدون ارجاع پزشکی خودکار',
+    'انتخاب مستقل عضو برای آموزش سلامت یا پیشگیری',
+    'تصمیم متخصص مجاز درباره ادامه مراقبت و برنامه درمانی'
+  ]) await expect(stages.getByText(name, { exact: true })).toBeVisible();
+  await expect(stages.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+});
+
+test('CARE-CONTINUITY-02: assumed paid/consent status never causes clinical plan or monitoring', async ({ page }) => {
+  await page.goto('/member/care?paid=true&follow_up=completed&consent=yes&care=active');
+  await expect(page.getByText('هیچ مشارکت یا پیگیری واقعی آغاز نشده است')).toBeVisible();
+  await expect(page.getByText(/یادداشت تماس هماهنگ‌کننده یا ارجاع ادعایی به متخصص، اثبات ملاقات/)).toBeVisible();
+  await expect(page.getByText(/هیچ یادآوری، پایش سلامت، پیام شخصی‌سازی‌شده یا تغییر خودکار مراقبت فعال نیست/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'بررسی انتخاب مشارکت — نیازمند رضایت مستقل عضو'
+  })).toBeDisabled();
+});
+
+test('CARE-CONTINUITY-03: explicit member control and research separation preserve urgent care', async ({ page }) => {
+  await page.goto('/member/care');
+  await expect(page.getByText(/عضو می‌تواند مشارکت را نپذیرد/)).toBeVisible();
+  await expect(page.getByText(/برای استفاده پژوهشی یا آموزش هوش مصنوعی رضایت مستقل/)).toBeVisible();
+  await expect(page.getByText(/اطلاعات سلامت عضو در اختیار حامی اشتراک یا کارفرما/)).toBeVisible();
+  await expect(page.getByText('در احتمال فوریت پزشکی، دریافت کمک فوری را به هماهنگی غیراضطراری یا پاسخ پزشک در سامانه موکول نکنید.')).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'بررسی پیگیری پس از خدمت — نیازمند هویت و مرجع درمانی واقعی'
+  })).toBeDisabled();
+});
+
+test('CARE-CONTINUITY-04: source-free care view cannot call patient integrations or store private data', async ({ page }) => {
+  const forbidden: string[] = [];
+  page.on('request', req => {
+    if (['/api/', '/care/', '/clinical/', '/health/', '/identity/',
+      '/consent/', '/referral/', '/follow-up/', '/patient/']
+      .some(s => req.url().includes(s))) forbidden.push(req.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'هماهنگی درمان' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'هماهنگی درمان' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'پیوستگی ایمن پیگیری درمان و پیشگیری' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', {
+    name: 'بررسی انتخاب مشارکت — نیازمند رضایت مستقل عضو'
+  })).toBeDisabled();
+  expect(forbidden).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

@@ -270,6 +270,26 @@ const sixIncomeOriginStages = [
     detail: 'حق اشتراک جزئی از منبع ششم است، نه منبع هفتم و نه واریز مستقیم به کیف پول پرداخت‌کننده.' }
 ] as const;
 
+// TRN-BIZ-046/047: read-only explanation of OPTIONAL prevention after
+// care coordination, never a medical visit, member consent or automated plan.
+const postServiceContinuityStages = [
+  {
+    key: 'contact',
+    title: 'پیگیری تجربه عضو پس از خدمت، بدون ارجاع پزشکی خودکار',
+    authority: 'ترنم فقط هماهنگی غیرتشخیصی و ارتباط احتمالی با عضو را تسهیل می‌کند؛ تماس یا تکمیل خدمت واقعی ثبت نشده است.'
+  },
+  {
+    key: 'choice',
+    title: 'انتخاب مستقل عضو برای آموزش سلامت یا پیشگیری',
+    authority: 'مشارکت اختیاری نیازمند انتخاب مشخص و جاری عضو، محتوای علمی معتبر و حقوق قانونی داده است؛ عضویت پولی به‌معنی رضایت نیست.'
+  },
+  {
+    key: 'clinician',
+    title: 'تصمیم متخصص مجاز درباره ادامه مراقبت و برنامه درمانی',
+    authority: 'ارزیابی، ادامه مراقبت و تغییر برنامه بالینی فقط در اختیار متخصص قانونی است؛ یادداشت هماهنگی یا سند ادعایی، مجوز درمان نیست.'
+  }
+] as const;
+
 // TRN-BIZ-035: a member self-view, clinician-limited disclosure and
 // legal/emergency exception are DIFFERENT authority channels. None active.
 const recordVisibilityLanes = [
@@ -1016,6 +1036,37 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="care-safety-limit">
                     درخواست هماهنگی — نیازمند هویت و مجوز واقعی
                   </button>
+                  <section aria-labelledby="post-service-prevention-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">هماهنگی پس از خدمت از مشارکت در مراقبت جداست</p>
+                        <h2 id="post-service-prevention-title">پیوستگی ایمن پیگیری درمان و پیشگیری</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ مشارکت یا پیگیری واقعی آغاز نشده است</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="مراحل مستقل پیگیری و مشارکت عضو">
+                      {postServiceContinuityStages.map((stage) => (
+                        <article className="status-card" role="listitem" key={stage.key}>
+                          <p className="status-card-label">{stage.title}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{stage.authority}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="post-service-continuity-limit">
+                      یادداشت تماس هماهنگ‌کننده یا ارجاع ادعایی به متخصص، اثبات ملاقات،
+                      شروع برنامه مراقبتی یا رضایت عضو نیست. عضو می‌تواند مشارکت را نپذیرد؛
+                      هیچ یادآوری، پایش سلامت، پیام شخصی‌سازی‌شده یا تغییر خودکار مراقبت فعال نیست.
+                      برای استفاده پژوهشی یا آموزش هوش مصنوعی رضایت مستقل و مبنای قانونی لازم است.
+                      اطلاعات سلامت عضو در اختیار حامی اشتراک یا کارفرما قرار نمی‌گیرد.
+                    </p>
+                    <button type="button" disabled aria-describedby="post-service-continuity-limit">
+                      بررسی پیگیری پس از خدمت — نیازمند هویت و مرجع درمانی واقعی
+                    </button>
+                    <button type="button" disabled aria-describedby="post-service-continuity-limit">
+                      بررسی انتخاب مشارکت — نیازمند رضایت مستقل عضو
+                    </button>
+                  </section>
                   <p className="emergency-note">
                     در احتمال فوریت پزشکی، دریافت کمک فوری را به هماهنگی غیراضطراری یا پاسخ پزشک در سامانه موکول نکنید.
                   </p>
