@@ -107,10 +107,13 @@ def scan(root: Path, *, history: bool = True) -> dict:
         # Git rev-list names one representative path for a blob. A historical
         # sensitive name can otherwise be missed when the exact same blob was
         # also committed at a harmless path. Inspect all logged path changes.
+        # Git's default text path display quotes and escapes filenames with
+        # newlines, quotes or non-ASCII bytes. NUL-delimited paths are exact.
         historical_paths = _git(root, 'log', '--all', '--format=',
-                                '--name-only', '--no-renames').decode('utf8', 'replace')
+                                '--name-only', '-z', '--no-renames')
         seen_paths = set()
-        for old_path in historical_paths.splitlines():
+        for old_path_bytes in historical_paths.split(b'\x00'):
+            old_path = old_path_bytes.decode('utf8', 'surrogateescape')
             if old_path and old_path not in seen_paths:
                 seen_paths.add(old_path)
                 if is_sensitive_path(old_path):
@@ -195,7 +198,9 @@ def main() -> int:
           'No credentials are printed; limited reachable-ref scan is NOT legal clearance.')
     if report['status'] != 'PASS_LIMITED_SCOPE':
         for finding in report['findings']:
-            print(f"DENIED {finding['rule']}: {finding.get('path', 'scan')}", file=sys.stderr)
+            print(f"DENIED {finding['rule']}: "
+                  f"{json.dumps(finding.get('path', 'scan'), ensure_ascii=True)}",
+                  file=sys.stderr)
         return 1
     return 0
 

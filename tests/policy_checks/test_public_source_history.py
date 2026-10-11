@@ -123,6 +123,15 @@ class PublicSourceHistoryGuardTests(unittest.TestCase):
         result = scan(self.root)
         self.assertIn('HISTORICAL_SENSITIVE_PATH', self.finding_rules(result))
 
+    def test_historical_sensitive_path_with_embedded_newline_is_detected(self) -> None:
+        self.commit('safe-alias.txt', 'same harmless text')
+        historical_path = 'odd\nfolder/.env.production'
+        self.commit(historical_path, 'same harmless text')
+        self.git('rm', historical_path)
+        self.git('commit', '-qm', 'Remove newline-named sensitive file')
+        result = scan(self.root)
+        self.assertIn('HISTORICAL_SENSITIVE_PATH', self.finding_rules(result))
+
     def test_other_fetched_branch_reachable_is_scanned(self) -> None:
         self.git('checkout', '-qb', 'synthetic-other-branch')
         self.commit('secret.txt', 'gho_' + 'K' * 35)
