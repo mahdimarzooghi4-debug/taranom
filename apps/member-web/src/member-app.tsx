@@ -47,6 +47,31 @@ const costShares = [
   { key: 'member', label: 'سهم احتمالی عضو', owner: 'اسناد معتبر نهایی مراجع مربوط' },
 ] as const;
 
+// TRN-BIZ-051/052: explanatory, not an actual cost estimate, consent
+// signature, binding choice, credit authorisation or active member session.
+const costChoiceContinuityLanes = [
+  {
+    key: 'source',
+    label: 'نسخه برآورد و منابع مستقل پنج سهم',
+    detail: 'هر هزینه و سهم احتمالی بیمه، اعتبار و عضو باید به نسخه و منشأ مجاز همان برآورد وابسته باشد.'
+  },
+  {
+    key: 'choice',
+    label: 'آگاهی و انتخاب اعلام‌شده عضو',
+    detail: 'ثبت احتمالی آگاهی یا درخواست توضیح، فقط درباره همان نسخه نشان‌داده‌شده است؛ انتخاب یا تأیید واقعی ثبت نشده است.'
+  },
+  {
+    key: 'change',
+    label: 'بازبینی مستقل پس از تغییر یا اختلاف',
+    detail: 'تغییر نسخه، منبع، سهم، اطلاعات نامعلوم یا مورد اختلاف، انتخاب نسخه قدیمی را خودکار به نسخه جدید منتقل نمی‌کند.'
+  },
+  {
+    key: 'authority',
+    label: 'رضایت درمانی و تعهد مالی رسمی جداگانه',
+    detail: 'رضایت بالینی با مرجع درمانی مجاز و تعهد هزینه و پرداخت با سند و مرجع قانونی خود معتبر می‌شوند؛ برآورد به‌تنهایی مجوز هیچ‌کدام نیست.'
+  }
+] as const;
+
 // Post-service source categories are independent from the pre-service estimate.
 // This disconnected shell has NO invoices, issuers, insured shares or credit.
 const billingSources = [
@@ -688,6 +713,39 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="cost-awareness-limits">
                     ثبت آگاهی و انتخاب — نیازمند اتصال امن
                   </button>
+                  <section aria-labelledby="cost-choice-continuity-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">نسخه جدید برآورد با انتخاب قبلی یکسان نیست</p>
+                        <h2 id="cost-choice-continuity-title">پیوستگی آگاهی عضو پس از تغییر هزینه</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ انتخاب یا نسخه‌ای تأیید نشده است</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="مرزهای مستقل آگاهی و تغییر برآورد">
+                      {costChoiceContinuityLanes.map((lane) => (
+                        <article className="status-card" role="listitem" key={lane.key}>
+                          <p className="status-card-label">{lane.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{lane.detail}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="cost-choice-continuity-limit">
+                      مبلغ نامعلوم صفر نیست و عدد یا پوشش مورد اختلاف معتبر فرض نمی‌شود.
+                      رضایت قبلی برای یک برآورد، تعهد مالی یا رضایت درمانی امضاشده نیست؛
+                      هیچ انتخاب قبلی به برآورد تازه منتقل نشده و هیچ کیف پولی برداشت یا مسدود نمی‌شود.
+                      کارفرما یا نهاد حامی با پرداخت اشتراک حق مشاهده هزینه درمان عضو را پیدا نمی‌کند.
+                    </p>
+                    <button type="button" disabled aria-describedby="cost-choice-continuity-limit">
+                      بررسی تغییرات نسخه برآورد — نیازمند اسناد و عضو واقعی
+                    </button>
+                    <button type="button" disabled aria-describedby="cost-choice-continuity-limit">
+                      ثبت انتخاب جدید — نیازمند نمایش معتبر و احراز هویت
+                    </button>
+                    <p className="emergency-note">
+                      در فوریت پزشکی، دریافت کمک درمانی را به بررسی برآورد، انتخاب هزینه یا تأیید مالی موکول نکنید.
+                    </p>
+                  </section>
                 </section>
               ) : null}
               {page.key === 'billing' ? (

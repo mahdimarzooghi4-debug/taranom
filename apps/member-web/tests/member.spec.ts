@@ -963,3 +963,60 @@ test('INSURANCE-HANDOFF-04: no private invoice/insurer requests or persistent da
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('COST-CONTINUITY-01: five-source estimate and four independent choice safeguards are shown', async ({ page }) => {
+  await page.goto('/member/costs');
+  await expect(page.getByRole('heading', { name: 'پیوستگی آگاهی عضو پس از تغییر هزینه' })).toBeVisible();
+  const list = page.getByRole('list', { name: 'مرزهای مستقل آگاهی و تغییر برآورد' });
+  await expect(list.getByRole('listitem')).toHaveCount(4);
+  for (const name of [
+    'نسخه برآورد و منابع مستقل پنج سهم',
+    'آگاهی و انتخاب اعلام‌شده عضو',
+    'بازبینی مستقل پس از تغییر یا اختلاف',
+    'رضایت درمانی و تعهد مالی رسمی جداگانه'
+  ]) await expect(list.getByText(name, { exact: true })).toBeVisible();
+  await expect(list.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(4);
+});
+
+test('COST-CONTINUITY-02: revising estimate never carries former choice to binding consent', async ({ page }) => {
+  await page.goto('/member/costs?old_choice=accepted&estimate_revision=42&payment=approved');
+  await expect(page.getByText('هیچ انتخاب یا نسخه‌ای تأیید نشده است')).toBeVisible();
+  await expect(page.getByText(/انتخاب نسخه قدیمی را خودکار به نسخه جدید منتقل نمی‌کند/)).toBeVisible();
+  await expect(page.getByText(/هیچ انتخاب قبلی به برآورد تازه منتقل نشده/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'ثبت انتخاب جدید — نیازمند نمایش معتبر و احراز هویت'
+  })).toBeDisabled();
+});
+
+test('COST-CONTINUITY-03: missing and disputed amounts, sponsor rights and emergency safety never inferred', async ({ page }) => {
+  await page.goto('/member/costs');
+  await expect(page.getByText(/مبلغ نامعلوم صفر نیست و عدد یا پوشش مورد اختلاف معتبر فرض نمی‌شود/)).toBeVisible();
+  await expect(page.getByText(/کارفرما یا نهاد حامی با پرداخت اشتراک حق مشاهده هزینه درمان عضو/)).toBeVisible();
+  await expect(page.getByText(/در فوریت پزشکی، دریافت کمک درمانی را به بررسی برآورد/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'بررسی تغییرات نسخه برآورد — نیازمند اسناد و عضو واقعی'
+  })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /صدور تعهد|برداشت کیف پول|تأیید درمان قطعی/ })).toHaveCount(0);
+});
+
+test('COST-CONTINUITY-04: preview remains disconnected and back-forward navigation accessible', async ({ page }) => {
+  const calls: string[] = [];
+  page.on('request', req => {
+    if (['/api/', '/cost/', '/estimate/', '/wallet/', '/insurance/', '/payment/',
+      '/consent/', '/health/'].some(x => req.url().includes(x))) calls.push(req.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'برآورد هزینه' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'برآورد هزینه' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'پیوستگی آگاهی عضو پس از تغییر هزینه' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', {
+    name: 'ثبت انتخاب جدید — نیازمند نمایش معتبر و احراز هویت'
+  })).toBeDisabled();
+  expect(calls).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});
