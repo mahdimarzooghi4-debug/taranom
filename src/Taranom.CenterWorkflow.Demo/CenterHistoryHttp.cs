@@ -1,6 +1,7 @@
 using System.Globalization;
 using Npgsql;
 using Taranom.ClinicalCenterGovernance;
+using CenterReducer = global::Taranom.ClinicalCenterGovernance.ClinicalCenterJournal;
 
 namespace Taranom.CenterWorkflow.Demo;
 
@@ -13,7 +14,7 @@ internal static class CenterHistoryHttp
     internal static async Task<IResult> ListAsync(HttpContext context)
     {
         var center = context.Request.RouteValues["centerRef"]?.ToString();
-        if (!ClinicalCenterJournal.IsSyntheticRef(center))
+        if (!CenterReducer.IsSyntheticRef(center))
             return Denied(400, "INVALID_TEST_REFERENCE");
 
         var query = context.Request.Query;
@@ -75,7 +76,7 @@ internal static class CenterHistoryHttp
     {
         var center = context.Request.RouteValues["centerRef"]?.ToString();
         var versionText = context.Request.RouteValues["version"]?.ToString();
-        if (!ClinicalCenterJournal.IsSyntheticRef(center))
+        if (!CenterReducer.IsSyntheticRef(center))
             return Denied(400, "INVALID_TEST_REFERENCE");
         if (context.Request.Query.Count != 0 ||
             !ParseNonnegative(versionText, out var version))
@@ -90,7 +91,7 @@ internal static class CenterHistoryHttp
             foreach (var evt in latest.Events)
             {
                 if (evt.Version > version) break;
-                var result = ClinicalCenterJournal.Apply(past, evt.Command);
+                var result = CenterReducer.Apply(past, evt.Command);
                 if (result.Outcome != CenterOutcome.Applied ||
                     result.Snapshot.Version != evt.Version)
                     return Denied(503, "TEST_HISTORY_UNVERIFIABLE");
