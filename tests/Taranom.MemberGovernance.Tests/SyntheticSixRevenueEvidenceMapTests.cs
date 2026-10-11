@@ -271,7 +271,8 @@ public sealed class SyntheticSixRevenueEvidenceMapTests
         var all = Six();
         var forward = Map(all);
         var reverse = Map(all.Reverse().ToArray());
-        Assert.Equal(forward, reverse);
+        Assert.Equal(forward.State, reverse.State);
+        Assert.Equal(forward.Sources.ToArray(), reverse.Sources.ToArray());
         Assert.False(reverse.EqualShareDistributionExecuted);
     }
 
