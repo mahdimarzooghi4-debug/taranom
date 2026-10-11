@@ -91,7 +91,7 @@ internal static class ReleaseDenialSource
                 {
                     var code = entry.GetString();
                     if (string.IsNullOrWhiteSpace(code) || code.Length > 100 ||
-                        !code.All(c => char.IsAsciiLetterUpper(c) || c == '_') ||
+                        !code.All(c => char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c) || c == '_') ||
                         codes.Contains(code, StringComparer.Ordinal))
                         return null;
                     codes.Add(code);

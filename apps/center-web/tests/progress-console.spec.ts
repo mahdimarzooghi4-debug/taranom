@@ -1,10 +1,16 @@
 import { expect, test } from '@playwright/test';
 import { resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 // Read-only evidence dashboard, generated offline from the public DRAFT
 // capability registry; no member data, credentials, provider claims or API.
-const dashboard = pathToFileURL(resolve(process.cwd(), 'TestResults/sprint61-epic-console.html')).href;
+// Require precisely one generated public DRAFT console; future Sprint names
+// cannot silently point to an old artifact or an absent file.
+const results = resolve(process.cwd(), 'TestResults');
+const candidates = readdirSync(results).filter(name => /^sprint\\d+-epic-console\\.html$/.test(name));
+if (candidates.length !== 1) throw new Error('AMBIGUOUS_OR_MISSING_EPIC_CONSOLE');
+const dashboard = pathToFileURL(resolve(results, candidates[0])).href;
 
 test('PROGRESS-01: local dashboard displays full draft scope and DENIED admission', async ({ page }) => {
   await page.goto(dashboard);
