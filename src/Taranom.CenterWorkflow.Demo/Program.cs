@@ -32,6 +32,34 @@ app.Use(async (context, next) =>
         "default-src 'none'; base-uri 'none'; form-action 'none'; " +
         "object-src 'none'; frame-src 'none'; script-src 'self'; " +
         "style-src 'self'; img-src 'self'; connect-src 'self'";
+    // Browser same-origin is NOT authentication. This test-only server must
+    // reject alternate Host values that could otherwise allow DNS rebinding.
+    // No real reverse proxy or forwarded-header trust has been authorized.
+    var host = context.Request.Host;
+    var loopbackHost =
+        (string.Equals(host.Host, "127.0.0.1", StringComparison.Ordinal) ||
+         string.Equals(host.Host, "localhost", StringComparison.OrdinalIgnoreCase)) &&
+        host.Port == 4320;
+    var forwardedAuthority = context.Request.Headers.ContainsKey("Forwarded") ||
+        context.Request.Headers.ContainsKey("X-Forwarded-Host") ||
+        context.Request.Headers.ContainsKey("X-Forwarded-Proto") ||
+        context.Request.Headers.ContainsKey("X-Forwarded-For");
+    if (!loopbackHost || forwardedAuthority)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        context.Response.ContentType = "application/json; charset=utf-8";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            contract = "TRN-TECH-077",
+            outcome = "UNTRUSTED_LOOPBACK_AUTHORITY",
+            syntheticOnly = true,
+            memberAuthenticated = false,
+            managerAuthenticated = false,
+            clinicalReviewCompleted = false,
+            nationalReleaseAllowed = false
+        });
+        return;
+    }
     await next();
 });
 
@@ -64,7 +92,9 @@ app.MapGet("/member-demo/", () =>
         "member-demo", "index.html"), "text/html; charset=utf-8"));
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.MapFallbackToFile("index.html");
+// Unknown paths MUST NOT silently render the center browser page.
+// Explicit root default file and explicit member entrypoint remain available.
+app.MapFallback(() => Results.NotFound());
 app.Run();
 
 // Handler methods deliberately use HttpContext RequestDelegate bindings;

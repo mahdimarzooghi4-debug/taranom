@@ -46,6 +46,99 @@ def verify_split_browser_entrypoints():
     print("PASS: separate real center/member HTML entrypoints on identical localhost HTTP host")
 
 
+
+def verify_host_and_static_route_integrity():
+    """Actual Kestrel Host validation, forwarded-authority denial and 404 routing."""
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError
+    base = "http://127.0.0.1:4320"
+    tests = (
+        ("/", {"Host": "attacker.example:4320"}),
+        ("/member-demo/", {"Host": "attacker.example:4320"}),
+        ("/internal/demo/v1/support/test:host-attacker", {"Host": "attacker.example:4320"}),
+        ("/internal/demo/v1/centers/test:host-attacker", {"Host": "attacker.example:4320"}),
+        ("/internal/demo/v1/centers/test:forwarded", {"X-Forwarded-Host": "attacker.example"}),
+        ("/internal/demo/v1/support/test:forwarded", {"Forwarded": "host=attacker.example"}),
+        ("/member-demo/", {"X-Forwarded-Proto": "https"}),
+        ("/", {"X-Forwarded-For": "198.51.100.8"}),
+    )
+    for path, headers in tests:
+        req = Request(base + path, headers=headers)
+        try:
+            with urlopen(req, timeout=8) as response:
+                raise AssertionError("INVALID_AUTHORITY_ACCEPTED:" + str(response.status))
+        except HTTPError as denied:
+            assert denied.code == 403, (path, headers, denied.code)
+            payload = json.loads(denied.read())
+            assert payload["outcome"] == "UNTRUSTED_LOOPBACK_AUTHORITY"
+            assert payload["memberAuthenticated"] is False
+            assert payload["managerAuthenticated"] is False
+            assert payload["nationalReleaseAllowed"] is False
+            assert denied.headers.get("Cache-Control") == "no-store"
+            assert "Access-Control-Allow-Origin" not in denied.headers
+
+    for path in (
+        "/member-demo/missing-route", "/real-member",
+        "/member", "/center/administrator", "/api/v1/health-records",
+        "/login", "/internal/unknown", "/internal/demo/v1/clinical/records",
+    ):
+        try:
+            with urlopen(base + path, timeout=8) as response:
+                raise AssertionError("UNKNOWN_ROUTE_ACCEPTED:" + path)
+        except HTTPError as denied:
+            assert denied.code == 404, (path, denied.code)
+            body = denied.read().decode("utf-8")
+            assert "گردش آزمایشی مرکز" not in body
+            assert "پنل آزمایشی پشتیبانی عضو" not in body
+    print("PASS: all hostile Host/Forwarded authority rejected, unknown paths deny 404")
+
+
+def verify_true_postgres_concurrency():
+    """Independent parallel HTTP commands must settle at one durable revision."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        case_ref = "test:race-center-" + uuid4().hex
+        one = command(0, "DEFINE_DEPARTMENT", department="test:dep-one")
+        two = command(0, "DEFINE_DEPARTMENT", department="test:dep-two")
+        completed = list(pool.map(
+            lambda cmd: call(case_ref + "/commands", cmd), [one, two]))
+        assert sorted(code for code, _, _ in completed) == [200, 409]
+        assert {payload["outcome"] for _, _, payload in completed} == {
+            "Applied", "StaleRevision"
+        }
+        status, _, state = call(case_ref)
+        assert status == 200 and state["currentVersion"] == 1
+        assert state["eventCount"] == 1
+        assert len(state["departments"]) == 1
+
+        support_case = "test:race-support-" + uuid4().hex
+        m, evidence, submitter = ("test:member-" + uuid4().hex,
+                                  "test:evidence-" + uuid4().hex,
+                                  "test:submitter-" + uuid4().hex)
+        first = support_payload(support_case, m, evidence, submitter, str(uuid4()))
+        second = support_payload(support_case, m, evidence, submitter, str(uuid4()))
+        outcomes = list(pool.map(
+            lambda item: support_call(support_case, item), [first, second]))
+        assert sorted(status for status, _ in outcomes) == [200, 409]
+        assert {payload["outcome"] for _, payload in outcomes} == {
+            "RecordedUnverified", "StaleRevision"
+        }
+        status, state = support_call(support_case)
+        assert status == 200 and state["revision"] == 1 and state["followUpCount"] == 0
+
+        replay_case = "test:race-replay-" + uuid4().hex
+        exact = support_payload(replay_case, m, evidence, submitter, str(uuid4()))
+        outcomes = list(pool.map(
+            lambda item: support_call(replay_case, item), [exact, exact]))
+        assert [status for status, _ in outcomes] == [200, 200]
+        assert {payload["outcome"] for _, payload in outcomes} == {
+            "RecordedUnverified", "Replayed"
+        }
+        status, state = support_call(replay_case)
+        assert status == 200 and state["revision"] == 1
+        assert state["followUpCount"] == 0
+    print("PASS: real PostgreSQL race one accepted, one denied; exact idempotent retry")
+
 def main():
     case = "test:center-http-" + uuid4().hex
     dept = "test:dep-" + uuid4().hex
@@ -246,6 +339,8 @@ if __name__ == "__main__":
         main()
         verify_support()
         verify_split_browser_entrypoints()
+        verify_host_and_static_route_integrity()
+        verify_true_postgres_concurrency()
     except Exception:
         print("DENIED: EPHEMERAL_CENTER_HTTP_INTEGRATION_FAILED", file=sys.stderr)
         raise SystemExit(1)

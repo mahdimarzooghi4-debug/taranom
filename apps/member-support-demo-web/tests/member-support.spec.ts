@@ -134,3 +134,48 @@ test('SURFACE-02: separate member bundle is same-origin and test-only, without e
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(page.getByRole('note')).toContainText('هیچ اطلاعات شخص حقیقی وارد نکنید');
 });
+
+
+test('GATEWAY-01: unknown production-looking URLs never fallback to the center or member entrypoint', async ({ request }) => {
+  for (const path of ['/api/v1/members', '/login', '/member', '/member-demo/unknown',
+                       '/internal/demo/v1/clinical/patient', '/center/administrator']) {
+    const res = await request.get(path, { failOnStatusCode: false });
+    expect(res.status(), path).toBe(404);
+    const html = await res.text();
+    expect(html).not.toContain('گردش آزمایشی مرکز');
+    expect(html).not.toContain('پنل آزمایشی پشتیبانی عضو');
+  }
+  const center = await request.get('/');
+  const member = await request.get('/member-demo/');
+  expect(center.status()).toBe(200);
+  expect(member.status()).toBe(200);
+  expect(await center.text()).toContain('گردش آزمایشی مرکز');
+  expect(await member.text()).toContain('پنل آزمایشی پشتیبانی عضو');
+});
+
+test('GATEWAY-02: hostile Host cannot read even public synthetic support or built member HTML', async ({ request }) => {
+  for (const path of ['/member-demo/', '/internal/demo/v1/support/test:evil-read',
+                       '/internal/demo/v1/centers/test:evil-read']) {
+    const res = await request.get(path, {
+      headers: { Host: 'malicious.example:4320' }, failOnStatusCode: false
+    });
+    expect(res.status(), path).toBe(403);
+    const denial = await res.json();
+    expect(denial.outcome).toBe('UNTRUSTED_LOOPBACK_AUTHORITY');
+    expect(denial.memberAuthenticated).toBe(false);
+    expect(denial.managerAuthenticated).toBe(false);
+    expect(denial.nationalReleaseAllowed).toBe(false);
+  }
+});
+
+test('GATEWAY-03: forwarded authority is refused rather than implicitly trusted', async ({ request }) => {
+  for (const headers of [
+    { 'X-Forwarded-Host': 'malicious.example' },
+    { 'X-Forwarded-Proto': 'https' },
+    { 'Forwarded': 'host=malicious.example' }
+  ]) {
+    const res = await request.get('/member-demo/', { headers, failOnStatusCode: false });
+    expect(res.status()).toBe(403);
+    expect((await res.json()).nationalReleaseAllowed).toBe(false);
+  }
+});
