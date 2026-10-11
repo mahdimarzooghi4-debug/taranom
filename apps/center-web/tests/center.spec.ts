@@ -406,3 +406,54 @@ test('NETWORK-03: center network page stays disconnected through navigation and 
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('QUALITY-01: provider quality center page distinguishes three responsible authority lanes', async ({ page }) => {
+  await page.goto('/center/qualifications');
+  await expect(page.getByRole('heading', { name: 'مسئولیت‌های جداگانه نظارت کیفیت و پاسخ‌گویی' })).toBeVisible();
+  const lanes = page.getByRole('list', { name: 'مسیرهای نظارت کیفیت و رسیدگی پزشکی' });
+  await expect(lanes.getByRole('listitem')).toHaveCount(3);
+  for (const title of [
+    'نظارت ترنم بر الزامات یکسان کیفیت',
+    'کنترل ارائه‌دهندگان توسط شبکه همکار',
+    'ارجاع تخصصی شکایت یا حادثه پزشکی'
+  ]) {
+    await expect(lanes.getByRole('heading', { name: title })).toBeVisible();
+  }
+  await expect(lanes.getByText('شواهد معتبر موجود نیست')).toHaveCount(3);
+});
+
+test('QUALITY-02: no oversight note grants medical qualification, suspension or authority to adjudicate', async ({ page }) => {
+  await page.goto('/center/qualifications');
+  await expect(page.getByText(/معرفی پزشک، یادداشت نظارت، قرارداد شبکه یا پیگیری شکایت/)).toBeVisible();
+  await expect(page.getByText(/امتیاز کیفیت، تعلیق خودکار، مجوز دیدن پرونده بیمار/)).toBeVisible();
+  await expect(page.getByText(/ثبت یادداشت داخلی به‌معنای ارسال ارجاع، تعیین تقصیر یا حل شکایت نیست/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'بررسی ردپای کیفیت — نیازمند اسناد و ناظر واقعی' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'ارسال ارجاع حادثه پزشکی — فقط مرجع قانونی و بالینی معتبر' })).toBeDisabled();
+});
+
+test('QUALITY-03: incident administration cannot delay urgent medical assistance', async ({ page }) => {
+  await page.goto('/center/qualifications');
+  await expect(page.getByText(/در فوریت پزشکی، کمک فوری و رسیدگی بالینی را/)).toBeVisible();
+  await expect(page.getByText(/به ثبت پرونده اداری یا پیگیری شکایت موکول نکنید/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /تأیید صلاحیت|تعلیق خودکار|صدور حکم|تعیین تقصیر/ })).toHaveCount(0);
+});
+
+test('QUALITY-04: provider oversight stays disconnected and preserves accessible history', async ({ page }) => {
+  const forbidden: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/quality/', '/provider/', '/incident/', '/patient/', '/referral/', '/license/']
+      .some(part => request.url().includes(part))) forbidden.push(request.url());
+  });
+  await page.goto('/center');
+  await page.getByRole('link', { name: 'بررسی صلاحیت' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'بررسی صلاحیت' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'مسئولیت‌های جداگانه نظارت کیفیت و پاسخ‌گویی' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'نمای کلی مرکز' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', { name: 'بررسی ردپای کیفیت — نیازمند اسناد و ناظر واقعی' })).toBeDisabled();
+  expect(forbidden).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

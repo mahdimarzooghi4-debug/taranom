@@ -36,6 +36,29 @@ const actionText: Record<ActionKey, { title: string; description: string }> = {
   },
 };
 
+// TRN-BIZ-044/045: organizational responsibilities, NOT actual licensed
+// provider review records or notified medical incidents.
+const qualityOversightLanes = [
+  {
+    key: 'taranom',
+    label: 'نظارت ترنم بر الزامات یکسان کیفیت',
+    owner: 'ترنم: تعریف الزامات واحد و پیگیری رعایت در دو مسیر مستقیم و شبکه‌ای',
+    limit: 'هیچ سیاست عملیاتی، ارزیابی رسمی، معیار عددی یا تأیید صلاحیت موجود نیست.'
+  },
+  {
+    key: 'network',
+    label: 'کنترل ارائه‌دهندگان توسط شبکه همکار',
+    owner: 'شبکه درمانی واجدصلاحیت: کنترل ارائه‌دهنده فقط در حدود قانون و قرارداد معتبر',
+    limit: 'هیچ تفویض اختیار، پروانه، قرارداد شبکه یا ارزیابی واقعی تأیید نشده است.'
+  },
+  {
+    key: 'incident',
+    label: 'ارجاع تخصصی شکایت یا حادثه پزشکی',
+    owner: 'مرجع تخصصی پزشکی و حقوقی ذی‌صلاح: رسیدگی به حادثه و مسئولیت حرفه‌ای',
+    limit: 'ثبت یادداشت داخلی به‌معنای ارسال ارجاع، تعیین تقصیر یا حل شکایت نیست.'
+  }
+] as const;
+
 function resolveSection(): Section | undefined {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   return centerSections.find(item => item.path === path);
@@ -273,6 +296,38 @@ export function CenterApp() {
                     <button type="button" disabled>بررسی شواهد شبکه — نیازمند مرجع قانونی و قرارداد واقعی</button>
                   </div>
                   <p className="care-warning">پزشک صرفاً با تعریف در مرکز، اجازه مشاهده پرونده بیماران یا دریافت وجه درمانی پیدا نمی‌کند.</p>
+                  <section className="module" aria-labelledby="provider-quality-oversight-title">
+                    <div className="section-heading">
+                      <div>
+                        <p className="eyebrow">کیفیت شبکه با اختیار مستقل رسیدگی به حوادث متفاوت است</p>
+                        <h2 id="provider-quality-oversight-title">مسئولیت‌های جداگانه نظارت کیفیت و پاسخ‌گویی</h2>
+                      </div>
+                    </div>
+                    <div className="tiles" role="list" aria-label="مسیرهای نظارت کیفیت و رسیدگی پزشکی">
+                      {qualityOversightLanes.map((item) => (
+                        <article key={item.key} className="tile" role="listitem">
+                          <h3>{item.label}</h3>
+                          <strong>شواهد معتبر موجود نیست</strong>
+                          <p>{item.owner}</p>
+                          <p>{item.limit}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="muted" id="provider-quality-oversight-limit">
+                      معرفی پزشک، یادداشت نظارت، قرارداد شبکه یا پیگیری شکایت، مجوز ارائه خدمت،
+                      امتیاز کیفیت، تعلیق خودکار، مجوز دیدن پرونده بیمار یا تأیید صلاحیت نیست.
+                      ثبت شکایت عضو و تصمیم تخصصی پزشکی مسیرهای مستقلی دارند.
+                    </p>
+                    <button type="button" disabled aria-describedby="provider-quality-oversight-limit">
+                      بررسی ردپای کیفیت — نیازمند اسناد و ناظر واقعی
+                    </button>
+                    <button type="button" disabled aria-describedby="provider-quality-oversight-limit">
+                      ارسال ارجاع حادثه پزشکی — فقط مرجع قانونی و بالینی معتبر
+                    </button>
+                    <p className="care-warning">
+                      در فوریت پزشکی، کمک فوری و رسیدگی بالینی را به ثبت پرونده اداری یا پیگیری شکایت موکول نکنید.
+                    </p>
+                  </section>
                 </section>
               ) : null}
 
