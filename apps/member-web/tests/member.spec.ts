@@ -1077,3 +1077,61 @@ test('ESTIMATE-BILL-04: billing comparison remains disconnected and navigable to
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('RECORD-TRANSPARENCY-01: member sees separate request, concern and independent oversight responsibilities', async ({ page }) => {
+  await page.goto('/member/records');
+  await expect(page.getByRole('heading', { name: 'ردپای درخواست دسترسی و پیگیری حریم خصوصی' })).toBeVisible();
+  const steps = page.getByRole('list', { name: 'مراحل مستقل پیگیری دسترسی بالینی' });
+  await expect(steps.getByRole('listitem')).toHaveCount(3);
+  for (const label of [
+    'درخواست محدود و مستند متخصص درمانگر',
+    'اعتراض یا پرسش مستقل صاحب پرونده',
+    'بررسی مستقل دامنه، مبنا و سابقه دسترسی'
+  ]) await expect(steps.getByText(label, { exact: true })).toBeVisible();
+  await expect(steps.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+});
+
+test('RECORD-TRANSPARENCY-02: paper claims cannot be treated as record reads or clinical authorization', async ({ page }) => {
+  await page.goto('/member/records?access=approved&member=other&emergency=1');
+  await expect(page.getByText('هیچ سابقه دسترسی واقعی موجود نیست')).toBeVisible();
+  await expect(page.getByText(/به‌معنی دسترسی واقعی، افشای پرونده/)).toBeVisible();
+  await expect(page.getByText(/استثنای دسترسی در فوریت پزشکی و رضایت پژوهش هوش مصنوعی/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'بررسی درخواست‌های دسترسی — نیازمند احراز هویت و ممیزی واقعی'
+  })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /اعطای دسترسی موفق|نمایش پرونده|تأیید اضطراری/ })).toHaveCount(0);
+});
+
+test('RECORD-TRANSPARENCY-03: member-scoped timeline never flows to sponsor or coordinator', async ({ page }) => {
+  await page.goto('/member/records?payer=employer&role=sponsor');
+  await expect(page.getByText(/نمایش حتی سوابق درخواست نیز به احراز مستقل/)).toBeVisible();
+  await expect(page.getByText(/کارفرما، حامی اشتراک و هماهنگ‌کننده درمان حق مشاهده/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'ثبت پرسش حریم خصوصی — نیازمند مرجع و فرایند قانونی'
+  })).toBeDisabled();
+  await expect(page.getByText(/اشتراک برای درمان رضایت پژوهش یا آموزش هوش مصنوعی نیست/)).toBeVisible();
+});
+
+test('RECORD-TRANSPARENCY-04: access trace UI remains disconnected, accessible and without persistence', async ({ page }) => {
+  const calls: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/records/', '/health/', '/clinical/', '/audit/',
+      '/consent/', '/identity/', '/member-access/'].some(x => request.url().includes(x))) {
+      calls.push(request.url());
+    }
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'سوابق سلامت' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'سوابق سلامت' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'ردپای درخواست دسترسی و پیگیری حریم خصوصی' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', {
+    name: 'بررسی درخواست‌های دسترسی — نیازمند احراز هویت و ممیزی واقعی'
+  })).toBeDisabled();
+  expect(calls).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

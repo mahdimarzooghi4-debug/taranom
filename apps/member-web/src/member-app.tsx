@@ -232,6 +232,26 @@ const secondaryAiLifecycle = [
 
 // Accepted TRN-BIZ-028/029 only describe possible payer arrangements;
 // these are NOT active subscriptions, verified contracts or payer records.
+// TRN-BIZ-035/036: no live EHR access or independent clinical audit.
+// These are distinct legally controlled future RESPONSIBILITIES only.
+const clinicalAccessTransparencyStages = [
+  {
+    key: 'request',
+    label: 'درخواست محدود و مستند متخصص درمانگر',
+    rule: 'درخواست ادعایی متخصص برای خدمت و نوع داده مشخص، به‌تنهایی دسترسی یا مجوز مشاهده پرونده نیست.'
+  },
+  {
+    key: 'concern',
+    label: 'اعتراض یا پرسش مستقل صاحب پرونده',
+    rule: 'عضو باید بتواند طبق سازوکار قانونی معتبر درباره درخواست و دامنه استفاده از داده سؤال یا اعتراض کند؛ هیچ درخواست واقعی ثبت نشده است.'
+  },
+  {
+    key: 'oversight',
+    label: 'بررسی مستقل دامنه، مبنا و سابقه دسترسی',
+    rule: 'بررسی ناظر نیازمند شواهد مستقل، هویت معتبر و ممیزی ثبت دسترسی واقعی است؛ یادداشت نظارتی به‌معنی رسیدگی یا صدور رأی نیست.'
+  }
+] as const;
+
 // TRN-BIZ-035: a member self-view, clinician-limited disclosure and
 // legal/emergency exception are DIFFERENT authority channels. None active.
 const recordVisibilityLanes = [
@@ -640,6 +660,37 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="records-legal-boundary">
                     سوابق دسترسی به پرونده — نیازمند ممیزی معتبر
                   </button>
+                  <section aria-labelledby="clinical-access-transparency-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">حق پرسش عضو مستقل از ادعای دسترسی متخصص است</p>
+                        <h2 id="clinical-access-transparency-title">ردپای درخواست دسترسی و پیگیری حریم خصوصی</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ سابقه دسترسی واقعی موجود نیست</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="مراحل مستقل پیگیری دسترسی بالینی">
+                      {clinicalAccessTransparencyStages.map((stage) => (
+                        <article className="status-card" role="listitem" key={stage.key}>
+                          <p className="status-card-label">{stage.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{stage.rule}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="clinical-access-transparency-limit">
+                      ثبت درخواست، ادعای بررسی یا یادداشت اعتراض به‌معنی دسترسی واقعی، افشای پرونده،
+                      تأیید پزشک یا رأی نهایی نیست. نمایش حتی سوابق درخواست نیز به احراز مستقل
+                      خود عضو و محدوده قانونی دسترسی نیاز دارد. کارفرما، حامی اشتراک و
+                      هماهنگ‌کننده درمان حق مشاهده این تاریخچه خصوصی را از نقش خود به دست نمی‌آورند.
+                      استثنای دسترسی در فوریت پزشکی و رضایت پژوهش هوش مصنوعی مجوز مستقل می‌خواهند.
+                    </p>
+                    <button type="button" disabled aria-describedby="clinical-access-transparency-limit">
+                      بررسی درخواست‌های دسترسی — نیازمند احراز هویت و ممیزی واقعی
+                    </button>
+                    <button type="button" disabled aria-describedby="clinical-access-transparency-limit">
+                      ثبت پرسش حریم خصوصی — نیازمند مرجع و فرایند قانونی
+                    </button>
+                  </section>
                   <p className="quiet" id="records-research-boundary">
                     اشتراک برای درمان رضایت پژوهش یا آموزش هوش مصنوعی نیست. لغو، محدودسازی
                     یا تغییر رضایت باید جداگانه و بر اساس شواهد و قرارداد معتبر بررسی شود.
