@@ -85,6 +85,58 @@ def main():
     assert code == 403 and denied["managerAuthenticated"] is False
     code, _, after = call(case)
     assert code == 200 and after["currentVersion"] == 4
+
+    # New read-only center history supports deterministic cursor pagination
+    # and reconstructs the verified event stream at exact past versions.
+    code, _, first_page = call(case + "/history?afterVersion=0&limit=2")
+    assert code == 200 and first_page["currentVersion"] == 4
+    assert first_page["syntheticOnly"] and not first_page["managerAuthenticated"]
+    assert not first_page["professionalQualificationVerified"]
+    assert not first_page["nationalReleaseAllowed"]
+    assert [x["version"] for x in first_page["events"]] == [1, 2]
+    assert first_page["hasMore"] is True and first_page["nextAfterVersion"] == 2
+    code, _, last_page = call(case + "/history?afterVersion=2&limit=2")
+    assert code == 200
+    assert [x["version"] for x in last_page["events"]] == [3, 4]
+    assert last_page["hasMore"] is False and last_page["nextAfterVersion"] is None
+    assert all(x["hypotheticalOnly"] for x in first_page["events"] + last_page["events"])
+    assert [x["kind"] for x in first_page["events"] + last_page["events"]] == [
+        "DefineDepartment", "RecordDoctorAffiliation",
+        "AssignDoctorToDepartment", "EndDoctorAffiliation"
+    ]
+    for version, expected_affiliation, expected_assignments in (
+        (0, None, []),
+        (2, "PendingIndependentVerification", []),
+        (3, "PendingIndependentVerification", [dept]),
+        (4, "Ended", []),
+    ):
+        code, _, past = call(case + "/versions/" + str(version))
+        assert code == 200 and past["asOfVersion"] == version
+        assert past["currentVersion"] == 4 and past["syntheticOnly"]
+        assert past["managerAuthenticated"] is False and past["nationalReleaseAllowed"] is False
+        assert past["snapshot"]["currentVersion"] == version
+        if expected_affiliation is None:
+            assert past["snapshot"]["doctors"] == [] and past["snapshot"]["departments"] == []
+        else:
+            assert past["snapshot"]["doctors"][0]["affiliation"] == expected_affiliation
+            assert past["snapshot"]["doctors"][0]["departmentRefs"] == expected_assignments
+    for suffix in (
+        "/history?afterVersion=-1&limit=2",
+        "/history?afterVersion=0&limit=21",
+        "/history?afterVersion=0&limit=2&manager=true",
+        "/history?afterVersion=99&limit=2",
+        "/history?afterVersion=0&afterVersion=1&limit=2",
+        "/versions/-1", "/versions/5", "/versions/1?status=approved",
+    ):
+        code, _, invalid = call(case + suffix)
+        assert code == 400 and invalid["nationalReleaseAllowed"] is False
+        assert invalid["managerAuthenticated"] is False
+    code, _, fresh = call("test:isolated-history-" + uuid4().hex +
+                         "/history?afterVersion=0&limit=2")
+    assert code == 200 and fresh["currentVersion"] == 0 and fresh["events"] == []
+    code, _, latest = call(case)
+    assert code == 200 and latest["currentVersion"] == 4
+    print("PASS: immutable cursor history, exact-version reconstructed center state, no cross-center data")
     print("PASS: actual ASP.NET/PostgreSQL journal 4-step center case, replay, stale and fail-close")
 
 

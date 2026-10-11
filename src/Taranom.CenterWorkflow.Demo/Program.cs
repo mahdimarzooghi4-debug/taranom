@@ -40,6 +40,13 @@ app.MapGet("/internal/demo/v1/centers/{centerRef}",
 app.MapPost("/internal/demo/v1/centers/{centerRef}/commands",
     (Func<HttpContext, Task<IResult>>)CenterHttp.WriteAsync);
 
+// Both read models derive from the same fully verified append-only test journal.
+// Neither performs a write, approval or actual clinical access.
+app.MapGet("/internal/demo/v1/centers/{centerRef}/history",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CenterHistoryHttp.ListAsync);
+app.MapGet("/internal/demo/v1/centers/{centerRef}/versions/{version}",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CenterHistoryHttp.AtVersionAsync);
+
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 app.UseDefaultFiles();
 app.UseStaticFiles();
