@@ -44,7 +44,8 @@ app.MapGet("/internal/ops/v1/status", () =>
 
 // Explicitly anonymous and hypothetical: an actual member's activation,
 // verified event source, legal status and wallet eligibility are NEVER inferred.
-app.MapPost("/internal/ops/v1/waiting-preview", WaitingPreview.Evaluate);
+app.MapPost("/internal/ops/v1/waiting-preview",
+    (Func<HttpContext, Task<IResult>>)WaitingPreview.Evaluate);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
