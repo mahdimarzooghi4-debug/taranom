@@ -128,8 +128,11 @@ public sealed class SyntheticMembershipActivationEvidenceGateTests
     [Fact]
     public void OldCaseVersionFailsClosedEvenAfterAnAccurateNewProofingResult()
     {
-        var historical = History();
-        var v = Input(history: historical) with { ExpectedProofingCaseRevision = 0 };
+        var first = History();
+        var second = ProofingCaseJournal.Apply(first,
+            Observe(ReverifyId, 1, 0, ProofingObservation.VerifiedMatch));
+        Assert.Equal(ProofingJournalOutcome.Applied, second.Outcome);
+        var v = Input(history: second.Snapshot) with { ExpectedProofingCaseRevision = 1 };
         Assert.Equal(SyntheticActivationInspection.StaleIdentityOrCaseRevision,
             SyntheticMembershipActivationEvidenceGate.Inspect(v).Result);
     }
