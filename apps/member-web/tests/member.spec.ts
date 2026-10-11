@@ -850,3 +850,58 @@ test('URGENT-04: safety explanation stays disconnected and keyboard/history safe
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('ACTIVATION-01: membership route separates licensed identity, correction, payment and formal activation', async ({ page }) => {
+  await page.goto('/member/membership');
+  await expect(page.getByRole('heading', { name: 'شواهد لازم پیش از فعال‌سازی عضویت' })).toBeVisible();
+  const steps = page.getByRole('list', { name: 'پیش‌شرط‌های مستقل فعال‌سازی عضویت' });
+  await expect(steps.getByRole('listitem')).toHaveCount(4);
+  for (const label of [
+    'احراز هویت از ارائه‌دهنده تخصصی مجاز',
+    'اصلاح کد ملی و احراز مجدد قبل از فعال‌سازی',
+    'قرارداد و پرداخت واقعی اشتراک',
+    'ثبت رسمی فعال‌سازی و مبدأ انتظار'
+  ]) await expect(steps.getByText(label, { exact: true })).toBeVisible();
+  await expect(steps.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(4);
+});
+
+test('ACTIVATION-02: no query strings or claimed paid status imply a member has been activated', async ({ page }) => {
+  await page.goto('/member/membership?paid=1&identity=verified&activate=true&start_90_days=now');
+  await expect(page.getByText('هیچ عضویت رسمی فعال نشده است')).toBeVisible();
+  await expect(page.getByText(/حتی تکمیل.*ادعایی این مراحل/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'بررسی فعال‌سازی رسمی — نیازمند شواهد همه مراجع قانونی'
+  })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /فعال‌سازی موفق|پرداخت موفق|شروع انتظار|ورود خودکار/ })).toHaveCount(0);
+});
+
+test('ACTIVATION-03: correction invalidates old identity and funder does not inherit private rights', async ({ page }) => {
+  await page.goto('/member/membership');
+  const steps = page.getByRole('list', { name: 'پیش‌شرط‌های مستقل فعال‌سازی عضویت' });
+  await expect(steps.getByText(/نتیجه قدیمی پس از اصلاح دیگر معتبر نیست/)).toBeVisible();
+  await expect(steps.getByText(/مالک عضویت و کیف پول شخص است/)).toBeVisible();
+  await expect(page.getByText(/درخواست بدون فعال‌سازی باقی می‌ماند/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'اصلاح و احراز مجدد اطلاعات — نیازمند هویت و سرویس معتبر'
+  })).toBeDisabled();
+});
+
+test('ACTIVATION-04: identity and payment activation screen has no private calls or browser persistence', async ({ page }) => {
+  const forbidden: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/identity/', '/proofing/', '/membership/', '/payment/',
+      '/provider/', '/wallet/', '/activation/', '/subscription/']
+      .some(x => request.url().includes(x))) forbidden.push(request.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'عضویت من' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'عضویت من' })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'شواهد لازم پیش از فعال‌سازی عضویت' })).toBeVisible();
+  expect(forbidden).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

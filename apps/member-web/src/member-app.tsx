@@ -199,6 +199,31 @@ const membershipFundingRoutes = [
     restriction: 'هیچ کارفرما یا تعهد پرداخت واقعی تأیید نشده است.' },
 ] as const;
 
+// TRN-BIZ-017..024: necessary independent evidence categories, NOT
+// effective legal activation conditions or official membership events.
+const activationAdmissionStages = [
+  {
+    key: 'proofing',
+    label: 'احراز هویت از ارائه‌دهنده تخصصی مجاز',
+    rule: 'ادعای هویت یا ثبت‌نام کافی نیست؛ نتیجه معتبر و جاریِ احراز هویت باید از ارائه‌دهنده قانونی طرف قرارداد به عضو درست منتسب شود.'
+  },
+  {
+    key: 'correction',
+    label: 'اصلاح کد ملی و احراز مجدد قبل از فعال‌سازی',
+    rule: 'متقاضی پیش از فعال‌سازی می‌تواند کد ملی نادرست را اصلاح کند؛ نتیجه قدیمی پس از اصلاح دیگر معتبر نیست و احراز جدید لازم است.'
+  },
+  {
+    key: 'payment',
+    label: 'قرارداد و پرداخت واقعی اشتراک',
+    rule: 'عضویت پولی است؛ حتی اگر کارفرما یا نهاد حمایتی پرداخت کند، مالک عضویت و کیف پول شخص است و ادعای پرداخت، تأیید وصول نیست.'
+  },
+  {
+    key: 'official',
+    label: 'ثبت رسمی فعال‌سازی و مبدأ انتظار',
+    rule: 'تنها پس از احراز تمام شرایط قانونی و ثبت رسمی فعال‌سازی، شمارش نخستین ۹۰ روز کامل آغاز می‌شود؛ هیچ تأییدی انجام نشده است.'
+  }
+] as const;
+
 // Business-approved lifecycle semantics, NOT a live membership timetable.
 // Dates, legal activation, policy entitlement and amounts remain unavailable.
 const membershipLifecycle = [
@@ -412,6 +437,36 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="membership-ownership-boundary">
                     درخواست یا پرداخت عضویت — نیازمند قرارداد و سرویس معتبر
                   </button>
+                  <section aria-labelledby="activation-admission-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">گذر از مراحل مستقل هویت، اشتراک و تصمیم رسمی</p>
+                        <h2 id="activation-admission-title">شواهد لازم پیش از فعال‌سازی عضویت</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ عضویت رسمی فعال نشده است</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="پیش‌شرط‌های مستقل فعال‌سازی عضویت">
+                      {activationAdmissionStages.map((item) => (
+                        <article className="status-card" role="listitem" key={item.key}>
+                          <p className="status-card-label">{item.label}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{item.rule}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="activation-admission-limit">
+                      وضعیت احراز هویت، مرجع قانونی، قرارداد حامی، پرداخت معتبر، تمامی شروط
+                      فعال‌سازی و تاریخ رسمی آن از سامانه واقعی دریافت نشده است. حتی تکمیل
+                      ادعایی این مراحل به معنای فعال‌شدن خودکار عضویت یا شروع ۹۰ روز نیست.
+                      هنگام قطع سرویس احراز یا نتیجه غیرقطعی، درخواست بدون فعال‌سازی باقی می‌ماند.
+                    </p>
+                    <button type="button" disabled aria-describedby="activation-admission-limit">
+                      اصلاح و احراز مجدد اطلاعات — نیازمند هویت و سرویس معتبر
+                    </button>
+                    <button type="button" disabled aria-describedby="activation-admission-limit">
+                      بررسی فعال‌سازی رسمی — نیازمند شواهد همه مراجع قانونی
+                    </button>
+                  </section>
                   <section aria-labelledby="membership-lifecycle-title">
                     <div className="section-header">
                       <div>
