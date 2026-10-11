@@ -16,7 +16,7 @@ All existing blob scans, historical path-alias controls, synthetic credential fi
 
 ## Tests and reproducible CI
 
-Add **six** isolated synthetic Git unit cases: high-confidence token in a previous commit message with report redaction; long literal password in body; suspicious commit on another fetched branch; benign normal commit; abbreviated commit identity with no raw token; and verification that even a synthetic-looking `Password` in a commit message is not exempted. Total security unit tests **33** (previous 27 + 6). Existing pinned 12-job CI workflow `.github/workflows/sprint-55-commit-message-credential-safety.yml` uses full checkout in the same internal-contract job, executes the 33 tests and both blob + message checks, publishes redacted JSON, then runs all inherited .NET, actual isolated PostgreSQL, built Chromium, external AI exclusion and national release refusal tests. Do not add a new job or network check.
+Add **six** isolated synthetic Git unit cases: high-confidence token in a previous commit message with report redaction; long literal password in body; suspicious commit on another fetched branch; benign normal commit; abbreviated commit identity with no raw token; and verification that even a synthetic-looking `Password` in a commit message is not exempted. Total security unit tests **34** (previous 28 + 6). Existing pinned 12-job CI workflow `.github/workflows/sprint-55-commit-message-credential-safety.yml` uses full checkout in the same internal-contract job, executes the 34 tests and both blob + message checks, publishes redacted JSON, then runs all inherited .NET, actual isolated PostgreSQL, built Chromium, external AI exclusion and national release refusal tests. Do not add a new job or network check.
 
 ## Governance/limits
 
