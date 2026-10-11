@@ -57,6 +57,7 @@ app.MapPost("/internal/demo/v1/support/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.WriteAsync);
 
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
+app.MapGet("/member-demo", () => Results.Redirect("/member-demo/"));
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFallbackToFile("index.html");
