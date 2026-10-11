@@ -905,3 +905,61 @@ test('ACTIVATION-04: identity and payment activation screen has no private calls
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('INSURANCE-HANDOFF-01: support distinguishes unified intake, legal forwarding and insurer-only response', async ({ page }) => {
+  await page.goto('/member/support');
+  await expect(page.getByRole('heading', { name: 'سه مرحله مستقل پیگیری اختلاف سهم بیمه' })).toBeVisible();
+  const stages = page.getByRole('list', { name: 'پیوند اعتراض بیمه با اسناد رسمی' });
+  await expect(stages.getByRole('listitem')).toHaveCount(3);
+  for (const title of [
+    'ثبت اعتراض نزد ترنم و پیوند به نسخه صورتحساب',
+    'ارجاع از مسیر مستقیم یا واسطه بیمه‌ای مجاز',
+    'پاسخ قانونی بیمه‌گر و اصلاح مستقل سند'
+  ]) await expect(stages.getByText(title, { exact: true })).toBeVisible();
+  await expect(stages.getByRole('heading', { name: 'اطلاعات موجود نیست' })).toHaveCount(3);
+});
+
+test('INSURANCE-HANDOFF-02: forwarded request is not insurer receipt or coverage and cannot change wallet', async ({ page }) => {
+  await page.goto('/member/support?insurer_approved=1&paid=1&receipt=true');
+  await expect(page.getByText('هیچ نتیجه یا رسید واقعی وجود ندارد')).toBeVisible();
+  await expect(page.getByText(/درخواست ارسال‌شده، رسید بیمه‌گر یا رأی نهایی نیست/)).toBeVisible();
+  await expect(page.getByText(/هیچ برداشت، مسدودی، جبران، برگشت یا اصلاح خودکار اعتبار درمان/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'بررسی رسید بیمه‌گر — نیازمند کانال و سند معتبر'
+  })).toBeDisabled();
+});
+
+test('INSURANCE-HANDOFF-03: insurer authority and sponsor privacy remain distinct from medical complaint', async ({ page }) => {
+  await page.goto('/member/support');
+  await expect(page.getByRole('list', { name: 'مسیرهای مستقل رسیدگی' })
+    .getByRole('listitem')).toHaveCount(2);
+  await expect(page.getByText(/فقط بیمه‌گر یا مرجع قانونی می‌تواند سهم پوشش را/)).toBeVisible();
+  await expect(page.getByText(/حامی یا کارفرما با پرداخت اشتراک حق دیدن اسناد درمان عضو/)).toBeVisible();
+  await expect(page.getByRole('button', {
+    name: 'درخواست بررسی اصلاح سهم — فقط با مرجع قانونی'
+  })).toBeDisabled();
+  await expect(page.getByText(/در فوریت پزشکی، کمک پزشکی و تماس با خدمات فوریت/)).toBeVisible();
+});
+
+test('INSURANCE-HANDOFF-04: no private invoice/insurer requests or persistent data during member navigation', async ({ page }) => {
+  const forbidden: string[] = [];
+  page.on('request', req => {
+    if (['/api/', '/insurer/', '/insurance/', '/claims/', '/billing/',
+      '/wallet/', '/health/', '/coverage/', '/payment/']
+      .some(part => req.url().includes(part))) forbidden.push(req.url());
+  });
+  await page.goto('/member');
+  await page.getByRole('link', { name: 'پشتیبانی و شکایات' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'پشتیبانی و شکایات' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'سه مرحله مستقل پیگیری اختلاف سهم بیمه' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'فضایی آرام برای پیگیری سلامت' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', {
+    name: 'بررسی رسید بیمه‌گر — نیازمند کانال و سند معتبر'
+  })).toBeDisabled();
+  expect(forbidden).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});

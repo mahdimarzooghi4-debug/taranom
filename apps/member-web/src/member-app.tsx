@@ -73,6 +73,29 @@ const supportPaths = [
     disclosure: 'ثبت اعتراض موجب برداشت، مسدودی یا اصلاح خودکار کیف پول نمی‌شود.' },
 ] as const;
 
+// TRN-BIZ-048/049/050: these are unconnected responsibilities, NOT
+// official insurance appeals, insurer receipt, approved correction or payout.
+const insurerDisputeHandoffStages = [
+  {
+    key: 'intake',
+    title: 'ثبت اعتراض نزد ترنم و پیوند به نسخه صورتحساب',
+    owner: 'ترنم فقط مسیر واحد دریافت و پیگیری اعتراض عضو را هماهنگ می‌کند.',
+    limit: 'هیچ پرونده، نسخه رسمی بیمه یا سند مورد اختلاف در دسترس نیست.'
+  },
+  {
+    key: 'forward',
+    title: 'ارجاع از مسیر مستقیم یا واسطه بیمه‌ای مجاز',
+    owner: 'بیمه‌گر یا واسطه واجد مجوز و قرارداد، در حدود اختیار قانونی مسئول دریافت درخواست است.',
+    limit: 'ثبت درخواست با رسید معتبر بیمه‌گر یکی نیست؛ هیچ اتصال یا تأیید دریافتی وجود ندارد.'
+  },
+  {
+    key: 'response',
+    title: 'پاسخ قانونی بیمه‌گر و اصلاح مستقل سند',
+    owner: 'فقط بیمه‌گر یا مرجع قانونی می‌تواند سهم پوشش را تصمیم‌گیری یا اصلاح کند.',
+    limit: 'پاسخ ادعایی تغییر وجه، صورتحساب قطعی، بدهی عضو یا موجودی کیف پول نیست.'
+  }
+] as const;
+
 // Coordinating a visit and making clinical decisions are DIFFERENT duties.
 // All entries are static responsibility descriptions, not existing activities.
 const careResponsibilitySteps = [
@@ -842,6 +865,38 @@ export function MemberApp() {
                       </article>
                     ))}
                   </div>
+                  <section aria-labelledby="insurance-handoff-title">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">اعتراض بیمه از رأی مرجع قانونی و اصلاح مالی مستقل است</p>
+                        <h2 id="insurance-handoff-title">سه مرحله مستقل پیگیری اختلاف سهم بیمه</h2>
+                      </div>
+                      <span className="readonly-pill">هیچ نتیجه یا رسید واقعی وجود ندارد</span>
+                    </div>
+                    <div className="status-grid" role="list" aria-label="پیوند اعتراض بیمه با اسناد رسمی">
+                      {insurerDisputeHandoffStages.map((stage) => (
+                        <article className="status-card" role="listitem" key={stage.key}>
+                          <p className="status-card-label">{stage.title}</p>
+                          <h3>اطلاعات موجود نیست</h3>
+                          <p>{stage.owner}</p>
+                          <p>{stage.limit}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <p className="quiet" id="insurer-handoff-limit">
+                      اعتراض درباره سهم بیمه پایه یا تکمیلی باید به نسخه دقیق سند همان عضو
+                      وابسته باشد. درخواست ارسال‌شده، رسید بیمه‌گر یا رأی نهایی نیست.
+                      حتی با وجود پاسخ بیمه‌گر، اصلاح حقوقی صورتحساب و تسویه مالی مستقل‌اند.
+                      هیچ برداشت، مسدودی، جبران، برگشت یا اصلاح خودکار اعتبار درمان انجام نمی‌شود.
+                      حامی یا کارفرما با پرداخت اشتراک حق دیدن اسناد درمان عضو را پیدا نمی‌کند.
+                    </p>
+                    <button type="button" disabled aria-describedby="insurer-handoff-limit">
+                      بررسی رسید بیمه‌گر — نیازمند کانال و سند معتبر
+                    </button>
+                    <button type="button" disabled aria-describedby="insurer-handoff-limit">
+                      درخواست بررسی اصلاح سهم — فقط با مرجع قانونی
+                    </button>
+                  </section>
                   <p className="quiet" id="support-legal-limit">
                     این صفحه رأی پزشکی، تصمیم بیمه‌گر، حکم جبران خسارت یا وضعیت یک پرونده واقعی نیست.
                     هیچ شماره پرونده، زمان پاسخ یا نتیجه رسیدگی ساخته نشده است.
