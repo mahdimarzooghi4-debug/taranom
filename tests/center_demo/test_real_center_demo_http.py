@@ -342,5 +342,7 @@ if __name__ == "__main__":
         verify_host_and_static_route_integrity()
         verify_true_postgres_concurrency()
     except Exception:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         print("DENIED: EPHEMERAL_CENTER_HTTP_INTEGRATION_FAILED", file=sys.stderr)
         raise SystemExit(1)

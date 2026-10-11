@@ -87,6 +87,10 @@ app.MapPost("/internal/demo/v1/support/{caseRef}/commands",
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 // Exact local member entrypoint is required: the generic root fallback must
 // never silently render the CENTER HTML for a MEMBER browser path.
+// The center page is an EXACT entrypoint; unknown URLs are not SPA routes.
+app.MapGet("/", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+        "index.html"), "text/html; charset=utf-8"));
 app.MapGet("/member-demo/", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
