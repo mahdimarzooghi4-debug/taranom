@@ -115,6 +115,14 @@ class PublicSourceHistoryGuardTests(unittest.TestCase):
         self.git('commit', '-qm', 'Removed but still reachable: expected scanning')
         self.assertEqual('PASS_LIMITED_SCOPE', scan(self.root)['status'])
 
+    def test_historical_sensitive_name_with_identical_blob_is_detected(self) -> None:
+        self.commit('safe.txt', 'one harmless repeated content')
+        self.commit('.env.production', 'one harmless repeated content')
+        self.git('rm', '.env.production')
+        self.git('commit', '-qm', 'Remove previous sensitive name')
+        result = scan(self.root)
+        self.assertIn('HISTORICAL_SENSITIVE_PATH', self.finding_rules(result))
+
     def test_other_fetched_branch_reachable_is_scanned(self) -> None:
         self.git('checkout', '-qb', 'synthetic-other-branch')
         self.commit('secret.txt', 'gho_' + 'K' * 35)

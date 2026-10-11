@@ -104,6 +104,17 @@ def scan(root: Path, *, history: bool = True) -> dict:
                  for l in raw.splitlines() if len(l) > 41 and l[40:41] == b' ']
         if not lines:
             raise ValueError('NO_REACHABLE_OBJECT_PATHS')
+        # Git rev-list names one representative path for a blob. A historical
+        # sensitive name can otherwise be missed when the exact same blob was
+        # also committed at a harmless path. Inspect all logged path changes.
+        historical_paths = _git(root, 'log', '--all', '--format=',
+                                '--name-only', '--no-renames').decode('utf8', 'replace')
+        seen_paths = set()
+        for old_path in historical_paths.splitlines():
+            if old_path and old_path not in seen_paths:
+                seen_paths.add(old_path)
+                if is_sensitive_path(old_path):
+                    _record(result, old_path, 'historic_path', 'HISTORICAL_SENSITIVE_PATH')
         # --batch is one long-lived local child; sending bounded groups avoids
         # stdin/stdout pipe backpressure and repeated fork overhead.
         with subprocess.Popen(['git', '-C', str(root), 'cat-file', '--batch'],
