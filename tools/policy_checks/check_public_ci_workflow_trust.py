@@ -123,7 +123,40 @@ def inspect_workflow(path: Path) -> list[str]:
                            for x in step):
                     violations.add("CHECKOUT_PERSISTS_CREDENTIALS")
         elif re.match(r"^\s*uses:", line):
-            violations.add("NONSTEP_OR_DYNAMIC_ACTION")
+            # GitHub Actions also allows the action as a property of a
+            # named step: '- name: Upload' followed by 'uses: ...'.
+            # It must be anchored to that very step, never arbitrary YAML.
+            indent = len(line) - len(line.lstrip())
+            previous = None
+            for prior in range(i - 1, -1, -1):
+                check = active[prior]
+                pindent = len(check) - len(check.lstrip())
+                if pindent <= indent - 2 and re.match(
+                        r"^\s*-\s*(?:name|uses|run):", check):
+                    previous = check
+                    break
+            token_match = re.fullmatch(r"\s*uses:\s+(\S+)(?:\s+#.*)?", line)
+            if previous is None or not re.match(r"^\s*-\s*name:", previous):
+                violations.add("NONSTEP_OR_DYNAMIC_ACTION")
+            elif token_match is None:
+                violations.add("DYNAMIC_OR_INVALID_ACTION")
+            else:
+                pin = FULL_PIN.fullmatch(token_match.group(1))
+                if pin is None or pin.group(1) not in APPROVED_ACTIONS:
+                    violations.add("UNPINNED_OR_UNAPPROVED_ACTION")
+                elif pin.group(1) == "actions/checkout":
+                    # Do not permit a second checkout syntax to omit the
+                    # same-step nonpersistent credential requirement.
+                    boundary = i + 1
+                    while boundary < len(active) and not (
+                            re.match(r"^\s*-\s*(?:name|uses|run):", active[boundary])
+                            and len(active[boundary]) - len(active[boundary].lstrip())
+                            <= indent - 2):
+                        boundary += 1
+                    if not any(re.fullmatch(
+                            r"\s+persist-credentials:\s+false(?:\s+#.*)?", value)
+                            for value in active[i + 1:boundary]):
+                        violations.add("CHECKOUT_PERSISTS_CREDENTIALS")
     return sorted(violations)
 
 

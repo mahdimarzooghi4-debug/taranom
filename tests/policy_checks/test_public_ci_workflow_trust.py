@@ -79,7 +79,7 @@ class WorkflowTrustTests(unittest.TestCase):
 
     def test_dynamic_action_rejected(self):
         self.change("actions/checkout@" + SHA, "actions/checkout@\${{ inputs.ref }}")
-        self.check("UNPINNED_OR_UNAPPROVED_ACTION")
+        self.check("DYNAMIC_OR_INVALID_ACTION")
 
     def test_token_persistence_rejected(self):
         self.change("persist-credentials: false", "persist-credentials: true")
@@ -142,7 +142,7 @@ class WorkflowTrustTests(unittest.TestCase):
 
     def test_file_payload_not_echoed_in_report(self):
         self.change("contents: read", "contents: write")
-        output = json.dumps(self.check())
+        output = json.dumps(self.check("WORKFLOW_TOKEN_NOT_READ_ONLY"))
         self.assertNotIn("contents: write", output)
         self.assertNotIn(SHA, output)
 
