@@ -369,3 +369,40 @@ test('BUNDLE-01: built center shell fetches only local route, JS and CSS (no ext
     expect(target.pathname).not.toMatch(/\.map$/);
   }
 });
+
+test('NETWORK-01: center qualification page separates direct and partner-network models', async ({ page }) => {
+  await page.goto('/center/qualifications');
+  await expect(page.getByRole('heading', { name: 'دو مسیر مستقل احراز صلاحیت و قرارداد' })).toBeVisible();
+  const paths = page.getByRole('list', { name: 'مسیرهای شبکه درمانی' });
+  await expect(paths.getByRole('listitem')).toHaveCount(2);
+  await expect(paths.getByRole('heading', { name: 'قرارداد مستقیم با ارائه‌دهنده' })).toBeVisible();
+  await expect(paths.getByRole('heading', { name: 'همکاری با شبکه درمانی واجدصلاحیت' })).toBeVisible();
+  await expect(paths.getByText('شواهد معتبر موجود نیست')).toHaveCount(2);
+});
+
+test('NETWORK-02: network qualification does not authorize treatment credit recipient', async ({ page }) => {
+  await page.goto('/center/qualifications');
+  await expect(page.getByRole('heading', { name: 'گیرنده اعتبار درمان، قرارداد مستقل لازم دارد' })).toBeVisible();
+  await expect(page.getByText(/قرارداد شبکه، جای قرارداد گیرنده پرداخت را نمی‌گیرد/)).toBeVisible();
+  await expect(page.getByText(/هیچ ارائه‌دهنده، پروانه، قرارداد، دریافت‌کننده وجه یا خدمت واقعی/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'بررسی و فعال‌سازی شبکه — نیازمند مرجع قانونی و قرارداد واقعی' })).toBeDisabled();
+});
+
+test('NETWORK-03: center network page stays disconnected through navigation and back', async ({ page }) => {
+  const prohibited: string[] = [];
+  page.on('request', request => {
+    if (['/api/', '/provider/', '/license/', '/payment/', '/wallet/', '/patient/', '/contract/']
+      .some(part => request.url().includes(part))) prohibited.push(request.url());
+  });
+  await page.goto('/center');
+  await page.getByRole('link', { name: 'بررسی صلاحیت' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'بررسی صلاحیت' })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'نمای کلی مرکز' })).toBeFocused();
+  await page.goForward();
+  await expect(page.getByRole('button', { name: 'بررسی و فعال‌سازی شبکه — نیازمند مرجع قانونی و قرارداد واقعی' })).toBeDisabled();
+  expect(prohibited).toEqual([]);
+  expect(await page.evaluate(() => ({
+    local: Object.keys(localStorage), session: Object.keys(sessionStorage)
+  }))).toEqual({ local: [], session: [] });
+});
