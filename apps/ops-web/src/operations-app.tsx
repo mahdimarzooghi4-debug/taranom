@@ -27,10 +27,67 @@ function valid(value: unknown): value is Snapshot {
   }
   return seen.size === 17;
 }
+
+type HypotheticalTime = {
+  contract: 'TRN-TECH-072'; hypotheticalOnly: true;
+  officialActivationVerified: false; memberEligibilityVerified: false;
+  walletCreditAuthorized: false; nationalReleaseAllowed: false;
+  state: 'OfficialActivationMissing' | 'ObservationBeforeActivation' |
+    'StillWaiting' | 'NinetyFullDaysElapsed';
+  thresholdUtc: string | null;
+};
+type Preview = { phase: 'NOT_ENTERED' | 'CALCULATING' | 'INVALID' } |
+  { phase: 'HYPOTHETICAL_ONLY'; result: HypotheticalTime };
+const utcPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const timeLabels: Record<HypotheticalTime['state'], string> = {
+  OfficialActivationMissing: 'بدون رویداد فعال‌سازی رسمی، دوره انتظار قابل شروع نیست.',
+  ObservationBeforeActivation: 'لحظه بررسی پیش از زمان فرضی فعال‌سازی است؛ محاسبه معتبر نیست.',
+  StillWaiting: 'در این سناریوی فرضی هنوز ۹۰ دوره کامل ۲۴ساعته نگذشته است.',
+  NinetyFullDaysElapsed: 'فقط شرط زمانیِ فرضی ۹۰ روز کامل شده است؛ هیچ استحقاقی تأیید نمی‌شود.'
+};
+function validTime(value: unknown): value is HypotheticalTime {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Partial<HypotheticalTime>;
+  return v.contract === 'TRN-TECH-072' && v.hypotheticalOnly === true &&
+    v.officialActivationVerified === false && v.memberEligibilityVerified === false &&
+    v.walletCreditAuthorized === false && v.nationalReleaseAllowed === false &&
+    typeof v.state === 'string' && Object.hasOwn(timeLabels, v.state) &&
+    (v.thresholdUtc === null ||
+      (typeof v.thresholdUtc === 'string' && utcPattern.test(v.thresholdUtc)));
+}
+
 export function OperationsApp() {
   const [state, setState] = useState<State>({ kind: 'LOADING' });
   const [sequence, setSequence] = useState(0);
   const [filter, setFilter] = useState('ALL');
+  const [activationUtc, setActivationUtc] = useState('');
+  const [observedUtc, setObservedUtc] = useState('');
+  const [preview, setPreview] = useState<Preview>({ phase: 'NOT_ENTERED' });
+
+  async function calculateTime(): Promise<void> {
+    if (activationUtc && !utcPattern.test(activationUtc) ||
+        !utcPattern.test(observedUtc)) {
+      setPreview({ phase: 'INVALID' });
+      return;
+    }
+    setPreview({ phase: 'CALCULATING' });
+    try {
+      const response = await fetch('/internal/ops/v1/waiting-preview', {
+        method: 'POST', credentials: 'omit', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activationUtc: activationUtc || null, observedUtc
+        })
+      });
+      if (!response.ok) throw Error('INVALID_PREVIEW');
+      const data: unknown = await response.json();
+      if (!validTime(data)) throw Error('INVALID_TIME_RESULT');
+      setPreview({ phase: 'HYPOTHETICAL_ONLY', result: data });
+    } catch {
+      setPreview({ phase: 'INVALID' });
+    }
+  }
+
   useEffect(() => {
     const ac = new AbortController();
     setState({ kind: 'LOADING' });
@@ -83,7 +140,41 @@ export function OperationsApp() {
         <ul className="dimensions">{filtered.map(d => <li key={d.id}><strong>{d.id} — {d.label}</strong>
           <span>{d.status}</span><small>شواهد موردنیاز: {d.missingEvidence.join('، ')}</small></li>)}</ul>
       </section>}
-      <footer>TRN-TECH-071 | فقط آزمایش محلی | بدون ورود، پرداخت، تشخیص، تغییر وضعیت یا اتصال خارجی</footer>
+      <section className="panel" aria-labelledby="hypothetical-title">
+        <h2 id="hypothetical-title">محاسبه آموزشی دوره انتظار ۹۰ روزه</h2>
+        <p>زمان‌ها صرفاً فرضی، بدون نام و بدون ذخیره‌سازی‌اند. تاریخ فعال‌سازی رسمی عضو از این فرم صادر یا تأیید نمی‌شود.</p>
+        <p>هر روز دقیقاً ۲۴ ساعت است؛ «سه ماه تقویمی» الزاماً معادل ۹۰ روز کامل نیست.</p>
+        <form onSubmit={event => { event.preventDefault(); void calculateTime(); }}>
+          <div className="input-grid">
+            <label htmlFor="hypothetical-activation">
+              زمان فرضی فعال‌سازی (UTC؛ اختیاری)
+              <input id="hypothetical-activation" value={activationUtc}
+                onChange={e => { setActivationUtc(e.target.value); setPreview({ phase: 'NOT_ENTERED' }); }}
+                placeholder="YYYY-MM-DDTHH:mm:ssZ" maxLength={20} autoComplete="off" />
+            </label>
+            <label htmlFor="hypothetical-observed">
+              لحظه فرضی بررسی (UTC؛ لازم)
+              <input id="hypothetical-observed" value={observedUtc}
+                onChange={e => { setObservedUtc(e.target.value); setPreview({ phase: 'NOT_ENTERED' }); }}
+                placeholder="YYYY-MM-DDTHH:mm:ssZ" maxLength={20} autoComplete="off" required />
+            </label>
+          </div>
+          <button type="submit" disabled={preview.phase === 'CALCULATING'}>
+            بررسی شرط زمانی فرضی
+          </button>
+        </form>
+        {preview.phase === 'CALCULATING' && <p role="status">در حال محاسبه توسط هسته .NET محلی</p>}
+        {preview.phase === 'INVALID' && <p role="status">ورودی یا سرویس محاسبه معتبر نیست؛ نتیجه‌ای تأیید نشده است. تاریخ باید دقیقاً UTC و با Z پایان یابد.</p>}
+        {preview.phase === 'HYPOTHETICAL_ONLY' && (
+          <div className="time-result" role="status" aria-live="polite">
+            <strong>{timeLabels[preview.result.state]}</strong>
+            {preview.result.thresholdUtc &&
+              <p>مرز زمانی فرضی: <code>{preview.result.thresholdUtc}</code></p>}
+            <p>فعال‌سازی رسمی: تأییدنشده | استحقاق عضو: تأییدنشده | اعتبار کیف پول: تأییدنشده</p>
+          </div>
+        )}
+      </section>
+      <footer>TRN-TECH-071/072 | فقط آزمایش محلی | بدون ورود، پرداخت، تشخیص، تغییر وضعیت یا اتصال خارجی</footer>
     </main>
   </>;
 }

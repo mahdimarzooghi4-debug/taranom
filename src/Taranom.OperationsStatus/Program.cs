@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Globalization;
+using Taranom.MemberGovernance;
 
 var builder = WebApplication.CreateBuilder(args);
 // Developer-only same-origin end-to-end probe. Never expose to public network.
@@ -39,6 +41,11 @@ app.MapGet("/internal/ops/v1/status", () =>
         dimensions = inventory
     });
 });
+
+// Explicitly anonymous and hypothetical: an actual member's activation,
+// verified event source, legal status and wallet eligibility are NEVER inferred.
+app.MapPost("/internal/ops/v1/waiting-preview", WaitingPreview.Evaluate);
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFallbackToFile("index.html");
@@ -108,4 +115,105 @@ internal static class ReleaseDenialSource
             return null;
         }
     }
+}
+
+
+// Public historical rule demonstration only. No identity, session, stored
+// dates, claim of official activation or membership entitlement; no side effects.
+internal static class WaitingPreview
+{
+    private const string Contract = "TRN-TECH-072";
+    private const string IsoUtc = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+
+    internal static async Task<IResult> Evaluate(HttpContext context)
+    {
+        var req = context.Request;
+        if (req.Headers.Origin.Count > 0 &&
+            !string.Equals(req.Headers.Origin.ToString(),
+                "http://127.0.0.1:4318", StringComparison.Ordinal) &&
+            !string.Equals(req.Headers.Origin.ToString(),
+                "http://localhost:4318", StringComparison.Ordinal))
+            return Invalid();
+        if (req.ContentType is null ||
+            !req.ContentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) ||
+            req.ContentLength is > 512)
+            return Invalid();
+
+        // Enforce body bound even when Content-Length is omitted/chunked.
+        var buffer = new byte[513];
+        var count = 0;
+        try
+        {
+            while (count < buffer.Length)
+            {
+                var read = await req.Body.ReadAsync(buffer.AsMemory(count));
+                if (read == 0) break;
+                count += read;
+            }
+            if (count is < 2 or > 512) return Invalid();
+            using var doc = JsonDocument.Parse(buffer.AsMemory(0, count),
+                new JsonDocumentOptions { MaxDepth = 4 });
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                root.EnumerateObject().Count() != 2 ||
+                !root.TryGetProperty("activationUtc", out var rawActivation) ||
+                !root.TryGetProperty("observedUtc", out var rawObserved) ||
+                rawObserved.ValueKind != JsonValueKind.String ||
+                rawActivation.ValueKind is not (JsonValueKind.Null or JsonValueKind.String))
+                return Invalid();
+
+            var observedText = rawObserved.GetString();
+            if (!TryUtc(observedText, out var observed)) return Invalid();
+
+            DateTimeOffset? activation = null;
+            if (rawActivation.ValueKind == JsonValueKind.String)
+            {
+                if (!TryUtc(rawActivation.GetString(), out var at)) return Invalid();
+                activation = at;
+            }
+
+            var projection = MembershipWaitingPeriod.Observe(activation, observed);
+            return Results.Json(new
+            {
+                contract = Contract,
+                hypotheticalOnly = true,
+                officialActivationVerified = false,
+                memberEligibilityVerified = false,
+                walletCreditAuthorized = false,
+                nationalReleaseAllowed = false,
+                state = projection.State.ToString(),
+                thresholdUtc = projection.ThresholdUtc?.ToString(
+                    IsoUtc, CultureInfo.InvariantCulture)
+            });
+        }
+        catch (JsonException)
+        {
+            return Invalid();
+        }
+        catch (IOException)
+        {
+            return Invalid();
+        }
+    }
+
+    private static bool TryUtc(string? value, out DateTimeOffset utc)
+    {
+        utc = default;
+        return value is { Length: 20 } &&
+            DateTimeOffset.TryParseExact(value, IsoUtc,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out utc);
+    }
+
+    private static IResult Invalid() => Results.Json(new
+    {
+        contract = Contract,
+        status = "INVALID_HYPOTHETICAL_INPUT",
+        hypotheticalOnly = true,
+        officialActivationVerified = false,
+        memberEligibilityVerified = false,
+        walletCreditAuthorized = false,
+        nationalReleaseAllowed = false
+    }, statusCode: 400);
 }

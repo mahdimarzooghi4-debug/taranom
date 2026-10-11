@@ -50,3 +50,55 @@ test('OPS-05 refresh, keyboard focus and Persian RTL preserve deny-only state', 
   await expect(page.locator('.dimensions li')).toHaveCount(17);
   await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
 });
+
+
+test('TIME-01 exact 90 full days uses actual domain-backed .NET HTTP', async ({ page }) => {
+  await page.goto('/operations');
+  await page.getByLabel('زمان فرضی فعال‌سازی (UTC؛ اختیاری)').fill('2026-01-01T00:00:00Z');
+  await page.getByLabel('لحظه فرضی بررسی (UTC؛ لازم)').fill('2026-04-01T00:00:00Z');
+  await page.getByRole('button', { name: 'بررسی شرط زمانی فرضی' }).click();
+  await expect(page.getByRole('status').last()).toContainText('فقط شرط زمانیِ فرضی ۹۰ روز کامل شده');
+  await expect(page.getByRole('status').last()).toContainText('2026-04-01T00:00:00Z');
+  await expect(page.getByRole('status').last()).toContainText('استحقاق عضو: تأییدنشده');
+});
+
+test('TIME-02 one second before completion is still waiting', async ({ page }) => {
+  await page.goto('/operations');
+  await page.getByLabel('زمان فرضی فعال‌سازی (UTC؛ اختیاری)').fill('2026-01-01T00:00:00Z');
+  await page.getByLabel('لحظه فرضی بررسی (UTC؛ لازم)').fill('2026-03-31T23:59:59Z');
+  await page.getByRole('button', { name: 'بررسی شرط زمانی فرضی' }).click();
+  await expect(page.getByRole('status').last()).toContainText('هنوز ۹۰ دوره کامل');
+});
+
+test('TIME-03 missing activation refuses to start a waiting period', async ({ page }) => {
+  await page.goto('/operations');
+  await page.getByLabel('لحظه فرضی بررسی (UTC؛ لازم)').fill('2026-04-01T00:00:00Z');
+  await page.getByRole('button', { name: 'بررسی شرط زمانی فرضی' }).click();
+  await expect(page.getByRole('status').last()).toContainText('بدون رویداد فعال‌سازی رسمی');
+});
+
+test('TIME-04 malformed UTC and extra fields are rejected by real .NET endpoint', async ({ request }) => {
+  const url = '/internal/ops/v1/waiting-preview';
+  const valid = await request.post(url, { data: { activationUtc: '2026-01-01T00:00:00Z', observedUtc: '2026-04-01T00:00:00Z' } });
+  expect(valid.status()).toBe(200);
+  const actual = await valid.json();
+  expect(actual.state).toBe('NinetyFullDaysElapsed');
+  expect(actual.hypotheticalOnly).toBe(true);
+  expect(actual.officialActivationVerified).toBe(false);
+  expect(actual.memberEligibilityVerified).toBe(false);
+  expect(actual.walletCreditAuthorized).toBe(false);
+  expect(actual.nationalReleaseAllowed).toBe(false);
+  expect((await request.post(url, { data: { activationUtc: '2026-01-01T00:00:00+03:30', observedUtc: '2026-04-01T00:00:00Z' } })).status()).toBe(400);
+  expect((await request.post(url, { data: { activationUtc: null, observedUtc: '2026-04-01T00:00:00Z', memberId: 'test:spoof' } })).status()).toBe(400);
+  expect((await request.post(url, { data: { activationUtc: null } })).status()).toBe(400);
+});
+
+test('TIME-05 failed local service never produces a successful hypothetical result', async ({ page }) => {
+  await page.route('**/internal/ops/v1/waiting-preview', route => route.abort());
+  await page.goto('/operations');
+  await page.getByLabel('زمان فرضی فعال‌سازی (UTC؛ اختیاری)').fill('2026-01-01T00:00:00Z');
+  await page.getByLabel('لحظه فرضی بررسی (UTC؛ لازم)').fill('2026-04-01T00:00:00Z');
+  await page.getByRole('button', { name: 'بررسی شرط زمانی فرضی' }).click();
+  await expect(page.getByRole('status').last()).toContainText('ورودی یا سرویس محاسبه معتبر نیست');
+  await expect(page.getByText('فقط شرط زمانیِ فرضی ۹۰ روز کامل شده')).toHaveCount(0);
+});
