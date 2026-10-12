@@ -64,6 +64,7 @@ function verified(input: unknown): input is Source {
 export function MarketEntryApp() {
   const [state, setState] = useState<State>({ phase: 'LOADING' });
   const [revision, setRevision] = useState(0);
+  const [payerMode, setPayerMode] = useState<'INDIVIDUAL' | 'THIRD_PARTY'>('INDIVIDUAL');
   useEffect(() => {
     const controller = new AbortController();
     setState({phase:'LOADING'});
@@ -123,6 +124,43 @@ export function MarketEntryApp() {
             href={marketRoutes.find(r => r.id === m.id)!.path}
             aria-current={selected === m.id ? 'page' : undefined}>{m.label}</a>)}
         </nav>
+
+        <section className="panel" aria-labelledby="payer-guide-title" data-testid="payer-guide">
+          <h2 id="payer-guide-title">راهنمای انتخاب بازار و تأمین حق اشتراک</h2>
+          <p>این راهنما فقط تصمیم‌های مصوب را بر اساس وضعیت واقعیِ مسدودبودن سه بازار توضیح می‌دهد. هیچ قیمت، قرارداد، معافیت، عضویت یا مجوز درمانی از پاسخ استنتاج نمی‌شود.</p>
+          <fieldset>
+            <legend>پرداخت‌کننده احتمالیِ حق اشتراک</legend>
+            <label><input type="radio" name="payer-guide" value="INDIVIDUAL"
+              checked={payerMode === 'INDIVIDUAL'}
+              onChange={() => setPayerMode('INDIVIDUAL')}/> خود فرد</label>
+            <label><input type="radio" name="payer-guide" value="THIRD_PARTY"
+              checked={payerMode === 'THIRD_PARTY'}
+              onChange={() => setPayerMode('THIRD_PARTY')}/> حامی یا سازمان، صرفاً پس از قرارداد معتبر</label>
+          </fieldset>
+          <div className="market-grid" aria-label="نتیجه مقایسه سه بازار">
+            {source.markets.map(m => {
+              const conditional = payerMode === 'THIRD_PARTY';
+              const potentiallyRelevant = !conditional || m.thirdPartyPayerContractRequired;
+              return <article className="market-tile" key={m.id}
+                data-testid={'payer-market-' + m.id}>
+                <h3>{m.label}</h3>
+                <p>{potentiallyRelevant
+                  ? conditional
+                    ? 'این مسیر امکان بررسی پرداخت توسط طرف ثالث را فقط با قرارداد معتبرِ آتی پیش‌بینی می‌کند.'
+                    : 'پرداخت حق اشتراک توسط خود فرد در دامنه تصمیم‌های مصوب است؛ هیچ پرداختی فعال نیست.'
+                  : 'این بازار به‌عنوان مسیر پرداخت شخص ثالث تعریف نشده است.'}</p>
+                <p>مالک عضویت و کیف پول درمانی: همیشه شخص عضو.</p>
+                <p>حق دسترسی خودکار حامی به پرونده سلامت: وجود ندارد.</p>
+                <p>وضعیت منبع: {m.status}</p>
+                <p>قرارداد معتبر، پرداخت و فعال‌سازی: تأیید نشده.</p>
+                <a href={marketRoutes.find(route => route.id === m.id)!.path}>
+                  مطالعه مسیر {m.label}
+                </a>
+              </article>;
+            })}
+          </div>
+          <p role="note">این مقایسه مجوز پرداخت، صدور فاکتور، دسترسی سلامت یا پیشنهاد تجاری محسوب نمی‌شود. انتخاب بازار به تنهایی هیچ استحقاقی نمی‌سازد.</p>
+        </section>
         <section aria-labelledby="market-scope-title">
           <h2 id="market-scope-title">{active ? 'مسیر انتخابی' : 'سه مسیر مصوب در دامنه برنامه'}</h2>
           <div className="market-grid">

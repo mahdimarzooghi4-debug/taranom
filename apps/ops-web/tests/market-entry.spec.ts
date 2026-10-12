@@ -66,3 +66,39 @@ test('MARKET-05 unknown market paths are 404, no fake login, no hidden payments'
   await expect(page.getByRole('button',{name:/ثبت‌نام|پرداخت|شروع عضویت/})).toHaveCount(0);
   await expect(page.getByRole('status')).toContainText('BLOCKED_UNVERIFIED');
 });
+
+test('MARKET-81 real source guides member vs third-party payer without changing ownership',async({page})=>{
+ await page.goto('/markets');
+ await expect(page.getByTestId('payer-guide')).toBeVisible();
+ await expect(page.getByTestId('payer-guide').locator('.market-tile')).toHaveCount(3);
+ await expect(page.getByTestId('payer-guide')).toContainText('مالک عضویت و کیف پول درمانی: همیشه شخص عضو');
+ await page.getByRole('radio',{name:/حامی یا سازمان/}).check();
+ await expect(page.getByTestId('payer-market-MARKET-PUBLIC')).toContainText('به‌عنوان مسیر پرداخت شخص ثالث تعریف نشده');
+ await expect(page.getByTestId('payer-market-MARKET-SUPPORT')).toContainText('فقط با قرارداد معتبر');
+ await expect(page.getByTestId('payer-market-MARKET-CORPORATE')).toContainText('فقط با قرارداد معتبر');
+ for(const id of ['MARKET-PUBLIC','MARKET-SUPPORT','MARKET-CORPORATE']){
+   await expect(page.getByTestId('payer-market-'+id)).toContainText('BLOCKED_UNVERIFIED');
+   await expect(page.getByTestId('payer-market-'+id)).toContainText('حق دسترسی خودکار حامی به پرونده سلامت: وجود ندارد');
+   await expect(page.getByTestId('payer-market-'+id)).toContainText('فعال‌سازی: تأیید نشده');
+ }
+ await page.getByRole('radio',{name:'خود فرد'}).check();
+ await expect(page.getByTestId('payer-market-MARKET-PUBLIC')).toContainText('پرداخت حق اشتراک توسط خود فرد');
+ await expect(page.getByRole('button',{name:/پرداخت|فعال‌سازی|عضویت/})).toHaveCount(0);
+});
+
+test('MARKET-81 source missing or forged authorization removes all payer guidance',async({page})=>{
+ await page.route('**/internal/ops/v1/market-entry',route=>route.abort());
+ await page.goto('/markets');
+ await expect(page.getByTestId('payer-guide')).toHaveCount(0);
+ await expect(page.getByRole('status')).toContainText('منبع وضعیت قابل تأیید نیست');
+ await page.unrouteAll();
+ await page.goto('/markets');
+ await expect(page.getByTestId('payer-guide')).toBeVisible();
+ await page.route('**/internal/ops/v1/market-entry',async route=>{
+   const response=await route.fetch();const body=await response.json();
+   body.markets[0].sponsorClinicalAccessAuthorized=true;
+   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+ });
+ await page.getByRole('button',{name:'بازخوانی وضعیت'}).click();
+ await expect(page.getByTestId('payer-guide')).toHaveCount(0);
+});

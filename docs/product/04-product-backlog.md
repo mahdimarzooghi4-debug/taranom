@@ -229,3 +229,7 @@ Owner requested large, substantive packages. [TRN-TECH-070](../technical/70-offl
 ## Sprint 80 — Canonical .NET national blockers in Member and Center
 
 TRN-TECH-089: all 15 existing Member and Center pages on loopback ASP.NET 4318 now display the existing canonical 17 blocked dimensions and evidence references; invalid, READY, duplicate or unavailable source fails closed and removes stale details. Standalone browsers never fetch source. Official three-market national first release DENIED_BY_DEFAULT. Push+PR full 14-job CI and human review gates retained.
+
+## Sprint 81 — Interactive payer choice and individual wallet ownership for all markets (2026-10-12)
+
+[TRN-TECH-090](../technical/90-three-market-payer-individual-ownership.md) / [Sprint81](../sprints/89-sprint-81-three-market-payer-guide.md): the same existing source-validated three-market React workspace now offers a real interactive comparison of self-paid vs future contracted third-party subscription under TRN-BIZ-029. Person always owns healthcare wallet and membership, and sponsor gets no implicit clinical access. No finance/product activation; missing/forged source removes guidance, not pretending approval. Full 14 Push/PR jobs and human review remain gates.
