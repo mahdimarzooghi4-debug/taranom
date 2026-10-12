@@ -78,6 +78,10 @@ app.MapGet("/internal/ops/v1/market-entry",
 app.MapPost("/internal/ops/v1/waiting-preview",
     (Func<HttpContext, Task<IResult>>)WaitingPreview.Evaluate);
 
+// Exact two-field, no identity, no financial write: just policy what-if.
+app.MapPost("/internal/ops/v1/payer-scenario-preview",
+    (Func<HttpContext, Task<IResult>>)PayerScenarioHttp.Evaluate);
+
 app.Use(async (context, next) =>
 {
     if ((context.Request.Path.StartsWithSegments("/member-portal") ||
@@ -154,6 +158,7 @@ internal static class OpsFallback
         if ((ProductPageSource.IsExplicitPage(path) && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/waiting-preview" && !HttpMethods.IsPost(method)) ||
+            (path == "/internal/ops/v1/payer-scenario-preview" && !HttpMethods.IsPost(method)) ||
             (path == "/operations" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/market-entry" && !HttpMethods.IsGet(method)) ||
             ((path is "/markets" or "/markets/individuals" or
