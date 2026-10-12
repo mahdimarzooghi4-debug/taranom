@@ -61,7 +61,7 @@ internal static class SupportHttp
         }
     }
 
-    private static object ToResponse(SyntheticSupportSnapshot state, string caseRef, string outcome)
+    internal static object ToResponse(SyntheticSupportSnapshot state, string caseRef, string outcome)
     {
         var read = SyntheticSupportReadProjection.Project(state);
         var first = state.History.IsEmpty ? (SyntheticSupportCommand?)null : state.History[0].Command;

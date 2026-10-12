@@ -83,6 +83,10 @@ app.MapGet("/internal/demo/v1/support/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/support/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.WriteAsync);
+app.MapGet("/internal/demo/v1/support/{caseRef}/history",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHistoryHttp.ListAsync);
+app.MapGet("/internal/demo/v1/support/{caseRef}/versions/{revision}",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHistoryHttp.AtVersionAsync);
 
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 // Exact local member entrypoint is required: the generic root fallback must
