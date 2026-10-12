@@ -1,0 +1,7 @@
+# TRN-SP-70 — Private external evidence batch preparation and national gap visibility
+
+**Date:** 2026-10-12. **Parent:** Draft/Open PR #77, exact head `f8e76d2186d66b1f765535b554e2faea94496f49`, both 14/14 CI SUCCESS, preliminary COMMENT review. **Contract:** [TRN-TECH-079](../technical/79-private-evidence-batch-workbench.md).
+
+**Scope:** supply real-useful trusted-local *operator tooling* for all 17 currently unverified national launch dimensions and three markets, without onboarding a fictional partner. Read an operator-created private bounded request, securely hash genuine private file bytes using the existing descriptor-safe checker, derive a new-only private manifest bound to the actual canonical inventory, and produce a redacted human-actionable missing-slot workbench. All source/evidence/approval boundaries remain negative by default. Tests cover positive example bytes and fail-close adversarial conditions under inherited 14-job CI.
+
+**Explicit exclusions:** no arbitrary IdP/session/financial/medical/insurance rights, real user or medical data in Public Git or CI, real API endpoints, actual partner selection, signer authenticity, legal clearance, financial/clinical approval, external AI, Prod or national-release rights. `TRN-TECH-012` still NOT CODE-AUTHORIZED. 17/17 dimensions remain `BLOCKED_UNVERIFIED`; complete first nationwide public/support/corporate launch `DENIED_BY_DEFAULT`. Draft/Open/unmerged; COMMENT is not independent approval.
