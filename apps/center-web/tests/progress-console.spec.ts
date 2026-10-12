@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 // Require precisely one generated public DRAFT console; future Sprint names
 // cannot silently point to an old artifact or an absent file.
 const results = resolve(process.cwd(), 'TestResults');
-const candidates = readdirSync(results).filter(name => /^sprint\d+-epic-console\.html$/.test(name));
+const candidates = readdirSync(results).filter(name => /^(?:sprint\d+|fullci)-epic-console\.html$/.test(name));
 if (candidates.length !== 1) throw new Error('AMBIGUOUS_OR_MISSING_EPIC_CONSOLE');
 const dashboard = pathToFileURL(resolve(results, candidates[0])).href;
 

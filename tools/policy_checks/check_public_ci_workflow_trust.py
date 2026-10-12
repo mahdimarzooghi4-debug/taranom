@@ -134,13 +134,16 @@ def inspect_workflow(path: Path) -> list[str]:
         if set(job_names) != REQUIRED_FULL_JOBS or len(job_names) != 14:
             violations.add("REQUIRED_FULL_CI_JOB_MISSING_OR_EXTRA")
         # An omitted job body / inserted conditional skip is never accepted.
-        if any(re.match(r"^\s*(?:if|continue-on-error|secrets|with):", s)
-               for s in job_lines):
-            # with: is permitted solely inside an approved first-party pinned
-            # action step; it is checked below, not prohibited universally.
-            if any(re.match(r"^\s*(?:if|continue-on-error|secrets):", s)
-                   for s in job_lines):
-                violations.add("REUSABLE_JOB_SKIP_OR_SECRET_FORBIDDEN")
+        # The inherited evidence upload actions use the unconditional
+        # *step-level* "if: always()" so artifacts survive failed test jobs.
+        # Preserve that one exact 8-space source shape but reject any
+        # job-level if, conditional step skip, secrets or continue-on-error.
+        if any(
+            re.match(r"^\s*(?:continue-on-error|secrets):", s)
+            or (re.match(r"^\s*if:", s) and s != "        if: always()")
+            for s in job_lines
+        ):
+            violations.add("REUSABLE_JOB_SKIP_OR_SECRET_FORBIDDEN")
     else:
         # No non-dispatcher workflow may invoke a reusable job.
         if any(re.match(r"^    uses:", s) for s in job_lines):
