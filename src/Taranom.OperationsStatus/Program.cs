@@ -81,8 +81,24 @@ app.UseStaticFiles();
 app.MapGet("/operations", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "index.html"), "text/html; charset=utf-8"));
-app.MapFallback(() => Results.NotFound());
+// Keep HTTP method mismatch distinct from a missing route. The former must
+// remain 405; the latter cannot be a successful SPA HTML page.
+app.MapFallback((Func<HttpContext, IResult>)OpsFallback.Evaluate);
 app.Run();
+
+internal static class OpsFallback
+{
+    internal static IResult Evaluate(HttpContext context)
+    {
+        var path = context.Request.Path.Value;
+        var method = context.Request.Method;
+        if ((path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
+            (path == "/internal/ops/v1/waiting-preview" && !HttpMethods.IsPost(method)) ||
+            (path == "/operations" && !HttpMethods.IsGet(method)))
+            return Results.StatusCode(StatusCodes.Status405MethodNotAllowed);
+        return Results.NotFound();
+    }
+}
 
 internal sealed record Dimension(string Id, string Label, string Status, string[] MissingEvidence);
 
