@@ -68,9 +68,15 @@ test('GUIDED-84-03 invalid input, unknown source and manual steps never authoriz
  await page.getByLabel('شناسه پزشک آزمایشی').fill('real:doctor');
  await expect(guide.getByTestId('center-guided-step')).toContainText('صرفاً test:');
  await setup(page);
- await page.route('**/internal/demo/v1/centers/test:*',route=>route.abort());
+ let intercepted=0;
+ // The URL contains percent-encoded test: so match the entire bounded
+ // centers prefix rather than a literal unencoded test: substring.
+ await page.route('**/internal/demo/v1/centers/**',route=>{
+  intercepted++;return route.abort();
+ });
  await page.getByRole('button',{name:'بازخوانی مرکز از PostgreSQL'}).click();
  await expect(page.getByRole('status').first()).toContainText('وضعیت معتبر فرض نمی‌شود');
+ expect(intercepted).toBe(1);
  await expect(guide.getByRole('button',{name:'ثبت مرحله بعد در PostgreSQL'})).toHaveCount(0);
  await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
 });
