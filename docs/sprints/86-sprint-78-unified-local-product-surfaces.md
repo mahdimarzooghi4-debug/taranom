@@ -1,0 +1,7 @@
+# Sprint 78 — Real same-origin three-market, member and center product navigation
+
+**Date:** 2026-10-12. **Technical:** [TRN-TECH-087](../technical/87-unified-local-product-surfaces.md). **Parent:** PR #85 exact `8c011d25f7e6dd6cb26107ca47389453a49dc7c2` Draft/Open, Push+PR 14/14 green and COMMENT review only.
+
+**Deliverable:** existing independent Persian member and center UI become **real, separately compiled** page routes under the single running localhost C#/.NET product orientation host, with actual market→member/center browsing, direct/deep reload and denial-only evidence gating. All separate independent React projects and the genuine three-market backend remain intact. No actual member identity, clinical service, verified doctor, private wallet, sponsor access, provider qualification or active membership is represented. New Python HTTP and Playwright Chromium prove routing, asset isolation, Host/Forwarded denial, response headers, invalid unknown and mutation routes, and zero external API calls. Shared exact-head Push+PR **14/14** CI retains .NET, PostgreSQL recovery and all inherited security gates. Preliminary Code Review COMMENT only after green.
+
+**Business/release:** 13 required Epics, 3 markets, national coverage = 17 BLOCKED_UNVERIFIED. First comprehensive nationwide three-market public release DENIED_BY_DEFAULT; product completion UNBASELINED. No Ready/Merge/Stage/QA Gate/Release Approval/Production or independent human approval.

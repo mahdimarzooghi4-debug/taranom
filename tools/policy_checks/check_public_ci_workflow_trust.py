@@ -46,6 +46,10 @@ DISPATCHER_BRANCHES = {
         "sprint-77-ephemeral-postgres-recovery-rehearsal",
         "sprint-76-private-fhir-capability-preflight",
     ),
+    "sprint-78-unified-loopback-product-surfaces.yml": (
+        "sprint-78-unified-loopback-product-surfaces",
+        "sprint-77-ephemeral-postgres-recovery-rehearsal",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -78,6 +78,25 @@ app.MapGet("/internal/ops/v1/market-entry",
 app.MapPost("/internal/ops/v1/waiting-preview",
     (Func<HttpContext, Task<IResult>>)WaitingPreview.Evaluate);
 
+app.Use(async (context, next) =>
+{
+    if ((context.Request.Path.StartsWithSegments("/member-portal") ||
+         context.Request.Path.StartsWithSegments("/center-portal")) &&
+        ReleaseDenialSource.Read(Environment.GetEnvironmentVariable(
+            "TARANOM_OPS_REPO_ROOT")) is null)
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new {
+            contract = "TRN-TECH-087",
+            outcome = "PUBLIC_RELEASE_SOURCE_UNVERIFIABLE",
+            memberAuthenticated = false,
+            clinicalProviderVerified = false,
+            nationalReleaseAllowed = false
+        });
+        return;
+    }
+    await next();
+});
 app.UseDefaultFiles();
 app.UseStaticFiles();
 // Explicit technical UI entrypoint. Unknown URLs do not become a 200 HTML
@@ -97,6 +116,30 @@ foreach (var route in new[] {
         Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
             "index.html"), "text/html; charset=utf-8"));
 }
+// Existing separately built member and center informational React apps.
+// These routes do NOT authenticate subjects or create an external API.
+// Names are explicit: unknown/deceptive routes never become SPA 200.
+var memberPages = new[] {
+    "/member", "/member/membership", "/member/credit", "/member/consents",
+    "/member/care", "/member/prevention", "/member/records", "/member/costs",
+    "/member/billing", "/member/support"
+};
+var centerPages = new[] {
+    "/center", "/center/departments", "/center/doctors",
+    "/center/qualifications", "/center/audit"
+};
+foreach (var page in memberPages)
+{
+    app.MapGet(page, () => ProductPageSource.Read(
+        app.Environment.WebRootPath ?? "wwwroot", "member-portal"));
+}
+foreach (var page in centerPages)
+{
+    app.MapGet(page, () => ProductPageSource.Read(
+        app.Environment.WebRootPath ?? "wwwroot", "center-portal"));
+}
+// Static compiled bundles also respect fail-closed source admission.
+// Existing ops bundle and APIs are unchanged.
 // Keep HTTP method mismatch distinct from a missing route. The former must
 // remain 405; the latter cannot be a successful SPA HTML page.
 app.MapFallback((Func<HttpContext, IResult>)OpsFallback.Evaluate);
@@ -108,7 +151,8 @@ internal static class OpsFallback
     {
         var path = context.Request.Path.Value;
         var method = context.Request.Method;
-        if ((path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
+        if ((ProductPageSource.IsExplicitPage(path) && !HttpMethods.IsGet(method)) ||
+            (path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/waiting-preview" && !HttpMethods.IsPost(method)) ||
             (path == "/operations" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/market-entry" && !HttpMethods.IsGet(method)) ||
@@ -117,6 +161,51 @@ internal static class OpsFallback
                 !HttpMethods.IsGet(method)))
             return Results.StatusCode(StatusCodes.Status405MethodNotAllowed);
         return Results.NotFound();
+    }
+}
+
+// TRN-TECH-087: strict source-backed local informational UI, not auth.
+internal static class ProductPageSource
+{
+    private static readonly HashSet<string> Member = new(StringComparer.Ordinal) {
+        "/member", "/member/membership", "/member/credit", "/member/consents",
+        "/member/care", "/member/prevention", "/member/records", "/member/costs",
+        "/member/billing", "/member/support"
+    };
+    private static readonly HashSet<string> Center = new(StringComparer.Ordinal) {
+        "/center", "/center/departments", "/center/doctors",
+        "/center/qualifications", "/center/audit"
+    };
+
+    internal static bool IsExplicitPage(string? path) =>
+        path is not null && (Member.Contains(path) || Center.Contains(path));
+
+    internal static IResult Read(string root, string subdirectory)
+    {
+        // Immutable, enumerated static bundle names, never a request-supplied
+        // filesystem path. A missing release inventory cannot permit pages.
+        if (ReleaseDenialSource.Read(Environment.GetEnvironmentVariable(
+            "TARANOM_OPS_REPO_ROOT")) is null)
+            return Results.Json(new {
+                contract = "TRN-TECH-087",
+                outcome = "PUBLIC_RELEASE_SOURCE_UNVERIFIABLE",
+                memberAuthenticated = false,
+                clinicalProviderVerified = false,
+                releaseAllowed = false,
+                nationalReleaseAllowed = false
+            }, statusCode: 503);
+
+        var file = Path.Combine(root, subdirectory, "index.html");
+        if (!File.Exists(file))
+            return Results.Json(new {
+                contract = "TRN-TECH-087",
+                outcome = "DISCONNECTED_BUNDLE_UNAVAILABLE",
+                memberAuthenticated = false,
+                clinicalProviderVerified = false,
+                releaseAllowed = false,
+                nationalReleaseAllowed = false
+            }, statusCode: 503);
+        return Results.File(file, "text/html; charset=utf-8");
     }
 }
 

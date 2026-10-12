@@ -109,6 +109,14 @@ export function MarketEntryApp() {
         </p>
       </section>
       {source && <>
+        <aside className="panel" aria-label="محیط‌های نمایشی مستقل">
+          <h2>بازدید از محیط‌های وب ترنم در توسعه</h2>
+          <p>این پیوندها فقط ساختار رابط را نشان می‌دهند؛ ورود عضو، خدمات مرکز و دسترسی درمانی فعال نیستند.</p>
+          <nav className="market-nav" aria-label="محیط‌های توسعه بدون داده واقعی">
+            <a href="/member">ورود به پیش‌نمایش عضو بدون حساب واقعی</a>
+            <a href="/center">ورود به پیش‌نمایش مرکز بدون پزشک واقعی</a>
+          </nav>
+        </aside>
         <nav className="market-nav" aria-label="مسیرهای سه بازار">
           <a href="/markets" aria-current={!selected ? 'page' : undefined}>هر سه بازار</a>
           {source.markets.map(m => <a key={m.id}

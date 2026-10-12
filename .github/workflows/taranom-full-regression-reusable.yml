@@ -597,6 +597,18 @@ jobs:
           npm run build
           mkdir -p ../../src/Taranom.OperationsStatus/wwwroot
           cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/
+          cd ../member-web
+          npm ci --no-audit --no-fund --ignore-scripts
+          npm run typecheck
+          npm run build -- --base=/member-portal/
+          mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/member-portal
+          cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/member-portal/
+          cd ../center-web
+          npm ci --no-audit --no-fund --ignore-scripts
+          npm run typecheck
+          npm run build -- --base=/center-portal/
+          mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/center-portal
+          cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/center-portal/
       - name: Install browser for real HTTP backend/frontend integration
         run: |
           cd apps/ops-web
@@ -616,6 +628,7 @@ jobs:
           test "$ready" = "1"
           python3 tests/ops_status/test_local_ops_http.py
           python3 tests/ops_status/test_three_market_entry_http.py
+          python3 tests/ops_status/test_unified_local_surfaces_http.py
           cd apps/ops-web
           CI=true npm run test:e2e
       - name: Upload local-only HTTP/browser QA records
