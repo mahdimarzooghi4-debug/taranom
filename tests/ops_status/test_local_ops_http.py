@@ -122,8 +122,9 @@ def verify_ops_host_and_route_denial():
     unknown = (
         "/login", "/api/v1/member", "/api/v1/members/test:123",
         "/internal/ops/v1/identity", "/internal/ops/v1/status/admin",
-        "/operations/real", "/clinical/records", "/admin", "/member",
-        "/member-demo/", "/center-demo", "/internal/demo/v1/support/test:123"
+        "/operations/real", "/clinical/records", "/admin", "/member/login",
+        "/member/records/patient", "/center/patients", "/member-demo/",
+        "/center-demo", "/internal/demo/v1/support/test:123"
     )
     for path in unknown:
         status, headers, response = call(path)
