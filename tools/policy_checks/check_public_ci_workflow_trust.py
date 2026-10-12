@@ -78,6 +78,10 @@ DISPATCHER_BRANCHES = {
         "sprint-85-synthetic-cost-choice-continuity",
         "sprint-84-synthetic-five-source-cost-workbench",
     ),
+    "sprint-86-postgres-cost-choice-workflow.yml": (
+        "sprint-86-postgres-cost-choice-workflow",
+        "sprint-85-synthetic-cost-choice-continuity",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

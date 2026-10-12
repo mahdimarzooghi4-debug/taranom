@@ -2,6 +2,7 @@ using System.Text.Json;
 using Npgsql;
 using Taranom.ClinicalCenterGovernance;
 using Taranom.ClinicalCenterJournal.Postgres;
+using Taranom.ProofingJournal.Postgres;
 
 // TRN-TECH-073: ephemeral synthetic ONLY, never a real center management API.
 if (Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY") != "CI_EPHEMERAL_ONLY")
@@ -17,6 +18,10 @@ if (connection.Database != "taranom_sprint64_center" ||
 await using var dataSource = NpgsqlDataSource.Create(connection.ConnectionString);
 await PgClinicalCenterJournal.InitializeIsolatedTestSchemaAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
+// TRN-TECH-095: reuse the EXISTING synthetic cost-awareness tables and
+// append-only event journal only when explicitly enabled in isolated CI.
+if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")
+    await PgSyntheticCostAwarenessJournal.InitializeIsolatedTestSchemaAsync(dataSource);
 var store = new PgClinicalCenterJournal(dataSource);
 
 var builder = WebApplication.CreateBuilder(args);
@@ -76,6 +81,19 @@ app.MapGet("/internal/demo/v1/centers/{centerRef}/history",
 app.MapGet("/internal/demo/v1/centers/{centerRef}/versions/{version}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CenterHistoryHttp.AtVersionAsync);
 
+// Separate persistent, TEST-ONLY cost-awareness journal; not a member
+// account, legal acknowledgement, insurer estimate or financial backend.
+if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")
+{
+    Taranom.CenterWorkflow.Demo.CostJournalHttp.Store = new PgSyntheticCostAwarenessJournal(dataSource);
+    app.MapPost("/internal/demo/v1/cost-previews",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CostJournalHttp.Register);
+    app.MapGet("/internal/demo/v1/cost-previews/{previewId}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CostJournalHttp.Read);
+    app.MapPost("/internal/demo/v1/cost-previews/{previewId}/choices",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CostJournalHttp.Record);
+}
+
 // Separate synthetic-only member support case; no actual member/insurer/provider.
 Taranom.CenterWorkflow.Demo.SupportHttp.Store =
     new Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal(dataSource);
@@ -98,6 +116,10 @@ app.MapGet("/", () =>
 app.MapGet("/member-demo/", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
+if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")
+    app.MapGet("/member-demo/costs", () =>
+        Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+            "member-demo", "index.html"), "text/html; charset=utf-8"));
 app.UseDefaultFiles();
 app.UseStaticFiles();
 // Unknown paths MUST NOT silently render the center browser page.

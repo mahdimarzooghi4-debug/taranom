@@ -721,7 +721,7 @@ jobs:
       - name: Execute PostgreSQL-backed real HTTP, denied business authority and UI QA
         run: |
           cd src/Taranom.CenterWorkflow.Demo
-          dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
+          TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           cd "$GITHUB_WORKSPACE"
@@ -736,6 +736,7 @@ jobs:
           fi
           python3 tests/center_demo/test_real_center_demo_http.py
           python3 tests/center_demo/test_support_history_http.py
+          python3 tests/center_demo/test_cost_journal_http.py
           cd apps/center-demo-web
           CI=true npm run test:e2e
           cd ../member-support-demo-web

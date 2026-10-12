@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemberSupportDemo } from './member-support-demo';
+import { CostJournalDemo } from './cost-journal-demo';
 import './style.css';
 
 function MemberSupportSurface() {
@@ -23,4 +24,7 @@ function MemberSupportSurface() {
 }
 const el = document.getElementById('root');
 if (!el) throw Error('Missing member support root');
-createRoot(el).render(<StrictMode><MemberSupportSurface /></StrictMode>);
+createRoot(el).render(<StrictMode>{window.location.pathname === '/member-demo/costs'
+  ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی پشتیبانی</a>
+      <CostJournalDemo /></main>
+  : <MemberSupportSurface />}</StrictMode>);
