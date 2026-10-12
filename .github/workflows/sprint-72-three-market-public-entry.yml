@@ -1,0 +1,14 @@
+name: Sprint 72 Three Market Product Entry Regression
+on:
+  push:
+    branches: [sprint-72-three-market-public-entry]
+  pull_request:
+    branches: [sprint-71-shared-secure-ci-gates]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

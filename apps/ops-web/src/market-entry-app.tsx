@@ -1,0 +1,141 @@
+import { useEffect, useState } from 'react';
+
+type MarketId = 'MARKET-PUBLIC' | 'MARKET-SUPPORT' | 'MARKET-CORPORATE';
+type Market = {
+  id: MarketId; label: string; description: string;
+  thirdPartyPayerContractRequired: boolean;
+  status: 'BLOCKED_UNVERIFIED'; missingEvidence: string[];
+  ownershipAlwaysIndividual: true; sponsorClinicalAccessAuthorized: false;
+  allowedActions: [];
+};
+type Source = {
+  contract: 'TRN-TECH-081'; source: 'PUBLIC_17_DENIAL_INVENTORY';
+  scope: 'THREE_MARKETS_AND_NATIONAL_FIRST_RELEASE';
+  marketCount: 3; blockerCount: 17; markets: Market[];
+  onboardingEnabled: false; memberAuthenticated: false;
+  sponsorClinicalAccessAuthorized: false; paymentsEnabled: false;
+  providerIntegrationsVerified: false; officialMembershipActivated: false;
+  releaseAllowed: false; nationalReleaseAllowed: false;
+};
+type State = { phase: 'LOADING' | 'UNAVAILABLE' } |
+             { phase: 'SOURCE_BLOCKED'; data: Source };
+
+const marketRoutes: {id:MarketId, path:string}[] = [
+  {id:'MARKET-PUBLIC',path:'/markets/individuals'},
+  {id:'MARKET-SUPPORT',path:'/markets/support'},
+  {id:'MARKET-CORPORATE',path:'/markets/corporate'}
+];
+
+const actualRoute = window.location.pathname;
+const selected = marketRoutes.find(r => r.path === actualRoute)?.id;
+
+function verified(input: unknown): input is Source {
+  if (!input || typeof input !== 'object') return false;
+  const v = input as Partial<Source>;
+  if (v.contract !== 'TRN-TECH-081' ||
+      v.source !== 'PUBLIC_17_DENIAL_INVENTORY' ||
+      v.scope !== 'THREE_MARKETS_AND_NATIONAL_FIRST_RELEASE' ||
+      v.marketCount !== 3 || v.blockerCount !== 17 ||
+      v.onboardingEnabled !== false || v.memberAuthenticated !== false ||
+      v.sponsorClinicalAccessAuthorized !== false ||
+      v.paymentsEnabled !== false || v.providerIntegrationsVerified !== false ||
+      v.officialMembershipActivated !== false ||
+      v.releaseAllowed !== false || v.nationalReleaseAllowed !== false ||
+      !Array.isArray(v.markets) || v.markets.length !== 3) return false;
+  const seen = new Set<string>();
+  for (const market of v.markets) {
+    if (!market || !marketRoutes.some(r => r.id === market.id) ||
+        seen.has(market.id) || market.status !== 'BLOCKED_UNVERIFIED' ||
+        market.ownershipAlwaysIndividual !== true ||
+        market.sponsorClinicalAccessAuthorized !== false ||
+        market.thirdPartyPayerContractRequired !== (market.id !== 'MARKET-PUBLIC') ||
+        !Array.isArray(market.allowedActions) || market.allowedActions.length !== 0 ||
+        !Array.isArray(market.missingEvidence) ||
+        market.missingEvidence.length === 0 ||
+        !market.missingEvidence.every(c => typeof c === 'string' && /^[A-Z0-9_]+$/.test(c)) ||
+        typeof market.label !== 'string' || market.label.trim().length === 0 ||
+        typeof market.description !== 'string' || market.description.trim().length === 0)
+      return false;
+    seen.add(market.id);
+  }
+  return seen.size === 3;
+}
+
+export function MarketEntryApp() {
+  const [state, setState] = useState<State>({ phase: 'LOADING' });
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setState({phase:'LOADING'});
+    async function load() {
+      try {
+        const response = await fetch('/internal/ops/v1/market-entry', {
+          method:'GET', credentials:'omit', cache:'no-store', signal:controller.signal
+        });
+        if (!response.ok) throw Error('SOURCE_UNAVAILABLE');
+        const value:unknown = await response.json();
+        if (!verified(value)) throw Error('SOURCE_INVALID');
+        if (!controller.signal.aborted) setState({phase:'SOURCE_BLOCKED',data:value});
+      } catch {
+        if (!controller.signal.aborted) setState({phase:'UNAVAILABLE'});
+      }
+    }
+    void load();
+    return () => controller.abort();
+  },[revision]);
+
+  const source = state.phase === 'SOURCE_BLOCKED' ? state.data : null;
+  const active = selected && source?.markets.find(m => m.id === selected);
+  return <>
+    <a className="skip" href="#market-main">پرش به محتوای اصلی</a>
+    <header className="market-hero">
+      <p>ترنم · راهنمای سه بازار در محیط توسعه</p>
+      <h1>مسیرهای مشارکت افراد، نهادهای حمایتی و سازمان‌ها</h1>
+      <p>اطلاعات برنامه‌ریزی مصوب؛ هیچ خدمت، ثبت‌نام، قرارداد یا پرداخت واقعی فعال نشده است.</p>
+    </header>
+    <main id="market-main">
+      <section className="notice" role="note">
+        <strong>انتشار رسمی جامع و کشوری: DENIED_BY_DEFAULT</strong>
+        <p>این درگاه فقط روی سرویس محلی توسعه اجرا می‌شود. اطلاعات زیر دعوت به ثبت‌نام یا پیشنهاد خدمت فعال نیست.</p>
+      </section>
+      <section className="panel">
+        <div className="heading"><h2>وضعیت سه مسیر از منبع .NET</h2>
+          <button type="button" onClick={() => setRevision(n => n + 1)}>بازخوانی وضعیت</button>
+        </div>
+        <p role="status" aria-live="polite">
+          {state.phase === 'LOADING' && 'در حال کنترل منبع رسمی موانع فنی'}
+          {state.phase === 'UNAVAILABLE' && 'منبع وضعیت قابل تأیید نیست؛ هیچ مسیر یا خدمتی قابل اعلام نیست.'}
+          {source && 'سه بازار برنامه‌ریزی شده‌اند؛ تمامی مسیرها BLOCKED_UNVERIFIED هستند.'}
+        </p>
+      </section>
+      {source && <>
+        <nav className="market-nav" aria-label="مسیرهای سه بازار">
+          <a href="/markets" aria-current={!selected ? 'page' : undefined}>هر سه بازار</a>
+          {source.markets.map(m => <a key={m.id}
+            href={marketRoutes.find(r => r.id === m.id)!.path}
+            aria-current={selected === m.id ? 'page' : undefined}>{m.label}</a>)}
+        </nav>
+        <section aria-labelledby="market-scope-title">
+          <h2 id="market-scope-title">{active ? 'مسیر انتخابی' : 'سه مسیر مصوب در دامنه برنامه'}</h2>
+          <div className="market-grid">
+            {(active ? [active] : source.markets).map(m => <article key={m.id}
+              className="market-tile">
+              <h3>{m.label}</h3><p>{m.description}</p>
+              <p className="market-denial">وضعیت: {m.status}</p>
+              <p>مالک عضویت و کیف پول درمانی، همیشه خود فرد است.</p>
+              {m.thirdPartyPayerContractRequired && <p>تأمین حق اشتراک توسط حامی فقط بر اساس قرارداد معتبرِ آتی قابل بررسی است؛ قراردادی تأیید نشده است.</p>}
+              <p>حامی هیچ حق خودکاری برای دسترسی به پرونده سلامت یا کیف پول فرد ندارد.</p>
+              <small>شواهد هنوز ارائه/راستی‌آزمایی نشده: {m.missingEvidence.join('، ')}</small>
+              <p>ثبت‌نام، پرداخت و فعال‌سازی: غیرفعال</p>
+            </article>)}
+          </div>
+        </section>
+        <section className="panel" aria-label="دامنه انتشار">
+          <p><strong>۱۷/۱۷ الزام انتشار همچنان مسدود است.</strong></p>
+          <p>این وضعیت اثبات پوشش خدمات ملی، قرارداد بیمه، مجوز پزشکی یا وجود ارائه‌دهنده نیست.</p>
+        </section>
+      </>}
+      <footer>TRN-TECH-081 | فقط اطلاع‌رسانی محلی | بدون نشست، داده سلامت، تراکنش یا اتصال خارجی</footer>
+    </main>
+  </>;
+}

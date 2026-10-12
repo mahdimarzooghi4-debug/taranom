@@ -69,6 +69,10 @@ app.MapGet("/internal/ops/v1/status", () =>
     });
 });
 
+// Read-only three-market orientation. No user account, onboarding, or contract.
+app.MapGet("/internal/ops/v1/market-entry",
+    (Func<HttpContext, IResult>)MarketEntryHttp.Read);
+
 // Explicitly anonymous and hypothetical: an actual member's activation,
 // verified event source, legal status and wallet eligibility are NEVER inferred.
 app.MapPost("/internal/ops/v1/waiting-preview",
@@ -84,6 +88,15 @@ app.MapGet("/", () =>
 app.MapGet("/operations", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "index.html"), "text/html; charset=utf-8"));
+// Only explicitly listed audience information pages can render HTML.
+foreach (var route in new[] {
+    "/markets", "/markets/individuals", "/markets/support", "/markets/corporate"
+})
+{
+    app.MapGet(route, () =>
+        Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+            "index.html"), "text/html; charset=utf-8"));
+}
 // Keep HTTP method mismatch distinct from a missing route. The former must
 // remain 405; the latter cannot be a successful SPA HTML page.
 app.MapFallback((Func<HttpContext, IResult>)OpsFallback.Evaluate);
@@ -97,7 +110,11 @@ internal static class OpsFallback
         var method = context.Request.Method;
         if ((path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/waiting-preview" && !HttpMethods.IsPost(method)) ||
-            (path == "/operations" && !HttpMethods.IsGet(method)))
+            (path == "/operations" && !HttpMethods.IsGet(method)) ||
+            (path == "/internal/ops/v1/market-entry" && !HttpMethods.IsGet(method)) ||
+            ((path is "/markets" or "/markets/individuals" or
+                "/markets/support" or "/markets/corporate") &&
+                !HttpMethods.IsGet(method)))
             return Results.StatusCode(StatusCodes.Status405MethodNotAllowed);
         return Results.NotFound();
     }

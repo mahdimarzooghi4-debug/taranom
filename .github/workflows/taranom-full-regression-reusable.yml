@@ -607,6 +607,7 @@ jobs:
           done
           test "$ready" = "1"
           python3 tests/ops_status/test_local_ops_http.py
+          python3 tests/ops_status/test_three_market_entry_http.py
           cd apps/ops-web
           CI=true npm run test:e2e
       - name: Upload local-only HTTP/browser QA records

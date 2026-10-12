@@ -17,6 +17,16 @@ WORKFLOW_DIR = Path(".github/workflows")
 # envelope; all historical workflows retain their original strict step rules.
 REUSABLE_NAME = "taranom-full-regression-reusable.yml"
 DISPATCHER_NAME = "sprint-71-shared-secure-ci-gates.yml"
+DISPATCHER_BRANCHES = {
+    DISPATCHER_NAME: (
+        "sprint-71-shared-secure-ci-gates",
+        "sprint-70-private-evidence-batch-workbench",
+    ),
+    "sprint-72-three-market-public-entry.yml": (
+        "sprint-72-three-market-public-entry",
+        "sprint-71-shared-secure-ci-gates",
+    ),
+}
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
     "internal-contract-tests",
@@ -96,7 +106,7 @@ def inspect_workflow(path: Path) -> list[str]:
         violations.add("UNAUTHORIZED_WORKFLOW_CALL")
     if path.name == REUSABLE_NAME and triggers != {"workflow_call"}:
         violations.add("REUSABLE_TRIGGER_NOT_ISOLATED")
-    if path.name == DISPATCHER_NAME and triggers != {
+    if path.name in DISPATCHER_BRANCHES and triggers != {
             "push", "pull_request", "workflow_dispatch"}:
         violations.add("DISPATCHER_TRIGGERS_CHANGED")
     if any(UNSAFE_EVENT.match(s) for s in active):
@@ -120,7 +130,14 @@ def inspect_workflow(path: Path) -> list[str]:
     job_names = [m.group(1) for s in job_lines if (m := JOB_KEY.fullmatch(s))]
     # The only job-level uses is a literal local same-commit call in the
     # explicitly named Sprint71 dispatcher; no with/secrets/if/runner/steps.
-    if path.name == DISPATCHER_NAME:
+    if path.name in DISPATCHER_BRANCHES:
+        branch, base = DISPATCHER_BRANCHES[path.name]
+        if trigger_lines != [
+            "  push:", "    branches: [" + branch + "]",
+            "  pull_request:", "    branches: [" + base + "]",
+            "  workflow_dispatch:",
+        ]:
+            violations.add("DISPATCHER_TARGET_BRANCHES_CHANGED")
         if job_lines != [
             "  full-regression:",
             "    uses: " + REUSABLE_SOURCE,
