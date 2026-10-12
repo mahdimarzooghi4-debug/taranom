@@ -86,6 +86,10 @@ DISPATCHER_BRANCHES = {
         "sprint-81-three-market-payer-boundary-preview",
         "sprint-80-runtime-release-source-member-center",
     ),
+    "sprint-84-center-guided-event-workflow.yml": (
+        "sprint-84-center-guided-event-workflow",
+        "sprint-83-manual-uncertain-command-recovery",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -82,6 +82,31 @@ function valid(value: unknown, center: string): value is Snapshot {
     Array.isArray(x.departmentRefs) && x.departmentRefs.every(d => validRef(d))
   );
 }
+// TRN-TECH-093: a manual, version-derived workspace plan over the
+// already persisted synthetic-only center event journal. NO automated apply.
+type NextCenterStep={
+  code:'READ_FIRST'|'INPUT_DENIED'|'DEPARTMENT'|'AFFILIATION'|'ASSIGNMENT'|'END'|'FINISHED';
+  action:Kind|null; label:string;
+};
+function nextCenterStep(
+  source:Snapshot|null, center:string, department:string, doctor:string
+):NextCenterStep{
+  if(!validRef(center)||!validRef(department)||!validRef(doctor))
+    return {code:'INPUT_DENIED',action:null,label:'شناسه‌ها باید صرفاً test: و معتبر باشند؛ هیچ مرحله‌ای مجاز نیست.'};
+  if(!source||source.centerRef!==center)
+    return {code:'READ_FIRST',action:null,label:'ابتدا نسخه جاری مرکز را از PostgreSQL بخوانید.'};
+  if(!source.departments.includes(department))
+    return {code:'DEPARTMENT',action:'DEFINE_DEPARTMENT',label:'مرحله ۱ از ۴: تعریف بخش آزمایشی'};
+  const affiliation=source.doctors.find(d=>d.doctorRef===doctor);
+  if(!affiliation)
+    return {code:'AFFILIATION',action:'RECORD_DOCTOR',label:'مرحله ۲ از ۴: ثبت وابستگی پزشک تأییدنشده'};
+  if(affiliation.affiliation==='Ended')
+    return {code:'FINISHED',action:null,label:'مسیر آزمایشی برای این پزشک پایان یافته؛ هیچ مجوز حرفه‌ای ایجاد نشده است.'};
+  if(!affiliation.departmentRefs.includes(department))
+    return {code:'ASSIGNMENT',action:'ASSIGN_DOCTOR',label:'مرحله ۳ از ۴: انتساب آزمایشی پزشک به بخش'};
+  return {code:'END',action:'END_DOCTOR',label:'مرحله ۴ از ۴: پایان وابستگی آزمایشی'};
+}
+
 const texts: Record<Kind, string> = {
   DEFINE_DEPARTMENT: 'ثبت بخش آزمایشی',
   RECORD_DOCTOR: 'ثبت وابستگی تأییدنشده پزشک آزمایشی',
@@ -214,6 +239,7 @@ export function CenterDemo() {
     }
   }
 
+  const guidedStep=nextCenterStep(snapshot,center,department,doctor);
   return <>
     <a href="#main" className="skip">پرش به محتوای اصلی</a>
     <header>
@@ -246,6 +272,26 @@ export function CenterDemo() {
               {texts[kind]}
             </button>)}
         </div>
+        <section className="guided-workflow" aria-label="راهنمای چهارمرحله‌ای رویداد مرکز" data-testid="center-guided-flow">
+          <h3>راهنمای عملی ثبت رخدادهای مرکز — فقط داده ساختگی</h3>
+          <p>مرحله بعد صرفاً از آخرین نسخه خوانده‌شده PostgreSQL انتخاب می‌شود.
+            هیچ دکمه‌ای چند دستور را خودکار اجرا نمی‌کند؛ هر تغییر نیازمند اقدام جداگانه است.</p>
+          <p data-testid="center-guided-step" aria-live="polite">
+            {pending ? 'در حال انتظار برای پاسخ پایگاه آزمایشی؛ مرحله جدیدی مجاز نیست.' : guidedStep.label}
+          </p>
+          <ol className="guided-stages">
+            <li>تعریف بخش آزمایشی</li>
+            <li>ثبت وابستگی پزشک در انتظار بررسی مستقل</li>
+            <li>انتساب آزمایشی پزشک به بخش</li>
+            <li>پایان وابستگی آزمایشی پزشک</li>
+          </ol>
+          {guidedStep.action && <button type="button" disabled={!snapshot || pending}
+            onClick={() => void apply(guidedStep.action!)}>
+            ثبت مرحله بعد در PostgreSQL
+          </button>}
+          <p>وضعیت مدیر، صلاحیت حرفه‌ای و انتشار ملی همواره تأییدنشده باقی می‌ماند.
+            این راهنما جایگزین مجوز، قرارداد یا نظارت بالینی نیست.</p>
+        </section>
         <p role="status" aria-live="polite" className="status">{pending ? 'در حال ارتباط با پایگاه آزمایشی...' : status}</p>
         {snapshot && <section aria-label="وضعیت ذخیره‌شده آزمایشی">
           <p><strong>نسخه ثبت‌شده:</strong> {snapshot.currentVersion} | <strong>تعداد رخدادهای پذیرفته‌شده:</strong> {snapshot.eventCount}</p>

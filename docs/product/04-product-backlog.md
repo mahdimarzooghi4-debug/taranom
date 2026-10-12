@@ -250,3 +250,7 @@ TRN-TECH-089: all 15 existing Member and Center pages on loopback ASP.NET 4318 n
 ## Additional Sprint 81 payer scenario — test-only contractual responsibility matrix
 
 [TRN-TECH-090](../technical/90-three-market-payer-boundary-preview.md) and [Sprint 81 parallel branch](../sprints/89-sprint-81-payer-boundary-preview.md) include a separate same-origin .NET/React policy what-if across individual, support and corporate member sponsorship. A sponsor requires a real future contract; member ownership and clinical privacy never transfer. No real payment, insurer coverage or contract is implied. This parallel deliverable was integrated alongside the Sprint 81 informational market guide without replacing it.
+
+## Additional Sprint 84 center guided workflow — actual synthetic PostgreSQL journal
+
+[TRN-TECH-093 (center)](../technical/93-guided-center-postgres-workflow.md) and [parallel Sprint 84](../sprints/92-sprint-84-guided-center-workflow.md) give the tester a four-step manual journal-based sequence for a test department and unverified professional affiliation, assignment and end. Every transition is human-triggered, re-reads PostgreSQL and never asserts a real licensed provider, clinician or authorization; no automatic progression, clinical approval or official release.
