@@ -48,6 +48,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_private_external_evidence.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_private_evidence_batch.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_private_evidence_delta.py' -v
           python3 tools/policy_checks/check_private_external_evidence.py --root . --evidence-root . --manifest docs/governance/external-evidence-intake-template.json --report-json TestResults/fullci-private-evidence-empty.json
           test -s TestResults/fullci-private-evidence-empty.json
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
