@@ -1,0 +1,14 @@
+name: Sprint 88 Insurance Cost Support Handoff Full Regression
+on:
+  push:
+    branches: [sprint-88-insurance-cost-support-handoff]
+  pull_request:
+    branches: [sprint-87-mainline-ci-integrity]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

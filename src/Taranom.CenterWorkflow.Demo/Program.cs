@@ -92,6 +92,8 @@ if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEM
         (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CostJournalHttp.Read);
     app.MapPost("/internal/demo/v1/cost-previews/{previewId}/choices",
         (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CostJournalHttp.Record);
+    app.MapGet("/internal/demo/v1/cost-previews/{previewId}/support-link/{caseRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CostSupportHandoffHttp.Inspect);
 }
 
 // Separate synthetic-only member support case; no actual member/insurer/provider.

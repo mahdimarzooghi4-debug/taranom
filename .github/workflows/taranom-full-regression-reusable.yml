@@ -738,6 +738,7 @@ jobs:
           python3 tests/center_demo/test_real_center_demo_http.py
           python3 tests/center_demo/test_support_history_http.py
           python3 tests/center_demo/test_cost_journal_http.py
+          python3 tests/center_demo/test_cost_support_handoff_http.py
           cd apps/center-demo-web
           CI=true npm run test:e2e
           cd ../member-support-demo-web

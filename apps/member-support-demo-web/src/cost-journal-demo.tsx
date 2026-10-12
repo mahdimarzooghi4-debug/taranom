@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {CostSupportHandoff} from './cost-support-handoff';
 
 // TRN-TECH-095: CI-only, exact test: fixtures, existing append-only PG journal.
 // No verified estimate, identity, legal choice or medical/financial authority.
@@ -186,6 +187,7 @@ export function CostJournalDemo() {
         بازپخش دقیق آخرین انتخاب
       </button>:null}
     </section>:null}
+    {current&&!pending?<CostSupportHandoff source={current}/>:null}
     {pending?<button type="button" disabled={busy} onClick={()=>void send(pending)}>
       تکرار امن همان UUID نامطمئن
     </button>:null}
