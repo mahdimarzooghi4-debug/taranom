@@ -63,7 +63,7 @@ class EphemeralRecoveryContractTests(unittest.TestCase):
                                         "Extra": "test:quoted\\\"x\\\""}),
             "revision": 1
         }).encode()
-        count, digest = rec.canonical_rows(row + b"\\n")
+        count, digest = rec.canonical_rows(row + b"\n")
         self.assertEqual(count, 1)
         self.assertEqual(len(digest), 64)
         # COPY text format escapes JSON backslashes again and is *not*
