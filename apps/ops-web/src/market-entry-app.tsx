@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import {PayerScenarioPreview} from './payer-scenario-preview';
 
 type MarketId = 'MARKET-PUBLIC' | 'MARKET-SUPPORT' | 'MARKET-CORPORATE';
 type Market = {
@@ -123,6 +124,7 @@ export function MarketEntryApp() {
             href={marketRoutes.find(r => r.id === m.id)!.path}
             aria-current={selected === m.id ? 'page' : undefined}>{m.label}</a>)}
         </nav>
+        <PayerScenarioPreview markets={source.markets} initial={selected} />
         <section aria-labelledby="market-scope-title">
           <h2 id="market-scope-title">{active ? 'مسیر انتخابی' : 'سه مسیر مصوب در دامنه برنامه'}</h2>
           <div className="market-grid">
