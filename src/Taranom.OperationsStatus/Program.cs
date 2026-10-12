@@ -78,6 +78,9 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 // Explicit technical UI entrypoint. Unknown URLs do not become a 200 HTML
 // response or impersonate a member login / operational backend endpoint.
+app.MapGet("/", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+        "index.html"), "text/html; charset=utf-8"));
 app.MapGet("/operations", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "index.html"), "text/html; charset=utf-8"));
