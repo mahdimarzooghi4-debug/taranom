@@ -91,7 +91,8 @@ def scan(root: Path, *, history: bool = True) -> dict:
               'independent_credential_clearance': False,
               'national_release_allowed': False, 'status': 'BLOCKED',
               'git_objects_inspected': 0, 'text_blobs_checked': 0,
-              'binary_blobs_skipped': 0, 'findings': []}
+              'binary_blobs_skipped': 0, 'commit_messages_checked': 0,
+              'findings': []}
     try:
         if _git(root, 'rev-parse', '--is-inside-work-tree').strip() != b'true':
             raise ValueError('NOT_A_GIT_WORKTREE')
@@ -118,6 +119,23 @@ def scan(root: Path, *, history: bool = True) -> dict:
                 seen_paths.add(old_path)
                 if is_sensitive_path(old_path):
                     _record(result, old_path, 'historic_path', 'HISTORICAL_SENSITIVE_PATH')
+        # Commit messages are public Git objects too. Inspect a NUL-framed
+        # stream with OIDs, without ever recording message text or credentials.
+        # Git commit messages cannot contain NUL bytes.
+        commit_stream = _git(root, 'log', '--all', '--format=%H%x00%B%x00')
+        if len(commit_stream) > 10_000_000:
+            raise ValueError('OVERSIZED_COMMIT_MESSAGE_STREAM')
+        fields = commit_stream.split(b'\0')
+        if (len(fields) < 3 or len(fields) % 2 != 1
+                or fields[-1].strip()):
+            raise ValueError('INVALID_COMMIT_MESSAGE_STREAM')
+        for index in range(0, len(fields) - 1, 2):
+            commit_oid = fields[index].strip()
+            if not re.fullmatch(rb'(?:[0-9a-f]{40}|[0-9a-f]{64})', commit_oid):
+                raise ValueError('INVALID_COMMIT_ID')
+            result['commit_messages_checked'] += 1
+            for rule in inspect_blob('', fields[index + 1]):
+                _record(result, 'commit-message', commit_oid.decode('ascii'), rule)
         # --batch is one long-lived local child; sending bounded groups avoids
         # stdin/stdout pipe backpressure and repeated fork overhead.
         with subprocess.Popen(['git', '-C', str(root), 'cat-file', '--batch'],
@@ -194,6 +212,7 @@ def main() -> int:
     print(f"Public-history guard: {report['status']}; "
           f"objects={report['git_objects_inspected']}; "
           f"text={report['text_blobs_checked']}; "
+          f"commits={report['commit_messages_checked']}; "
           f"findings={len(report['findings'])}. "
           'No credentials are printed; limited reachable-ref scan is NOT legal clearance.')
     if report['status'] != 'PASS_LIMITED_SCOPE':

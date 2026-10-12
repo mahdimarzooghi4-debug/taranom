@@ -191,6 +191,50 @@ class PublicSourceHistoryGuardTests(unittest.TestCase):
         self.assertIn('LONG_LITERAL_CREDENTIAL_ASSIGNMENT',
                       self.finding_rules(scan(self.root)))
 
+    def test_commit_message_github_token_blocks_without_value_disclosure(self) -> None:
+        secret = 'ghp_' + 'Q' * 36
+        self.git('commit', '--allow-empty', '-qm', 'historical ' + secret)
+        result = scan(self.root)
+        self.assertIn('GITHUB_ACCESS_TOKEN', self.finding_rules(result))
+        self.assertNotIn(secret, json.dumps(result))
+        self.assertTrue(any(x.get('path') == 'commit-message' for x in result['findings']))
+
+    def test_commit_body_long_password_assignment_blocks(self) -> None:
+        value = 'A' * 45
+        self.git('commit', '--allow-empty', '-qm', 'safety notice',
+                 '-m', 'PRODUCTION_PASSWORD=' + value)
+        result = scan(self.root)
+        self.assertIn('LONG_LITERAL_CREDENTIAL_ASSIGNMENT', self.finding_rules(result))
+        self.assertNotIn(value, json.dumps(result))
+
+    def test_commit_message_secret_in_another_fetched_branch_is_checked(self) -> None:
+        self.git('checkout', '-qb', 'another-msg-branch')
+        self.git('commit', '--allow-empty', '-qm', 'sk_live_' + 'S' * 26)
+        self.git('checkout', '-q', '-')
+        result = scan(self.root)
+        self.assertIn('STRIPE_LIVE_SECRET_KEY', self.finding_rules(result))
+
+    def test_normal_commit_subject_and_body_are_allowed(self) -> None:
+        self.git('commit', '--allow-empty', '-qm', 'Synthetic privacy review',
+                 '-m', 'Only test identifiers and no credential values')
+        result = scan(self.root)
+        self.assertEqual('PASS_LIMITED_SCOPE', result['status'])
+        self.assertGreaterEqual(result['commit_messages_checked'], 2)
+
+    def test_commit_sha_and_rule_not_secret_in_diagnostic(self) -> None:
+        token = 'github_pat_' + 'M' * 78
+        self.git('commit', '--allow-empty', '-qm', 'issue ' + token)
+        result = scan(self.root)
+        reports = [f for f in result['findings'] if f.get('path') == 'commit-message']
+        self.assertTrue(reports)
+        self.assertTrue(all(len(f['object_prefix']) == 12 for f in reports))
+        self.assertNotIn(token, json.dumps(result))
+
+    def test_commit_message_exemption_is_never_inherited_from_test_paths(self) -> None:
+        value = 'only_synthetic_untrusted_postgres_fixture_password'
+        self.git('commit', '--allow-empty', '-qm', 'Password = "' + value + '";')
+        self.assertIn('LONG_LITERAL_CREDENTIAL_ASSIGNMENT', self.finding_rules(scan(self.root)))
+
     def test_scanner_does_not_flag_ordinary_decision_or_sha(self) -> None:
         self.commit('business.md', '# TRN-BIZ-040\n' + 'f' * 64 + '\n')
         self.assertEqual('PASS_LIMITED_SCOPE', scan(self.root)['status'])
