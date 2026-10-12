@@ -34,7 +34,7 @@ test('COST-85-02 changing preview version requires manual continuity review and 
   await widget(page).getByRole('button',{name:'ارزیابی دستی با موتور .NET'}).click();
   await panel(page).getByRole('button',{name:'بررسی تغییر نسخه با تاریخچه قبلی'}).click();
   await expect(page.getByTestId('synthetic-choice-result'))
-    .toContainText('ChangedPreviewRequiresSeparateReview');
+    .toContainText('CurrentMissingRequiresSeparateReview');
   await expect(page.getByTestId('synthetic-choice-result')).toContainText('آگاهی قبلی منتقل نشد');
   await panel(page).getByRole('button',{name:'شروع نسخه مستقل بدون انتقال انتخاب'}).click();
   await expect(panel(page).getByRole('button',{name:'انتخاب آزمایشی برای همین نسخه برآورد'})).toBeEnabled();
