@@ -43,6 +43,9 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_identity_tls_preflight.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_private_oidc_discovery.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_private_fhir_capability.py' -v
+          python3 tools/policy_checks/check_private_fhir_capability.py --root . --report-json TestResults/fullci-fhir-capability-unconfigured.json
+          python3 -c "import json; d=json.load(open('TestResults/fullci-fhir-capability-unconfigured.json')); assert d['status']=='TARGET_NOT_CONFIGURED' and not d['fhir_data_exchange_verified'] and not d['national_release_allowed']"
           python3 tools/policy_checks/check_private_oidc_discovery.py --root . --report-json TestResults/fullci-oidc-discovery-unconfigured.json
           python3 -c "import json; d=json.load(open('TestResults/fullci-oidc-discovery-unconfigured.json')); assert d['status']=='TARGET_NOT_CONFIGURED' and not d['member_authentication_verified'] and not d['national_release_allowed']"
           python3 tools/policy_checks/check_identity_tls_preflight.py --purpose AUTHENTICATION_IDP --report-json TestResults/fullci-identity-preflight-unconfigured.json

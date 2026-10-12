@@ -38,6 +38,10 @@ DISPATCHER_BRANCHES = {
         "sprint-75-support-case-history-timeline",
         "sprint-74-private-oidc-discovery-preflight",
     ),
+    "sprint-76-private-fhir-capability-preflight.yml": (
+        "sprint-76-private-fhir-capability-preflight",
+        "sprint-75-support-case-history-timeline",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
