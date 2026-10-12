@@ -1,0 +1,3 @@
+# Sprint 81 — Interactive three-market member/sponsor payer boundary
+
+**Date:** 2026-10-12. [TRN-TECH-090](../technical/90-three-market-payer-boundary-preview.md), stacked on Draft PR #88 exact 8301c2eb20b9070b902042f7c81ad678bd979225 with 14/14 CI and COMMENT review. Real .NET stateless bounded policy preview + existing three-market React selectors illustrate conditional member/sponsor payer structure without transferring membership, wallet or clinical access. No real payment/activation, no approved contract, no member identity. Genuine HTTP and Chromium regressions, all 14 Push/PR jobs mandatory. All 17 national gates BLOCKED_UNVERIFIED, first nationwide 3-market launch DENIED_BY_DEFAULT, no merge/deploy.

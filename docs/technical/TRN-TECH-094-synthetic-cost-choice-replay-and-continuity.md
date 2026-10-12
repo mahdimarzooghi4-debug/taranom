@@ -1,0 +1,19 @@
+# TRN-TECH-094 — Synthetic cost choice command replay and version continuity
+
+**Status: Sprint 85 Technical, test-only, NEVER a legal, financial, identity or clinical authority.**
+
+Business basis: TRN-BIZ-051/052. Existing canonical domain: `CostAwarenessRecorder` and `SyntheticCostChoiceContinuity`. No new choice/status semantics, insurer calculations or actual consent flow.
+
+## Scope and boundary
+
+The existing local-only Kestrel 4318 host adds ONE explicit `POST /internal/ops/v1/synthetic-cost-choice` available only with `TARANOM_SYNTHETIC_COST_WORKBENCH=CI_EPHEMERAL_ONLY`. It is same-origin only (exact loopback Origin), exact Host/proxy protection from the existing host, no CORS, no credentials, no persistence, 16 KiB body cap, exact JSON schema at every level, no extra/duplicate keys, max depth 6. Absent opt-in yields 404. There is no new live member, payment, wallet, insurance or clinical API.
+
+Request is exactly `{previous,current,history,attempt}`. Each preview has exact `{memberRef,previewId,previewRevision,lines}` and the five exact original cost-line fields `component,state,amount,currency,sourceRef,evidenceRef,sourceRevision`. IDs, claims, source evidence and amounts must comply with the canonical Sprint 84 builder (only `test:` refs, independent five lanes). `history` is at most 16 claimed commands, each strictly bound by original `requestId,expectedRevision,memberRef,previewId,previewRevision,previewFingerprint,choice`. `attempt` is null (inspection only) or one exact command. All history entries are replayed sequentially, starting from the canonical previous preview; any inconsistency rejects the entire request. Request-supplied booleans, authority flags and external evidence are not accepted. Canonical enum values are `AcknowledgedUncertainty`, `Deferred`, `RequestedClarification`.
+
+The domain returns `RecordedUnverified`, `Replayed`, `ConflictingReplay`, `StaleRevision`, `PreviewChanged`, `ScopeMismatch`, or `InspectionOnly`. The independent continuity checker reports whether the new preview is unchanged, modified, missing or conflicted and never forwards historic choice. Replay is computational only: since **there is no database**, these are not authenticated or durable receipts. No real choice is stored. Client holds the unverified commands in memory for the current page lifetime only. No browser storage, session, provider identity, genuine cost/refund/coverage or wallet mutation.
+
+## UI, change safety and gating
+
+The opt-in Sprint 84 Member `/member/costs` tester explicitly evaluates the five sources before pinning a preview. The separate choice tester first pins that exact canonical preview, then the human chooses one of the three existing unverified declarations and clicks simulate. The test endpoint rebuilds all prior commands through the real .NET recorder and reports record/replay. The front end never posts automatically and cannot simulate a new selection after the preview changes. After an explicit new-preview evaluation, the tester can request an independent continuity review; changing version or conflicting sources never silently inherits choice. An explicit separate reset starts a new unverified version. Official member acknowledgement, financial commitment and clinical consent remain blocked; urgent medical action is never gated by this tester.
+
+The inherited 14 shared CI jobs are retained. Genuine HTTP and real Chromium validate exact replay, stale revision, conflicting replay, forged history, altered preview, missing and disputed source, denied origin, hostile Host, too-large body, extra/duplicate keys and rights always false. PR Draft/Open/Unmerged; all 17 national blockers `BLOCKED_UNVERIFIED`; national launch `DENIED_BY_DEFAULT`; product completion `UNBASELINED`; no Stage, QA Gate, merge or Production.

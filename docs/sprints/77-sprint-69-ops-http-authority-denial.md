@@ -1,0 +1,7 @@
+# TRN-SP-69 — Close the second operational HTTP trust gap
+
+**Date:** 2026-10-12. **Stacked parent:** Sprint68 Draft/Open PR #76 SHA \`2ea63e68735b38dae5c899a572457e44e1db3918\`, exact-head Push+PR CI 14/14 success, COMMENT review.
+
+**Substantive package:** Close the gap between the first hardened ASP.NET center host and a still-vulnerable second \`Taranom.OperationsStatus\` host. Enforce exact localhost Host+port and refuse untrusted forwarding before all HTML/API paths; preserve real public 17-denial manifest and canonical synthetic 90-full-days .NET rule; remove wildcard HTML route fallback so no guessed member/clinical/finance path is falsely successful; new genuine HTTP attack and false-entitlement denial tests; four real Chromium browser/API tests; retain all inherited 14 CI jobs, fix CI until both exact-head Push+PR green, then record initial COMMENT Code Review.
+
+**Never infer actual identity or production rights:** This is a local developer/operations app, not a real session or production-ready monitoring. TRN-TECH-012 authenticated member BFF/IdP still lacks required identity trust contracts and Code Authorization. No real health, wallet, medical, insurer, contract, bank, external AI or approval. All 17 national release dimensions remain BLOCKED_UNVERIFIED, nationwide first three-market launch DENIED_BY_DEFAULT. PR Draft/Open/unmerged and no Ready/Merge/Stage/QA/Release/Production without user approval.

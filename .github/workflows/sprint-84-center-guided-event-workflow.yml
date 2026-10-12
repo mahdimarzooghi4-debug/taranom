@@ -1,0 +1,14 @@
+name: Sprint 84 Guided Center PostgreSQL Workflow Full Regression
+on:
+  push:
+    branches: [sprint-84-center-guided-event-workflow]
+  pull_request:
+    branches: [sprint-83-manual-uncertain-command-recovery]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

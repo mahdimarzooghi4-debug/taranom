@@ -1,0 +1,24 @@
+# TRN-TECH-046 — Built disconnected web asset integrity and active-resource isolation
+
+**Date:** 2026-10-11. **Base:** Sprint36 Draft PR #43. **Source policies:** TRN-BIZ-035/036 (health data and independent consent), TRN-BIZ-037 (no external AI runtime), TRN-BIZ-030/040 (no incomplete national release), previous TRN-TECH-044 (real local built-preview HTTP CSP headers). This slice protects **build output reproducibility/integrity and active static resource closure**, not a legally signed or remotely deployed artifact.
+
+## Gap
+
+Both Persian RTL browser shells are intentionally disconnected. Existing tests cover real HTTP CSP/XFO, blocked iframe, no calls to private APIs, and static source checks. Those checks do NOT produce a deterministic manifest of what files a built distribution actually includes, independently recheck hashed build bytes, or reject all unexpected maps/auxiliary files and externally hosted HTML/CSS resources before the preview is delivered. A green UI build should never imply its artifact can be served to patients, payers, clinicians or national users.
+
+## Technical contract
+
+Add Python-stdlib `tools/artifact_checks/check_disconnected_bundle.py`, callable **after** `npm run build` for each of `apps/member-web/dist` and `apps/center-web/dist`. No model/service/credential/HTTP client, no fabricated patient/financial data. Contract:
+
+1. Require a real, readable built `dist` directory, `index.html`, at least one local hashed script and CSS asset, Persian `lang=fa` RTL entry semantics, and the existing disconnect-only CSP meta (`default-src 'none'`, `connect-src 'none'`, self JS and no form action). A local built preview HTTP response must additionally retain the previous TRN-TECH-044 HTTP `frame-ancestors 'none'` policy; this tool does not claim to replace the browser/HTTP test.
+2. Parse the **actual built HTML** using stdlib `HTMLParser`. Reject remote or protocol-relative active script/style URLs, non-`/assets/<filename>` references, path/query/hash/percent encoding, missing or duplicated active files, inline/untyped executable scripts, extra `iframe`/`object`/`form`/`base`/meta-refresh, unexpected media/resource tags or duplicate CSP.
+3. Parse built CSS `@import`/ `url(...)` active resource references and reject remote/unbundled paths. Check all files under dist recursively: no symbolic links, sourcemaps, unknown extensions, invalid text/JS sourcemap directives or missing referenced assets. This is a deliberately **strict** policy for current disconnected preview shells, NOT a general-purpose CDN/medical media loader.
+4. Produce one immutable-at-creation *per-job* SHA-256 inventory of **every** built file with path, exact byte size and file digest, canonical sorted file-list digest and `release_allowed: false`. No timestamp, secrets or source contents. The same checker separately `--verify` re-hashes actual bytes, denies changed data, cross-surface replay, fabricated release flag, JSON duplicate keys, or writing the manifest into `dist` itself.
+5. CI: augment **both existing built web jobs** in a copied Sprint37 12-job workflow, each running **27 adversarial stdlib tests** and checking its **real built dist** twice. Upload Member/Center manifest as artifacts in their respective jobs. Add one real Chromium test per app asserting all observed navigation/scripts/styles requests are same-origin and match only the expected route and hashed CSS/JS resources (37 Member, 25 Center expected; do not assume until CI). Preserve Sprint34 external AI static denial, Sprint35 header/iframe evidence, Sprint36 17-domain official release DENIED, existing PostgreSQL and protected-data DENY-ONLY.
+6. No signed provenance, external release attestation, trust root, dependency-lock proof, strict CSP for dynamic JS fetch, SRI in HTML, runtime filesystem write guard, production host/CDN integration, artifact retention policy or release approval. SHA256 checks ensure local byte consistency only; an attacker with repo/workflow write privileges can replace both payload and manifest. Real security/operations/human gate admission remains separate.
+
+## Test scope
+
+The isolated fixtures create only minimal synthetic HTML, JS and CSS in temporary folders and test unknown MIME/extension, source maps, symlinks, external script and stylesheet injection, inline script, unbounded iframe/form/redirect, parser and file/link mismatches, percent traversal, CSS import and remote URL, deterministic SHA, genuine content mutation, forged human-release flag, JSON duplicate key and member/center replay. No actual patient/member/provider/insurance identifiers.
+
+No active protected-data API, member auth, payments, AI model or national health/insurer integration exists. This Sprint is **internal build artifact hygiene**, not compliance certification. PR Draft/Open/Unmerged; no Ready for Review, Merge, Stage/QA Gate/Release/Production without explicit owner decision.

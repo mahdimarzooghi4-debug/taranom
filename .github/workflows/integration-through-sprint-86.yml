@@ -1,0 +1,14 @@
+name: Integrate Taranom through Sprint 86 Full Regression
+on:
+  push:
+    branches: [integration/through-sprint-86]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

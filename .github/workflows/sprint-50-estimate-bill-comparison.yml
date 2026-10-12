@@ -1,0 +1,520 @@
+name: Sprint 50 Estimate Bill Source Comparison
+
+on:
+  push:
+    branches: [sprint-50-estimate-bill-source-comparison]
+  pull_request:
+    branches: [sprint-49-cost-awareness-choice-continuity]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  internal-contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Reject known external AI SDK, inference endpoints and API credentials
+        run: |
+          python3 -m unittest discover -s tests/policy_checks -p 'test_external_ai_boundary.py' -v
+          python3 tools/policy_checks/check_external_ai_boundary.py --root .
+      - name: Verify comprehensive national release blockers remain DENY-ONLY
+        run: |
+          python3 -m unittest discover -s tests/policy_checks -p 'test_national_launch_blockers.py' -v
+          mkdir -p TestResults
+          python3 tools/policy_checks/check_national_launch_blockers.py --root . --report-json TestResults/sprint50-national-blockers.json
+          test -s TestResults/sprint50-national-blockers.json
+      - name: Build bounded member governance contract project
+        run: |
+          dotnet restore tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj
+          dotnet build tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj --no-restore --configuration Release
+      - name: Execute standalone xUnit governance tests
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj --no-build --configuration Release -- -xml TestResults/sprint03-governance.xml
+          test -s TestResults/sprint03-governance.xml
+      - name: Check missing external adapters remain explicitly blocked
+        run: |
+          test ! -d src/Taranom.Api
+          test ! -d src/Taranom.IdentityProvider
+          test ! -d src/Taranom.Payments
+          test ! -d src/Taranom.Clinical
+          if grep -R -E 'HttpClient|Npgsql|SqlConnection|JwtBearer|Bearer ' src/Taranom.MemberGovernance --include='*.cs'; then
+            echo 'Unapproved runtime adapter found in internal governance kernel' >&2
+            exit 1
+          fi
+      - name: Upload machine-readable contract evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-internal-member-governance
+          path: |
+            TestResults/sprint03-governance.xml
+            TestResults/sprint50-national-blockers.json
+          if-no-files-found: warn
+
+  synthetic-sprint01-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_sprint01
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_sprint01"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint01;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Build inherited Sprint 01 test projects
+        run: |
+          dotnet restore tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj
+          dotnet build tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-restore --configuration Release
+          dotnet restore tests/Taranom.ContractTests/Taranom.ContractTests.csproj
+          dotnet build tests/Taranom.ContractTests/Taranom.ContractTests.csproj --no-restore --configuration Release
+      - name: Run inherited xUnit and real PostgreSQL failure-injection regression
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.ContractTests/Taranom.ContractTests.csproj --no-build --configuration Release -- -xml TestResults/sprint01-regression.xml
+          test -s TestResults/sprint01-regression.xml
+          dotnet run --project tests/Taranom.SmokeTests/Taranom.SmokeTests.csproj --no-build --configuration Release
+      - name: Upload inherited .NET evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-sprint01-regression
+          path: TestResults/sprint01-regression.xml
+          if-no-files-found: warn
+
+  member-web-sprint02-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/member-web
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Reproducible dependencies, TypeScript, and production bundle
+        run: |
+          npm ci --no-audit --no-fund --ignore-scripts
+          npm run typecheck
+          npm run build
+      - name: Verify compiled member bundle integrity and active local resources
+        run: |
+          PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_disconnected_bundle.py' -v
+          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface member --dist dist --output TestResults/sprint50-member-bundle.json
+          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface member --dist dist --verify TestResults/sprint50-member-bundle.json
+          test -s TestResults/sprint50-member-bundle.json
+      - name: Verify shell still contains no fake member/identity backend
+        run: |
+          test ! -e src/fixtures
+          test ! -e src/mocks
+          test ! -e src/auth-provider.ts
+          if grep -R -E -i 'localStorage\.setItem|sessionStorage\.setItem|/api/v1/|Bearer |fake(balance|login|token)' src; then
+            echo 'Forbidden member-state adapter found' >&2
+            exit 1
+          fi
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser tests against the built Vite bundle
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+      - name: Upload browser regression evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-sprint02-browser-regression
+          path: |
+            apps/member-web/test-results/results.xml
+            apps/member-web/TestResults/sprint50-member-bundle.json
+            apps/member-web/test-results/**/trace.zip
+          if-no-files-found: warn
+
+  isolated-proofing-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_sprint03_isolated
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_sprint03_isolated"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint03_isolated;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Build separate non-deployable PostgreSQL integration tests
+        run: |
+          dotnet restore tests/Taranom.ProofingJournal.IntegrationTests/Taranom.ProofingJournal.IntegrationTests.csproj
+          dotnet build tests/Taranom.ProofingJournal.IntegrationTests/Taranom.ProofingJournal.IntegrationTests.csproj --no-restore --configuration Release
+      - name: Verify atomic rollback, concurrent replay, append-only audit and divergence detection
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.ProofingJournal.IntegrationTests/Taranom.ProofingJournal.IntegrationTests.csproj --no-build --configuration Release -- -xml TestResults/sprint03-proofing-postgres.xml
+          test -s TestResults/sprint03-proofing-postgres.xml
+      - name: Verify journal is not a deployable identity/API adapter
+        run: |
+          test ! -d src/Taranom.Api
+          test ! -d src/Taranom.IdentityProvider
+          ! grep -R -E 'HttpClient|JwtBearer|/api/v1/|NationalId|HealthRecord|Wallet' src/Taranom.ProofingJournal.Postgres --include='*.cs'
+      - name: Upload database integration evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-proofing-postgres-tests
+          path: TestResults/sprint03-proofing-postgres.xml
+          if-no-files-found: warn
+
+  internal-clinical-center-governance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Build center department and doctor affiliation contracts
+        run: |
+          dotnet restore tests/Taranom.ClinicalCenterGovernance.Tests/Taranom.ClinicalCenterGovernance.Tests.csproj
+          dotnet build tests/Taranom.ClinicalCenterGovernance.Tests/Taranom.ClinicalCenterGovernance.Tests.csproj --no-restore --configuration Release
+      - name: Exercise center isolation and denied affiliation transitions
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.ClinicalCenterGovernance.Tests/Taranom.ClinicalCenterGovernance.Tests.csproj --no-build --configuration Release -- -xml TestResults/sprint50-center-governance.xml
+          test -s TestResults/sprint50-center-governance.xml
+      - name: Prove no independent network or clinical runtime entered this assembly
+        run: |
+          test ! -d src/Taranom.ClinicalApi
+          ! grep -R -E 'HttpClient|Npgsql|JwtBearer|/api/v1/|NetworkAdministrator|ClinicalRecord|MedicalLicense|Wallet' src/Taranom.ClinicalCenterGovernance --include='*.cs'
+      - name: Upload center governance test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-internal-center-governance
+          path: TestResults/sprint50-center-governance.xml
+          if-no-files-found: warn
+
+  center-web-browser-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/center-web
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Reproducible dependencies and strict TypeScript build
+        run: |
+          npm ci --no-audit --no-fund --ignore-scripts
+          npm run typecheck
+          npm run build
+      - name: Verify compiled center bundle integrity and active local resources
+        run: |
+          PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_disconnected_bundle.py' -v
+          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface center --dist dist --output TestResults/sprint50-center-bundle.json
+          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface center --dist dist --verify TestResults/sprint50-center-bundle.json
+          test -s TestResults/sprint50-center-bundle.json
+      - name: Check no real provider credentials, routes, network administration or mutable preview store
+        run: |
+          test ! -e src/auth-provider.ts
+          test ! -d src/fixtures
+          test ! -d src/mocks
+          if grep -R -E -i 'localStorage\\.setItem|sessionStorage\\.setItem|/api/v1/|Bearer |fetch\\(|NetworkAdministrator|jwt-decode|window\\.localStorage' src; then
+            echo 'Unexpected real-adapter or browser-credential path in disconnected center shell' >&2
+            exit 1
+          fi
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Chromium tests against production-bundled preview
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+      - name: Upload center web test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-center-web-browser
+          path: |
+            apps/center-web/test-results/results.xml
+            apps/center-web/TestResults/sprint50-center-bundle.json
+            apps/center-web/test-results/**/trace.zip
+          if-no-files-found: warn
+
+  isolated-center-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_sprint06_center
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_sprint06_center"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint06_center;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Restore and build the separate synthetic PostgreSQL center journal
+        run: |
+          dotnet restore tests/Taranom.ClinicalCenterJournal.IntegrationTests/Taranom.ClinicalCenterJournal.IntegrationTests.csproj
+          dotnet build tests/Taranom.ClinicalCenterJournal.IntegrationTests/Taranom.ClinicalCenterJournal.IntegrationTests.csproj --no-restore --configuration Release
+      - name: Test transactional projection audit replay concurrency and fail closed
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.ClinicalCenterJournal.IntegrationTests/Taranom.ClinicalCenterJournal.IntegrationTests.csproj --no-build --configuration Release -- -xml TestResults/sprint50-center-postgres.xml
+          test -s TestResults/sprint50-center-postgres.xml
+      - name: Reject live backend or professional credential code in test adapter
+        run: |
+          test ! -d src/Taranom.ClinicalApi
+          test ! -d src/Taranom.CenterApi
+          if grep -R -E 'HttpClient|JwtBearer|/api/v1/|NationalId|ClinicalRecord|MedicalLicense|Wallet|Bearer ' src/Taranom.ClinicalCenterJournal.Postgres --include='*.cs'; then
+            echo 'Unapproved adapter for real identity or clinical data' >&2
+            exit 1
+          fi
+      - name: Publish exact CI center journal test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-center-postgres
+          path: TestResults/sprint50-center-postgres.xml
+          if-no-files-found: warn
+
+  center-authority-negative-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Restore and compile fail-closed center authority boundary
+        run: |
+          dotnet restore tests/Taranom.CenterAuthorityBoundary.Tests/Taranom.CenterAuthorityBoundary.Tests.csproj
+          dotnet build tests/Taranom.CenterAuthorityBoundary.Tests/Taranom.CenterAuthorityBoundary.Tests.csproj --no-restore --configuration Release
+      - name: Exercise negative actor and tenant authorization matrix
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.CenterAuthorityBoundary.Tests/Taranom.CenterAuthorityBoundary.Tests.csproj --no-build --configuration Release -- -xml TestResults/sprint50-center-authority.xml
+          test -s TestResults/sprint50-center-authority.xml
+      - name: Assert no live IdP, HTTP, session, API or privileged persistence boundary
+        run: |
+          test ! -d src/Taranom.CenterApi
+          test ! -d src/Taranom.IdentityProvider
+          if grep -R -E 'HttpClient|Npgsql|JwtBearer|/api/v1/|OpenIdConnect|Authorization: Bearer|localStorage|CenterAccessToken' src/Taranom.CenterAuthorityBoundary --include='*.cs'; then
+            echo 'Unauthorized identity/session/integration adapter appeared' >&2
+            exit 1
+          fi
+      - name: Upload exact-head center authority test report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-center-authority-negative-tests
+          path: TestResults/sprint50-center-authority.xml
+          if-no-files-found: warn
+  protected-center-interlock-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Restore and build synthetic private-data interlock
+        run: |
+          dotnet restore tests/Taranom.CenterDataAccessInterlock.Tests/Taranom.CenterDataAccessInterlock.Tests.csproj
+          dotnet build tests/Taranom.CenterDataAccessInterlock.Tests/Taranom.CenterDataAccessInterlock.Tests.csproj --no-restore --configuration Release
+      - name: Test denied and synthetic-positive requests cannot call protected ports
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.CenterDataAccessInterlock.Tests/Taranom.CenterDataAccessInterlock.Tests.csproj --no-build --configuration Release -- -xml TestResults/sprint50-interlock-unit.xml
+          test -s TestResults/sprint50-interlock-unit.xml
+      - name: Detect unauthorized runtime and outbound dependencies
+        run: |
+          test ! -d src/Taranom.CenterApi
+          if grep -R -E 'HttpClient|JwtBearer|Npgsql|/api/v1/|NetworkAdministrator|AuthorizedResponse|CenterAccessToken' src/Taranom.CenterDataAccessInterlock --include='*.cs'; then
+            echo 'Unexpected connected runtime dependency in closed center interlock' >&2
+            exit 1
+          fi
+      - name: Upload center interlock xUnit evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-center-interlock-unit
+          path: TestResults/sprint50-interlock-unit.xml
+          if-no-files-found: warn
+
+  protected-center-interlock-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_sprint08_center
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_sprint08_center"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint08_center;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Build PostgreSQL no-write/no-read center admission tests
+        run: |
+          dotnet restore tests/Taranom.CenterDataAccessInterlock.IntegrationTests/Taranom.CenterDataAccessInterlock.IntegrationTests.csproj
+          dotnet build tests/Taranom.CenterDataAccessInterlock.IntegrationTests/Taranom.CenterDataAccessInterlock.IntegrationTests.csproj --no-restore --configuration Release
+      - name: Verify seeded real PostgreSQL remains unchanged after every requested operation
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.CenterDataAccessInterlock.IntegrationTests/Taranom.CenterDataAccessInterlock.IntegrationTests.csproj --no-build --configuration Release -- -xml TestResults/sprint50-interlock-postgres.xml
+          test -s TestResults/sprint50-interlock-postgres.xml
+      - name: Upload real PostgreSQL deny evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-center-interlock-postgres
+          path: TestResults/sprint50-interlock-postgres.xml
+          if-no-files-found: warn
+  evidence-review-intake-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Build review-only clinical evidence intake
+        run: |
+          dotnet restore tests/Taranom.ClinicalEvidenceIntake.Tests/Taranom.ClinicalEvidenceIntake.Tests.csproj
+          dotnet build tests/Taranom.ClinicalEvidenceIntake.Tests/Taranom.ClinicalEvidenceIntake.Tests.csproj --no-restore --configuration Release
+      - name: Exercise append-only pending-review claims and deny unsafe activation
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.ClinicalEvidenceIntake.Tests/Taranom.ClinicalEvidenceIntake.Tests.csproj --no-build --configuration Release -- -xml TestResults/sprint50-evidence-intake.xml
+          test -s TestResults/sprint50-evidence-intake.xml
+      - name: Verify no real doctor certification grant, IdP, network role or protected runtime
+        run: |
+          test ! -d src/Taranom.CenterApi
+          if grep -R -E 'HttpClient|JwtBearer|Npgsql|/api/v1/|NetworkAdministrator|ClinicalRecord|Wallet|Authorization: Bearer|ApprovedLicense|ProfessionalActivation' src/Taranom.ClinicalEvidenceIntake --include='*.cs'; then
+            echo 'Evidence intake must never activate clinical provider or protected data' >&2
+            exit 1
+          fi
+      - name: Publish clinical evidence intake report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-evidence-intake
+          path: TestResults/sprint50-evidence-intake.xml
+          if-no-files-found: warn
+  isolated-review-evidence-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_sprint10_evidence_review
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_sprint10_evidence_review"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_sprint10_evidence_review;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.401'
+      - name: Compile isolated Npgsql review intake test implementation
+        run: |
+          dotnet restore tests/Taranom.ClinicalEvidenceJournal.IntegrationTests/Taranom.ClinicalEvidenceJournal.IntegrationTests.csproj
+          dotnet build tests/Taranom.ClinicalEvidenceJournal.IntegrationTests/Taranom.ClinicalEvidenceJournal.IntegrationTests.csproj --no-restore --configuration Release
+      - name: Exercise inherited synthetic PostgreSQL review integrity tests and center modal focus-isolation regressions
+        run: |
+          mkdir -p TestResults
+          dotnet run --project tests/Taranom.ClinicalEvidenceJournal.IntegrationTests/Taranom.ClinicalEvidenceJournal.IntegrationTests.csproj --no-build --configuration Release -- -xml TestResults/sprint50-review-evidence-postgres.xml
+          test -s TestResults/sprint50-review-evidence-postgres.xml
+      - name: Confirm no real identity or clinical activation runtime
+        run: |
+          test ! -d src/Taranom.CenterApi
+          if grep -R -E 'HttpClient|JwtBearer|/api/v1/|NationalId|ClinicalRecord|Wallet|Bearer |ApprovedLicense|ProfessionalActivation' src/Taranom.ClinicalEvidenceJournal.Postgres --include='*.cs'; then
+            echo 'Rejected unapproved clinical integration in test-only evidence journal' >&2
+            exit 1
+          fi
+      - name: Upload evidence review PostgreSQL report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sprint50-review-evidence-postgres
+          path: TestResults/sprint50-review-evidence-postgres.xml
+          if-no-files-found: warn

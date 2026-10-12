@@ -1,0 +1,23 @@
+# TRN-TECH-027 — Exact request-bound receipt-source recheck under PostgreSQL locks
+
+**Date:** 2026-10-10. **Status:** implemented in isolated synthetic-only internal .NET/Npgsql review assembly. Based on TRN-BIZ-043/044/053/054 and TRN-TECH-026. This is NOT a new business approval, legal reviewer appointment, real session/revocation service or operational human receipt.
+
+## Threat and correction
+
+The previous Sprint17 `ITechnicalReceiptAuthoritySource` accepted a packet ID but did not bind an issuer reply to the **exact receipt request ID** or opaque **receipt-evidence reference**. Moreover the simulated issuer was asked only BEFORE fetching/locking the packet and current source-disclosure head; its simulated grant could change before the accepted receipt database write. Neither check was production identity or revocation enforcement, but these gaps should not be normalized as safe behavior.
+
+Sprint18 tightens the **same** non-deployable contract rather than introducing another pretend business actor:
+
+1. `ITechnicalReceiptAuthoritySource.ResolveAsync(packetId, requestId, ct)` makes the intended issuer lookup specific to both immutable packet and exact receipt request. `TechnicalReceiptSourceEvidence` now includes the source-returned `RequestId` and `ReceiptEvidenceRef`, in addition to packet/center, claimed session and recipient, versioned synthetic grant and independently asserted (test-double) session/delegation/nonrevocation/audit flags.
+2. `ConflictPacketReceiptGuard.CheckAsync` requires exact match for packet, request UUID, center, synthetic claimant session/resolved recipient, current grant and the **receipt evidence ref**. Unknown, malformed, missing, mismatched or revoked simulated values FAIL CLOSED; no implicit “true” or fabricated entitlement. A fake-positive check still returns only `SimulatedPrerequisitesOnly`, never an actual authorization.
+3. `PgSyntheticPacketReceiptJournal.RecordAsync` keeps the established initial fail-closed gate. After it rehydrates and audits the packet/source, acquires per-request advisory lock, locks packet row and exact current disclosure-head version, it runs **a second issuer check immediately before checking/inserting receipt records**. If the test issuer became unavailable, changes the request, changes the recipient, revokes a claimed delegation or changes a grant version, the operation returns a non-authorizing error and rolls back any pending transaction. This has no SQL-visible receipt or audit side effect.
+4. An already accepted receipt remains a historical, append-only test observation. Exact replays still require the initial simulated source check (not a real current revocation or read-access decision); changed replays conflict. Cross-request test callers must supply their **own exact-request source responses**, not reuse an attestation for a different request.
+5. Existing PostgreSQL append-only audit, atomic rollback, one receipt per packet, historical replay, source revision pinning and inherited protected-data DENY-only interlock are unchanged. No actual identity provider, signed issuance, official reviewer role, conflict resolution, clinician license, patient record, portal or real receipt service exists.
+
+## Acceptance
+
+Real PostgreSQL tests cover the new request/evidence binding, disappearance/outage/revocation/recipient substitution/grant-version replacement/second issuer rebind between preflight and before-write recheck, rejection without receipt/audit, unchanged issuer accepted only as `SyntheticTechnicalReceiptRecorded`, and preservation of existing exact/changed replay and parallel request behavior. **No test may be skipped or relaxed**. Preserve all 165 predecessor reviewer/evidence tests and inherited twelve independent .NET, PostgreSQL and Center/Member Chromium jobs.
+
+**Known limitation:** two checks reduce a synthetically demonstrable TOCTOU window, but **cannot guarantee immediate, real-world revocation** if an external authority changes after the second check or concurrently with commit. A real legally approved issuer would need transactional version binding or equivalent strong consistency, verified source identities, trusted transport, legal privacy rights, independent human receipt, audit, retention and a product-approved authorization model. No such production scheme is specified or claimed here. Do not expose this internal assembly on HTTP or deploy it.
+
+Workflow: Business → Technical → Backlog → Sprint18 → Code → Tests → Code Review; independent security/medical/legal Code Review and Stage/QA/Release/Production remain unauthorized. Parent PR Draft/Open.

@@ -1,0 +1,5 @@
+# Sprint 83 — Manual recovery receipt for an uncertain test-only support POST
+
+**2026-10-12.** Technical contract [TRN-TECH-092](../technical/92-manual-support-retry-receipt.md). Parent PR #91 exact `40bdd6995f2d2d256b6f4c5b66c5c46aed6b6b27`, Push and PR CI 14/14 successful, preliminary COMMENT only.
+
+A useful post-reload human journey now composes the full original 10-field test-only support command into a manually copyable bounded/plaintext TRN-TECH-092 receipt, and allows strict human-initiated import into locked uncertain state without any network POST until separately approved by a second click. Idempotency remains in the existing real PostgreSQL journal. Actual browser CI drops the response after a real commit, reloads, imports and replays the identical UUID and note lineage; validates no duplicate, forged/real refs denied. No browser persistence/auto retry, auth, patient, clinical, insurer, payment or Production work. Full 14-job Push and PR CI required. All 17 national gates BLOCKED_UNVERIFIED and first 3-market nationwide official launch DENIED_BY_DEFAULT. PR Draft/Open/unmerged, no Ready/Merge/Stage/QA/Release Approval/Production.

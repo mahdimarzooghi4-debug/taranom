@@ -1,0 +1,7 @@
+# TRN-SP-68 — Close loopback authority/unknown-route gaps and prove PG concurrency
+
+**Date:** 2026-10-11. **Parent:** Sprint67 PR #75 Draft/Open, exact-head Push/PR CI both 14/14 SUCCESS, review COMMENTED at \`1297828216d7cd7fa25b3a83648464c68058a753\`.
+
+**Substantive package:** pinpoint two weaknesses introduced by the true technical HTTP workflows (arbitrary Host/dns rebinding risk and wildcard fallback showing center UI on unrelated paths); deny hostile request authority and untrusted proxy headers before static/API handling; constrain entrypoints to legitimate separate member and center browser routes; never create real login/protected API; add a genuine Python HTTP regression matrix covering all previous routes and fail-closed cases; run PostgreSQL race/idempotency acceptance on both the center and support journals; expand real browser tests; inherited full 14-job Push+PR CI; fix only CI failures, then initial COMMENT-only Code Review.
+
+**Trust boundary:** Strict host checks are only network/test isolation, not real authentication/authorization or proof of a licensed partner. Both React app domains still operate solely on synthetic \`test:\` references and isolated PostgreSQL; actual member BFF/IdP TRN-TECH-012 remains NOT CODE AUTHORIZED. All 17 national release gates remain BLOCKED_UNVERIFIED; first comprehensive official launch across individual/support/corporate markets DENIED_BY_DEFAULT; Draft/Open/unmerged, no Ready/Merge/Stage/QA/Release/Production absent owner approval.

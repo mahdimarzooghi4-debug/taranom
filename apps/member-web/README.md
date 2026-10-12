@@ -1,0 +1,22 @@
+# Taranom Member Web — Sprint 02 authorized code slice
+
+**Scope:** Persian RTL accessible React/TypeScript **member app shell only**. No real user login, account, credit values, clinical records, insurer/provider integrations, payment, AI or synthetic fake real-world authority.
+
+- `npm ci --no-audit --no-fund --ignore-scripts`
+- `npm run typecheck`
+- `npm run build`
+- `npx playwright install chromium` then `npm run build` and `npm run test:e2e`
+
+The app intentionally renders every member section in an explicitly unavailable state. Navigation paths are browser routes **only** and do not imply existing .NET read endpoints. It never sends private network API requests or persists sensitive state in browser storage. Pages and tests cover WEB-01, WEB-04…12 under this **shell-only** authorization. WEB-02/03 backend isolation requires later real backend identity/tenant contracts and must not be claimed satisfied by a disconnected shell.
+
+Exact direct and transitive npm dependencies are committed in `package-lock.json` (generated and validated from successful GitHub CI). CI uses `npm ci --ignore-scripts`; changes to dependency versions require an updated reviewed lockfile. No Stage/QA Gate, Production, or member launch.
+
+Mandatory product member Web App is TRN-EP-13. This code implements the layout and safe baseline only; no Backend BFF or Production member authentication exists.
+
+Privacy hardening: no third-party remote font, analytics or content dependencies. The UI uses local/system font fallbacks so loading the unauthenticated shell sends no data to external domains.
+
+Code Review update: Playwright runs the actual Vite production bundle using `vite preview`, not the development HMR server. Client routing focuses the new heading after link navigation and browser Back/Forward; the mobile menu closes with Escape and returns focus to its toggle. These are accessibility controls for the disconnected shell, not a real member authorization layer.
+
+## Sprint 25 — disconnected browser egress defense
+
+The built static member preview now includes HTML **meta Content-Security-Policy**: only self-hosted scripts/styles and local/data images; no `fetch`/XHR/WebSocket (`connect-src 'none'`), third-party assets, inline script, workers, frames, objects or form actions. It also requests `no-referrer` and `noindex,nofollow,noarchive`. Three real Chromium regressions check document policy, attempted same-origin private and remote fetch denial before actual requests, and blocking an injected inline script. This is intentionally for the built Vite preview; development HMR may be blocked. Meta CSP is NOT a deployment HTTP header, `frame-ancestors` cannot be enforced from meta CSP, and no real IdP, lawful member access or Production hosting exists.

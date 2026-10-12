@@ -1,0 +1,5 @@
+# Sprint 81 — Three-market payer and individual ownership journey
+
+**2026-10-12**. Parent PR #88 exact `8301c2eb20b9070b902042f7c81ad678bd979225`, full Push/PR CI 14/14 and initial COMMENT. Technical: [TRN-TECH-090](../technical/90-three-market-payer-individual-ownership.md).
+
+Build interactive yet **source-backed and explicitly non-commercial** comparison of self-pay vs validly contracted sponsor payment among Public, Support and Corporate audiences. Preserve individual ownership and sponsor clinical privacy; public route never implies third-party payment; two contracted markets remain unverified and inactive. Strict backend-denial source loss/forgery hides selector. Real Chromium tests and 14 canonical regressions required on same SHA. No real identity, membership, payment, wallet, insurer or clinician activity. All 17 national blockers remain BLOCKED_UNVERIFIED; nationwide first full official three-market release DENIED_BY_DEFAULT. Keep Draft/Open/unmerged; no Ready, Merge, Stage/QA or Production.

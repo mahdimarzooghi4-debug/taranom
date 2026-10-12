@@ -1,0 +1,14 @@
+name: Sprint 82 Uncertain Support Write Recovery Full Regression
+on:
+  push:
+    branches: [sprint-82-support-uncertain-write-idempotency]
+  pull_request:
+    branches: [sprint-81-three-market-payer-ownership-guide]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

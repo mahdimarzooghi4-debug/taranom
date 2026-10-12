@@ -1,0 +1,7 @@
+# TRN-SP-73 — Real private external-evidence drift reconciliation
+
+**Date:** 2026-10-12. **Parent:** PR #80 Draft/Open/Unmerged exact head `b9a724bd3e7b627c256e5e26ebc66c93a096aac0`, both 14/14 CI SUCCESS, technical COMMENT only. **Technical:** [TRN-TECH-082](../technical/82-private-evidence-delta-reconciliation.md).
+
+**Value:** provide a safe, real private-operator reconciliation of two actual evidence submission rounds (separate private roots). Re-verify both manifests against actual SHA-256 bytes and unchanged canonical release blocker policy, then produce a strictly redacted 17-dimension/three-market report on unreviewed file-category additions, removals, unchanged files and replacements. Operator can surface withdrawn or changed evidence without leaking real counterparties or calling any integration. The existing Sprint70 custody/batch primitives are reused, not duplicated.
+
+**Tests/gates:** offline real-byte positive/hostile cases, no-clobber private result, source and document tamper, symlinks and hardlinks, denied human escalation, redaction; integrate with existing 14-job shared Push/PR CI; strict Sprint73 local-only dispatcher; preliminary COMMENT Code Review after green. No real member/provider/clinical/payment API, no new identity/session, no outside AI, no automatic legal/clinical/finance/Release approval. All 17 release blockers remain BLOCKED_UNVERIFIED, comprehensive official three-market national launch DENIED_BY_DEFAULT, completeness UNBASELINED. No merge, Ready, Stage, QA, Release or Production.

@@ -1,0 +1,7 @@
+# Sprint 76 — Read-only private FHIR integration metadata readiness
+
+**Date:** 2026-10-12. **Contract:** [TRN-TECH-085](../technical/85-private-fhir-capability-preflight.md). **Parent:** Sprint75 Draft PR #83 exact `da7a740ec8dd1f71a093e6971c503d0ac25bf657`, Push + PR CI both 14/14 SUCCESS and preliminary COMMENT only.
+
+**Substantive integrator-facing package:** a real technically safe, explicitly opted-in, trusted-local read of an operator-selected prospective FHIR healthcare partner's **metadata only**, enabling resource/interaction discovery without any guessed partner, patient data or automatic authorizations. Bound DNS/IP/TLS/Host/path, one actual anonymous HTTP GET of CapabilityStatement, parse/byte limits, owner-private redacted report; adversarial mocked transport/metadata and actual no-network Actions execution. Builds directly toward TRN-BIZ-041 independent health-core interoperability prerequisite. Not another synthetic clinical reducer or ledger.
+
+**Gate:** exact-head full shared 14-job Push+PR CI, preliminary COMMENT review only. All independent human/legal/data-rights, provider/insurer, Stage, QA, Release, Production and nationwide coverage blockers remain open. PR remains Draft/Open/unmerged; TRN-TECH-012 real member session NOT CODE-AUTHORIZED; all 17 national release dimensions BLOCKED_UNVERIFIED and official comprehensive countrywide first three-market release DENIED_BY_DEFAULT.

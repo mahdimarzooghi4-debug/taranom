@@ -1,0 +1,14 @@
+name: Sprint 76 Private FHIR Capability Full Regression
+on:
+  push:
+    branches: [sprint-76-private-fhir-capability-preflight]
+  pull_request:
+    branches: [sprint-75-support-case-history-timeline]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

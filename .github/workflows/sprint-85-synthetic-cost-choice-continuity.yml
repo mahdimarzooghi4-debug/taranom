@@ -1,0 +1,14 @@
+name: Sprint 85 Synthetic Cost Choice Continuity Full Regression
+on:
+  push:
+    branches: [sprint-85-synthetic-cost-choice-continuity]
+  pull_request:
+    branches: [sprint-84-synthetic-five-source-cost-workbench]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
