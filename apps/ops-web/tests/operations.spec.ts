@@ -145,9 +145,9 @@ test('OPS-AUTHORITY-02: never trust proxy forwarding when no reverse proxy is au
 
 test('OPS-AUTHORITY-03: unknown member, protected, and fake ops routes never render success HTML', async ({ request }) => {
   for (const route of [
-    '/login', '/member', '/api/v1/records', '/internal/ops/v1/identity',
+    '/login', '/member/login', '/api/v1/records', '/internal/ops/v1/identity',
     '/internal/ops/v1/status/admin', '/operations/deep-link',
-    '/member-demo/', '/center', '/finance'
+    '/member-demo/', '/center/patients', '/finance'
   ]) {
     const response = await request.get(route, { failOnStatusCode: false });
     expect(response.status(), route).toBe(404);
