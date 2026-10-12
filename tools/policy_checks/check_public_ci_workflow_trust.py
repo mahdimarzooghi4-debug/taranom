@@ -50,6 +50,10 @@ DISPATCHER_BRANCHES = {
         "sprint-78-unified-loopback-product-surfaces",
         "sprint-77-ephemeral-postgres-recovery-rehearsal",
     ),
+    "sprint-79-ephemeral-cross-portal-qa-journey.yml": (
+        "sprint-79-ephemeral-cross-portal-qa-journey",
+        "sprint-78-unified-loopback-product-surfaces",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

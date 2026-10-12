@@ -457,3 +457,9 @@ test('QUALITY-04: provider oversight stays disconnected and preserves accessible
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('CENTER-QA-79: regular center preview cannot offer a test-only database jump',async({page})=>{
+  await page.goto('/center');
+  await expect(page.getByRole('navigation',{name:'گردش‌کار آزمایشی ایزوله'})).toHaveCount(0);
+  await expect(page.getByText('مدیر مرکز هنوز احراز نشده است')).toBeVisible();
+});

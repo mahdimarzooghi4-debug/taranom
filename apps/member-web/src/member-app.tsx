@@ -1105,6 +1105,20 @@ export function MemberApp() {
               ) : null}
               {page.key === 'support' ? (
                 <section aria-labelledby="support-paths-title">
+                  {import.meta.env.VITE_TARANOM_LOCAL_QA_HOP === '1' &&
+                    window.location.hostname === '127.0.0.1' &&
+                    window.location.port === '4318' && (
+                    <nav aria-label="گردش‌کار آزمایشی ایزوله" className="source-strip">
+                      <div>
+                        <strong>آزمایش فنی با داده ساختگی — جدا از سامانه عضو</strong>
+                        <p>این پیوند فقط در Build ویژه CI و با سرویس مستقل localhost:4320 فعال است.
+                          پرونده آزمایشی در PostgreSQL ذخیره می‌شود ولی هیچ شکایت رسمی یا حساب واقعی ایجاد نمی‌کند.</p>
+                        <a href="http://127.0.0.1:4320/member-demo/">
+                          آزمایش پرونده پشتیبانی با PostgreSQL
+                        </a>
+                      </div>
+                    </nav>
+                  )}
                   <div className="section-header">
                     <div>
                       <p className="eyebrow">مسیر واحد پیگیری؛ اختیارهای مستقل</p>

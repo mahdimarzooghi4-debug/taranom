@@ -685,6 +685,28 @@ jobs:
           npm run build
           mkdir -p ../../src/Taranom.CenterWorkflow.Demo/wwwroot/member-demo
           cp -R dist/. ../../src/Taranom.CenterWorkflow.Demo/wwwroot/member-demo/
+      - name: Build separate opt-in CI-only local QA link to genuine journal host
+        run: |
+          dotnet restore src/Taranom.OperationsStatus/Taranom.OperationsStatus.csproj
+          dotnet build src/Taranom.OperationsStatus/Taranom.OperationsStatus.csproj --no-restore --configuration Release
+          cd apps/ops-web
+          npm ci --no-audit --no-fund --ignore-scripts
+          npm run typecheck
+          npm run build
+          mkdir -p ../../src/Taranom.OperationsStatus/wwwroot
+          cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/
+          cd ../member-web
+          npm ci --no-audit --no-fund --ignore-scripts
+          npm run typecheck
+          VITE_TARANOM_LOCAL_QA_HOP=1 npm run build -- --base=/member-portal/
+          mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/member-portal
+          cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/member-portal/
+          cd ../center-web
+          npm ci --no-audit --no-fund --ignore-scripts
+          npm run typecheck
+          VITE_TARANOM_LOCAL_QA_HOP=1 npm run build -- --base=/center-portal/
+          mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/center-portal
+          cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/center-portal/
       - name: Install real Chromium for interactive persistent case workflow
         run: |
           cd apps/center-demo-web
@@ -711,6 +733,19 @@ jobs:
           CI=true npm run test:e2e
           cd ../member-support-demo-web
           CI=true npm run test:e2e
+          cd "$GITHUB_WORKSPACE/src/Taranom.OperationsStatus"
+          TARANOM_OPS_REPO_ROOT="$GITHUB_WORKSPACE" dotnet run --no-build --configuration Release > /tmp/taranom-cross-portal-ops.log 2>&1 &
+          ops_pid=$!
+          trap 'kill "$ops_pid" "$server_pid" 2>/dev/null || true' EXIT
+          cd "$GITHUB_WORKSPACE"
+          ready_ops=0
+          for attempt in $(seq 1 45); do
+            if curl --silent --fail --max-time 2 http://127.0.0.1:4318/internal/ops/v1/status >/dev/null; then ready_ops=1; break; fi
+            sleep 1
+          done
+          test "$ready_ops" = "1"
+          cd apps/ops-web
+          TARANOM_CI_CROSS_PORTAL=1 CI=true npx playwright test tests/cross-portal-qa.spec.ts
       - name: Rehearse real isolated PostgreSQL dump and restored journal integrity
         env:
           CI: 'true'

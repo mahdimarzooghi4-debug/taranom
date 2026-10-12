@@ -223,6 +223,17 @@ export function CenterApp() {
 
               {section.key === 'overview' ? (
                 <>
+                  {import.meta.env.VITE_TARANOM_LOCAL_QA_HOP === '1' &&
+                    window.location.hostname === '127.0.0.1' &&
+                    window.location.port === '4318' && (
+                    <nav aria-label="گردش‌کار آزمایشی ایزوله" className="module">
+                      <h2>آزمایش گردش‌کار مرکز در PostgreSQL ایزوله</h2>
+                      <p>این مسیر فقط برای CI توسعه است؛ هیچ مدیر، پزشک، مجوز یا خدمت درمانی واقعی احراز نمی‌شود.</p>
+                      <a href="http://127.0.0.1:4320/">
+                        آزمایش رویدادهای مرکز با PostgreSQL
+                      </a>
+                    </nav>
+                  )}
                   <div className="section-heading"><div><p className="eyebrow">ساختار مرکز</p><h2>مدیریت یکپارچه و محدود به همان مرکز</h2></div></div>
                   <div className="tiles">
                     <article className="tile"><span className="tile-mark">▦</span><h3>بخش‌ها</h3>

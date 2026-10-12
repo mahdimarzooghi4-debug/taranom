@@ -1253,3 +1253,9 @@ test('CARE-CONTINUITY-04: source-free care view cannot call patient integrations
     local: Object.keys(localStorage), session: Object.keys(sessionStorage)
   }))).toEqual({ local: [], session: [] });
 });
+
+test('WEB-QA-79: ordinary member preview cannot expose the ephemeral PostgreSQL handoff',async({page})=>{
+  await page.goto('/member/support');
+  await expect(page.getByRole('navigation',{name:'گردش‌کار آزمایشی ایزوله'})).toHaveCount(0);
+  await expect(page.getByRole('heading',{level:1,name:'پشتیبانی و شکایات'})).toBeVisible();
+});
