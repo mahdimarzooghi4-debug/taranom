@@ -30,6 +30,10 @@ DISPATCHER_BRANCHES = {
         "sprint-73-private-evidence-delta-reconciliation",
         "sprint-72-three-market-public-entry",
     ),
+    "sprint-74-private-oidc-discovery-preflight.yml": (
+        "sprint-74-private-oidc-discovery-preflight",
+        "sprint-73-private-evidence-delta-reconciliation",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

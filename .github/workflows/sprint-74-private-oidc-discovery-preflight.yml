@@ -1,0 +1,14 @@
+name: Sprint 74 Private OIDC Discovery Full Regression
+on:
+  push:
+    branches: [sprint-74-private-oidc-discovery-preflight]
+  pull_request:
+    branches: [sprint-73-private-evidence-delta-reconciliation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

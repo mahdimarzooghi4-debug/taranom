@@ -42,6 +42,9 @@ jobs:
       - name: Verify external identity TLS preflight contract without network or provider
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_identity_tls_preflight.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_private_oidc_discovery.py' -v
+          python3 tools/policy_checks/check_private_oidc_discovery.py --root . --report-json TestResults/fullci-oidc-discovery-unconfigured.json
+          python3 -c "import json; d=json.load(open('TestResults/fullci-oidc-discovery-unconfigured.json')); assert d['status']=='TARGET_NOT_CONFIGURED' and not d['member_authentication_verified'] and not d['national_release_allowed']"
           python3 tools/policy_checks/check_identity_tls_preflight.py --purpose AUTHENTICATION_IDP --report-json TestResults/fullci-identity-preflight-unconfigured.json
           python3 -c "import json; r=json.load(open('TestResults/fullci-identity-preflight-unconfigured.json')); assert r['status']=='TARGET_NOT_CONFIGURED' and not r['tls_transport_reachable'] and not r['national_release_allowed']"
       - name: Validate private evidence custody contract without uploading external evidence
