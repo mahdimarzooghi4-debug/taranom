@@ -76,6 +76,9 @@ test('CENTER-DEMO-05: no verified rights or real identity even after successful 
   });
   const { center } = await setup(page);
   await page.getByRole('button', { name: 'ثبت بخش آزمایشی' }).click();
+  // A click is not a completed HTTP commit. Synchronize on the real
+  // confirmed persistence acknowledgement before asserting DB-backed state.
+  await expect(page.getByRole('status').first()).toContainText('فقط در پایگاه آزمایشی ثبت شد');
   const json = await (await request.get('/internal/demo/v1/centers/' + encodeURIComponent(center))).json();
   expect(json.syntheticOnly).toBe(true);
   expect(json.managerAuthenticated).toBe(false);
