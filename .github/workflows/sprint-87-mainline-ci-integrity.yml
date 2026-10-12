@@ -3,7 +3,7 @@ on:
   push:
     branches: [sprint-87-mainline-ci-integrity]
   pull_request:
-    branches: [main]
+    branches: [sprint-86-postgres-cost-choice-workflow]
   workflow_dispatch:
 
 permissions:

@@ -97,7 +97,7 @@ DISPATCHER_BRANCHES = {
     ),
     "sprint-87-mainline-ci-integrity.yml": (
         "sprint-87-mainline-ci-integrity",
-        "main",
+        "sprint-86-postgres-cost-choice-workflow",
     ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
