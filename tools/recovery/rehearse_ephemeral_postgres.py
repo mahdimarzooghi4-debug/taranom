@@ -133,8 +133,9 @@ def _catalog(container, database):
            FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
            JOIN pg_namespace n ON n.oid=c.relnamespace
            WHERE n.nspname='public' AND NOT t.tgisinternal;""",
-        """SELECT coalesce(jsonb_agg(pg_get_indexdef(i.indexrelid) ORDER BY c.relname,i.indexrelid)::text,'[]')
+        """SELECT coalesce(jsonb_agg(pg_get_indexdef(i.indexrelid) ORDER BY c.relname,idx.relname)::text,'[]')
            FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid
+           JOIN pg_class idx ON idx.oid=i.indexrelid
            JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public';""",
         """SELECT coalesce(jsonb_agg(pg_get_constraintdef(k.oid) ORDER BY c.relname,k.conname)::text,'[]')
            FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid
@@ -208,8 +209,12 @@ def rehearse():
                 "-d", DESTINATION, "--no-owner", "--no-acl", "--exit-on-error"
             ], input_file=dump_file)
         after = _catalog(container, DESTINATION)
-        if before != after:
-            _deny("RECOVERY_RESTORED_SCHEMA_OR_BYTES_DIFFER")
+        if before[0] != after[0]:
+            _deny("RECOVERY_RESTORED_TABLE_SET_DIFFERS")
+        if before[1] != after[1]:
+            _deny("RECOVERY_RESTORED_SCHEMA_DIFFERS")
+        if before[2] != after[2]:
+            _deny("RECOVERY_RESTORED_CONTENT_DIFFERS")
         _guard_test(container)
         if after != _catalog(container, DESTINATION):
             _deny("RECOVERY_GUARD_CHECK_CHANGED_RESTORED_BYTES")

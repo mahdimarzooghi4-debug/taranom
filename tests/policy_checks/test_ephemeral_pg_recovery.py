@@ -90,6 +90,13 @@ class EphemeralRecoveryContractTests(unittest.TestCase):
                                         "RESTORED_APPEND_ONLY_GUARD_NOT_ENFORCED"):
                 rec.run_checked(["docker","exec","safe"],expect_failure=True)
 
+    def test_catalog_comparison_does_not_bind_ephemeral_pg_index_oids(self):
+        source=(ROOT/"tools/recovery/rehearse_ephemeral_postgres.py").read_text()
+        self.assertIn("ORDER BY c.relname,idx.relname",source)
+        self.assertNotIn("ORDER BY c.relname,i.indexrelid",source)
+        self.assertIn("RECOVERY_RESTORED_CONTENT_DIFFERS",source)
+        self.assertIn("RECOVERY_RESTORED_SCHEMA_DIFFERS",source)
+
     def test_recovery_safety_contract_is_non_authorizing(self):
         source=(ROOT/"tools/recovery/rehearse_ephemeral_postgres.py").read_text()
         self.assertIn('"production_recovery_verified": False',source)
