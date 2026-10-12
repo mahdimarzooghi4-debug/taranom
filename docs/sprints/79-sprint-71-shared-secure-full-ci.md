@@ -1,0 +1,7 @@
+# TRN-SP-71 — Deduplicate and harden all 14 real CI gates
+
+**Date:** 2026-10-12. **Parent:** PR #78 Draft/Open/Unmerged, exact parent SHA `31b173c771224184aa28836da024fee03aa6e12e`, full 14/14 Push+PR green and preliminary COMMENTED Code Review. **Technical contract:** [TRN-TECH-080](../technical/80-shared-secure-full-ci.md).
+
+**One meaningful infrastructure package:** retire the copied 705-line *new-Sprint* workflow pattern and introduce a single local canonical 14-job full regression with a minimal branch-specific call-only dispatcher. Harden the existing public workflow guard to allow *only* this strictly named/restricted local workflow_call, reject remote/dynamic/inputs/secrets/caller drift, and test every inherited job name (PostgreSQL, .NET, React and real Chromium, public-source/secret safety, external AI exclusion, national deny-only, private evidence checks). Capture real Push/PR CI on exact SHA, fix any failures before initial COMMENT.
+
+**Not a product-release claim:** never grants login, health access, insurance entitlement, payment, clinical authority, real integration, Production or national deployment. 17 dimensions BLOCKED_UNVERIFIED, 13-Epic completion UNBASELINED, first comprehensive nationwide three-market launch DENIED_BY_DEFAULT, TRN-TECH-012 NOT CODE-AUTHORIZED. No Ready, merge, Stage/QA/Release/Production; PR Draft/Open/Unmerged and human independent review still required.
