@@ -102,3 +102,67 @@ test('TIME-05 failed local service never produces a successful hypothetical resu
   await expect(page.getByRole('status').last()).toContainText('ورودی یا سرویس محاسبه معتبر نیست');
   await expect(page.getByText('فقط شرط زمانیِ فرضی ۹۰ روز کامل شده')).toHaveCount(0);
 });
+
+
+test('OPS-AUTHORITY-01: ops HTML, status and domain preview deny spoofed HTTP Host', async ({ request }) => {
+  for (const route of ['/', '/operations', '/internal/ops/v1/status']) {
+    const response = await request.get(route, {
+      headers: { Host: 'malicious.example:4318' },
+      failOnStatusCode: false
+    });
+    expect(response.status(), route).toBe(403);
+    const denial = await response.json();
+    expect(denial.contract).toBe('TRN-TECH-078');
+    expect(denial.outcome).toBe('UNTRUSTED_LOOPBACK_AUTHORITY');
+    expect(denial.releaseAllowed).toBe(false);
+    expect(denial.officialActivationVerified).toBe(false);
+    expect(denial.walletCreditAuthorized).toBe(false);
+    expect(denial.nationalReleaseAllowed).toBe(false);
+  }
+  const preview = await request.post('/internal/ops/v1/waiting-preview', {
+    data: { activationUtc: null, observedUtc: '2026-04-01T00:00:00Z' },
+    headers: { Host: 'evil.example:4318' },
+    failOnStatusCode: false
+  });
+  expect(preview.status()).toBe(403);
+  expect((await preview.json()).outcome).toBe('UNTRUSTED_LOOPBACK_AUTHORITY');
+});
+
+test('OPS-AUTHORITY-02: never trust proxy forwarding when no reverse proxy is authorized', async ({ request }) => {
+  for (const headers of [
+    { 'X-Forwarded-Host': 'evil.example' },
+    { 'X-Forwarded-Proto': 'https' },
+    { 'X-Forwarded-For': '203.0.113.8' },
+    { Forwarded: 'host=evil.example' },
+  ]) {
+    const status = await request.get('/internal/ops/v1/status', { headers, failOnStatusCode: false });
+    expect(status.status()).toBe(403);
+    const payload = await status.json();
+    expect(payload.releaseAllowed).toBe(false);
+    expect(payload.verifiedIntegrations).toBe(false);
+  }
+});
+
+test('OPS-AUTHORITY-03: unknown member, protected, and fake ops routes never render success HTML', async ({ request }) => {
+  for (const route of [
+    '/login', '/member', '/api/v1/records', '/internal/ops/v1/identity',
+    '/internal/ops/v1/status/admin', '/operations/deep-link',
+    '/member-demo/', '/center', '/finance'
+  ]) {
+    const response = await request.get(route, { failOnStatusCode: false });
+    expect(response.status(), route).toBe(404);
+    expect(await response.text()).not.toContain('ترنم | اتصال فنی محلی');
+  }
+  const actual = await request.get('/operations');
+  expect(actual.status()).toBe(200);
+  expect(await actual.text()).toContain('ترنم | اتصال فنی محلی');
+});
+
+test('OPS-AUTHORITY-04: normal real browser still displays mandatory 17 denied release blockers', async ({ page }) => {
+  await page.goto('/operations');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('اتصال واقعی محلی');
+  await expect(page.locator('.dimensions li')).toHaveCount(17);
+  await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
+  await page.reload();
+  await expect(page.locator('.dimensions li')).toHaveCount(17);
+});

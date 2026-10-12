@@ -16,6 +16,33 @@ app.Use(async (context, next) =>
         "default-src 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; " +
         "form-action 'none'; script-src 'self'; style-src 'self'; img-src 'self'; " +
         "connect-src 'self'; font-src 'self'";
+    // Strict loopback HTTP authority; a local listener without Host checking
+    // is vulnerable to browser DNS-rebinding to a developer-only service.
+    // A future trusted reverse proxy has not been approved for this app.
+    var authority = context.Request.Host;
+    var hostAllowed = authority.Port == 4318 &&
+        (string.Equals(authority.Host, "127.0.0.1", StringComparison.Ordinal) ||
+         string.Equals(authority.Host, "localhost", StringComparison.OrdinalIgnoreCase));
+    var untrustedProxy = context.Request.Headers.ContainsKey("Forwarded") ||
+        context.Request.Headers.ContainsKey("X-Forwarded-Host") ||
+        context.Request.Headers.ContainsKey("X-Forwarded-Proto") ||
+        context.Request.Headers.ContainsKey("X-Forwarded-For");
+    if (!hostAllowed || untrustedProxy)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            contract = "TRN-TECH-078",
+            outcome = "UNTRUSTED_LOOPBACK_AUTHORITY",
+            syntheticOnly = true,
+            verifiedIntegrations = false,
+            officialActivationVerified = false,
+            walletCreditAuthorized = false,
+            releaseAllowed = false,
+            nationalReleaseAllowed = false
+        });
+        return;
+    }
     await next();
 });
 app.MapGet("/internal/ops/v1/status", () =>
@@ -49,7 +76,12 @@ app.MapPost("/internal/ops/v1/waiting-preview",
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.MapFallbackToFile("index.html");
+// Explicit technical UI entrypoint. Unknown URLs do not become a 200 HTML
+// response or impersonate a member login / operational backend endpoint.
+app.MapGet("/operations", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+        "index.html"), "text/html; charset=utf-8"));
+app.MapFallback(() => Results.NotFound());
 app.Run();
 
 internal sealed record Dimension(string Id, string Label, string Status, string[] MissingEvidence);
