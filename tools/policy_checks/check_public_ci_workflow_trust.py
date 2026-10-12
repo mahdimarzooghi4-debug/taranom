@@ -17,6 +17,7 @@ WORKFLOW_DIR = Path(".github/workflows")
 # envelope; all historical workflows retain their original strict step rules.
 REUSABLE_NAME = "taranom-full-regression-reusable.yml"
 DISPATCHER_NAME = "sprint-71-shared-secure-ci-gates.yml"
+MAINLINE_DISPATCHER_NAME = "taranom-mainline-full-regression.yml"
 DISPATCHER_BRANCHES = {
     DISPATCHER_NAME: (
         "sprint-71-shared-secure-ci-gates",
@@ -92,6 +93,14 @@ DISPATCHER_BRANCHES = {
     ),
     "integration-through-sprint-86.yml": (
         "integration/through-sprint-86",
+        "main",
+    ),
+    MAINLINE_DISPATCHER_NAME: (
+        "main",
+        "main",
+    ),
+    "sprint-87-mainline-ci-integrity.yml": (
+        "sprint-87-mainline-ci-integrity",
         "main",
     ),
 }
@@ -317,6 +326,12 @@ def scan(root: Path) -> dict:
         return report
     try:
         children = sorted(path.iterdir())
+        # After introducing canonical reusable CI, absence of the mainline
+        # dispatcher is a security-critical omission, not a clean scan.
+        names = {entry.name for entry in children}
+        if REUSABLE_NAME in names and MAINLINE_DISPATCHER_NAME not in names:
+            _issue(report["findings"], ".github/workflows/" + MAINLINE_DISPATCHER_NAME,
+                   "MANDATORY_MAINLINE_CI_MISSING")
         if not children:
             _issue(report["findings"], ".github/workflows", "NO_WORKFLOWS")
         for entry in children:

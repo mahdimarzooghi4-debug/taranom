@@ -1,0 +1,21 @@
+# TRN-TECH-096 — Mandatory mainline full-regression admission
+
+Date: 2026-10-12. Parent: owner-authorized Integration PR #97 merged into `main` at `0d8cad694292c7810c9f292598fcbb14a450f695`. The source tree was identical to the tested 14/14 SUCCESS integration tree, but the repository had **zero main-branch GitHub Actions executions** after merging. Accepted process: Business → Technical → Backlog → Sprint → Code → Code Review → Stage → QA → Release Approval → Production → Monitoring → Improvement.
+
+## Business need and narrow technical scope
+
+An integration-quality premerge suite cannot replace validation that GitHub triggers the same inherited tests on the *actual* `main` branch after merge. A code change that accidentally breaks mainline dispatch must fail closed rather than be accepted as no CI runs. Preserve the canonical 14 real .NET/React/isolated PostgreSQL/Chromium/restore/security/national-release-deny Job IDs from `taranom-full-regression-reusable.yml`; do **not** fork or reduce the suite.
+
+Add a tiny literal dispatcher `.github/workflows/taranom-mainline-full-regression.yml` with exactly `push: branches [main]`, `pull_request: branches [main]`, and `workflow_dispatch`, all in the fixed static form accepted by the existing `TRN-TECH-066/080` checker. Global token permissions are exclusively `contents: read`, and the single `full-regression` job invokes `./.github/workflows/taranom-full-regression-reusable.yml` at the same commit. No `with`, `secrets`, OIDC tokens, environment, deployment, job skipping, remote action, ref indirection or on-demand dynamic parameters. Pull request checks are on proposed code; push checks use the actual post-merge main SHA. The workflow itself is not a GitHub ruleset/required-check enforcement policy; admin controls on merge remain separate.
+
+Extend the fail-closed static guard with exactly this new dispatcher and a narrow `MAINLINE_DISPATCHER_NAME` invariant: whenever the canonical reusable source exists in the tracked workflows, omission of the mandatory mainline file is a **BLOCKED** result. This prevents a source change from silently deleting the only mainline quality listener. The check is deliberately local and lexical, not a hosted GitHub permission or branch-protection proof. The historical Sprint dispatchers and 14 canonical jobs remain intact. Temporary unit fixtures that copy reusable workflow must also include the now-required mainline dispatcher.
+
+A small Sprint 87 dispatcher itself runs both Push (on its exact development branch) and PR-to-`main` on the same head SHA, calling all 14 inherited jobs. The mainline dispatcher independently runs the same 14 jobs on that PR. The owner may later Merge Sprint87 explicitly; **then** the mainline Push workflow must be observed on the resulting exact `main` merge SHA before claiming continuous integration active on main. A PR green alone is insufficient to claim that post-merge event occurred.
+
+## Negative tests
+
+Real workflow corpus static scan must pass, and isolated hostile fixtures must reject: missing mainline dispatcher, altered push/PR branches, unexpected privileged trigger, `contents: write`, alternate/remote reusable source, secret forwarding, new runner/skipped gate and noncanonical workflow names. The source remains read-only and uploads only test artifacts. A result `PASS_LIMITED_STATIC_SCOPE` is NOT independent software security certification.
+
+## Non-release
+
+No genuine IdP/member BFF, clinical record, insurer, finance, PSP, AI runtime, real paid contract or deployment is added. TRN-TECH-012 is still NOT CODE-AUTHORIZED. The nationwide first official three-market launch remains `DENIED_BY_DEFAULT`, 17 national gates `BLOCKED_UNVERIFIED`, completion `UNBASELINED`. Sprint87 stays Draft/Open/Unmerged until explicit owner Merge; automatic COMMENT review never replaces independent human review. Do not execute Stage/QA Gate/Release/Production.

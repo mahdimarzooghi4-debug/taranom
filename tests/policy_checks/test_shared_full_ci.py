@@ -8,7 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools/policy_checks"))
 from check_public_ci_workflow_trust import (
-    scan, inspect_workflow, REUSABLE_NAME, DISPATCHER_NAME, REQUIRED_FULL_JOBS
+    scan, inspect_workflow, REUSABLE_NAME, DISPATCHER_NAME, MAINLINE_DISPATCHER_NAME, REQUIRED_FULL_JOBS
 )
 
 
@@ -19,7 +19,7 @@ class SharedFullCiTests(unittest.TestCase):
         self.root = Path(temp.name)
         self.workflows = self.root / ".github/workflows"
         self.workflows.mkdir(parents=True)
-        for name in (REUSABLE_NAME, DISPATCHER_NAME):
+        for name in (REUSABLE_NAME, DISPATCHER_NAME, MAINLINE_DISPATCHER_NAME):
             shutil.copy2(ROOT / ".github/workflows" / name, self.workflows / name)
 
     def assert_denied(self, rule):

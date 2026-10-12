@@ -254,3 +254,8 @@ TRN-TECH-089: all 15 existing Member and Center pages on loopback ASP.NET 4318 n
 ## Additional Sprint 84 center guided workflow — actual synthetic PostgreSQL journal
 
 [TRN-TECH-093 (center)](../technical/93-guided-center-postgres-workflow.md) and [parallel Sprint 84](../sprints/92-sprint-84-guided-center-workflow.md) give the tester a four-step manual journal-based sequence for a test department and unverified professional affiliation, assignment and end. Every transition is human-triggered, re-reads PostgreSQL and never asserts a real licensed provider, clinician or authorization; no automatic progression, clinical approval or official release.
+
+
+## Sprint 87 — Mainline exact-SHA full regression admission (2026-10-12)
+
+The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fcbb14a450f695`) has **no GitHub Actions run on `main`** because prior Sprint dispatchers only target Sprint branches. [TRN-TECH-096](../technical/TRN-TECH-096-mainline-continuous-regression.md) / [Sprint87](../sprints/93-sprint-87-mainline-ci-integrity.md) bind exact `main` Push and incoming PR events to the canonical read-only 14-job reusable workflow. The public CI trust checker rejects removal of the mandatory mainline dispatcher or tampering with its event/branch/job boundary. This is a **continuous integration quality gate**, not Production deploy, signed independent review, or automatic release authorization. All 17 national gates remain BLOCKED_UNVERIFIED and comprehensive three-market official launch DENIED_BY_DEFAULT.
