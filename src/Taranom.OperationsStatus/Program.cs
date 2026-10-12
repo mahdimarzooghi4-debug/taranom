@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Globalization;
 using Taranom.MemberGovernance;
+using Taranom.OperationsStatus;
 
 var builder = WebApplication.CreateBuilder(args);
 // Developer-only same-origin end-to-end probe. Never expose to public network.
@@ -78,6 +79,10 @@ app.MapGet("/internal/ops/v1/market-entry",
 app.MapPost("/internal/ops/v1/waiting-preview",
     (Func<HttpContext, Task<IResult>>)WaitingPreview.Evaluate);
 
+// TRN-TECH-093: opt-in, same-origin synthetic-only cost inspection.
+app.MapPost(SyntheticCostWorkbenchHttp.Path,
+    (Func<HttpContext, Task<IResult>>)SyntheticCostWorkbenchHttp.Inspect);
+
 app.Use(async (context, next) =>
 {
     if ((context.Request.Path.StartsWithSegments("/member-portal") ||
@@ -154,6 +159,7 @@ internal static class OpsFallback
         if ((ProductPageSource.IsExplicitPage(path) && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/waiting-preview" && !HttpMethods.IsPost(method)) ||
+            (path == SyntheticCostWorkbenchHttp.Path && !HttpMethods.IsPost(method)) ||
             (path == "/operations" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/market-entry" && !HttpMethods.IsGet(method)) ||
             ((path is "/markets" or "/markets/individuals" or

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import {ReleaseSourcePanel} from './release-source-panel';
+import {SyntheticCostWorkbench} from './synthetic-cost-workbench';
 
 type PageKey =
   | 'overview' | 'membership' | 'credit' | 'consents' | 'care'
@@ -855,6 +856,9 @@ export function MemberApp() {
                   <button type="button" disabled aria-describedby="cost-awareness-limits">
                     ثبت آگاهی و انتخاب — نیازمند اتصال امن
                   </button>
+                  {import.meta.env.VITE_TARANOM_LOCAL_COST_WORKBENCH === '1' ? (
+                    <SyntheticCostWorkbench />
+                  ) : null}
                   <section aria-labelledby="cost-choice-continuity-title">
                     <div className="section-header">
                       <div>

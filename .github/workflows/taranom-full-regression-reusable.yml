@@ -601,7 +601,7 @@ jobs:
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
           python3 ../../tests/policy_checks/test_local_portal_csp.py
-          npm run build -- --base=/member-portal/
+          VITE_TARANOM_LOCAL_COST_WORKBENCH=1 npm run build -- --base=/member-portal/
           mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/member-portal
           cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/member-portal/
           CI=true python3 ../../tools/policy_checks/authorize_local_portal_csp.py --audience member
@@ -619,7 +619,7 @@ jobs:
       - name: Execute real Kestrel HTTP, read-only contract, and Chromium
         run: |
           cd src/Taranom.OperationsStatus
-          TARANOM_OPS_REPO_ROOT="$GITHUB_WORKSPACE" dotnet run --no-build --configuration Release > /tmp/taranom-ops.log 2>&1 &
+          TARANOM_SYNTHETIC_COST_WORKBENCH=CI_EPHEMERAL_ONLY TARANOM_OPS_REPO_ROOT="$GITHUB_WORKSPACE" dotnet run --no-build --configuration Release > /tmp/taranom-ops.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           cd "$GITHUB_WORKSPACE"
@@ -630,6 +630,7 @@ jobs:
           done
           test "$ready" = "1"
           python3 tests/ops_status/test_local_ops_http.py
+           python3 tests/ops_status/test_synthetic_cost_http.py
           python3 tests/ops_status/test_three_market_entry_http.py
           python3 tests/ops_status/test_unified_local_surfaces_http.py
           cd apps/ops-web
