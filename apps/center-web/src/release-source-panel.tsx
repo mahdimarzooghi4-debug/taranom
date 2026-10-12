@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-type Dimension={id:string;label:string;status:'BLOCKED_UNVERIFIED';missing_evidence:string[]};
+type Dimension={id:string;label:string;status:'BLOCKED_UNVERIFIED';missingEvidence:string[]};
 type Payload={contract:'TRN-TECH-071';runtime:'LOOPBACK_PROCESS_ALIVE';inventory:'SOURCE_BLOCKED_UNVERIFIED';releaseAllowed:false;verifiedIntegrations:false;dimensions:Dimension[]};
 type State={kind:'OFFLINE'|'LOADING'|'UNVERIFIABLE'}|{kind:'BLOCKED';data:Payload};
 const expected=new Set([
@@ -19,10 +19,10 @@ function validated(v:unknown):v is Payload{
   if(!d||typeof d!=='object'||!expected.has(d.id)||seen.has(d.id)||
    d.status!=='BLOCKED_UNVERIFIED'||typeof d.label!=='string'||
    d.label.trim().length===0||d.label.length>120||
-   !Array.isArray(d.missing_evidence)||d.missing_evidence.length<1||
-   d.missing_evidence.length>20||
-   new Set(d.missing_evidence).size!==d.missing_evidence.length||
-   !d.missing_evidence.every(s=>typeof s==='string'&&s.length<=100&&/^[A-Z0-9_]+$/.test(s)))return false;
+   !Array.isArray(d.missingEvidence)||d.missingEvidence.length<1||
+   d.missingEvidence.length>20||
+   new Set(d.missingEvidence).size!==d.missingEvidence.length||
+   !d.missingEvidence.every(s=>typeof s==='string'&&s.length<=100&&/^[A-Z0-9_]+$/.test(s)))return false;
   seen.add(d.id);
  }
  return seen.size===expected.size;
@@ -64,7 +64,7 @@ export function ReleaseSourcePanel({audience}:{audience:'MEMBER'|'CENTER'}){
    <button type="button" aria-expanded={details} onClick={()=>setDetails(v=>!v)}>
     {details?'بستن جزئیات موانع':'مشاهده جزئیات ۱۷ مانع'}</button>
    {details&&<ul data-testid="release-source-blockers">{data.dimensions.map(d=>
-    <li key={d.id}><strong>{d.id} — {d.label}</strong>: BLOCKED_UNVERIFIED — {d.missing_evidence.join('، ')}</li>)}</ul>}
+    <li key={d.id}><strong>{d.id} — {d.label}</strong>: BLOCKED_UNVERIFIED — {d.missingEvidence.join('، ')}</li>)}</ul>}
   </>}
   <p>عضویت، داده سلامت، پزشک، اعتبار درمان، بیمه و پرداخت واقعی تأیید نشده‌اند.</p>
  </section>;
