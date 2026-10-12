@@ -1,0 +1,14 @@
+name: Sprint 81 Three-Market Payer Policy Full Regression
+on:
+  push:
+    branches: [sprint-81-three-market-payer-boundary-preview]
+  pull_request:
+    branches: [sprint-80-runtime-release-source-member-center]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

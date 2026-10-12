@@ -245,3 +245,8 @@ TRN-TECH-089: all 15 existing Member and Center pages on loopback ASP.NET 4318 n
 ## Sprint 83 — Explicit manual post-reload test support command recovery (2026-10-12)
 
 [TRN-TECH-092](../technical/92-manual-support-retry-receipt.md) / [Sprint83](../sprints/91-sprint-83-support-manual-recovery.md) provide a portable plain-text, **synthetic-only** command snapshot when support POST acknowledgement is uncertain. After browser restart manual paste validates canonical source and exact original request ID/command but never POSTs or authorizes anything. A separate manual replay relies on real PostgreSQL request idempotency. Real Chromium tests prove receipt→reload→import without write→replay existing accepted event once for both original submission and follow-up; malformed receipt and real refs denied. No cookies, automatic storage or real patient workflow. The 14-job Push/PR gate and 17-national DENIED remain unchanged.
+
+
+## Additional Sprint 81 payer scenario — test-only contractual responsibility matrix
+
+[TRN-TECH-090](../technical/90-three-market-payer-boundary-preview.md) and [Sprint 81 parallel branch](../sprints/89-sprint-81-payer-boundary-preview.md) include a separate same-origin .NET/React policy what-if across individual, support and corporate member sponsorship. A sponsor requires a real future contract; member ownership and clinical privacy never transfer. No real payment, insurer coverage or contract is implied. This parallel deliverable was integrated alongside the Sprint 81 informational market guide without replacing it.

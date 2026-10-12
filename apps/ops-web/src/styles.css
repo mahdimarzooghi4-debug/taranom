@@ -13,3 +13,7 @@
 /* TRN-TECH-090: distinct comparison tiles, preserving three original market cards. */
 .payer-tile { border: 1px solid currentColor; border-radius: 0.7rem; padding: 1rem; min-width: 0; }
 .payer-tile p { line-height: 1.75; }
+
+
+/* TRN-TECH-090 local-only payer what-if, not payment */
+.payer-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-block:1rem}.payer-grid label{display:flex;flex-direction:column;gap:.45rem;font-weight:600}.payer-result{padding:1rem;border:1px solid #a8c7d8;border-radius:10px;background:#eff8fa;margin-top:1rem}.payer-result p{margin:.35rem 0;overflow-wrap:anywhere}

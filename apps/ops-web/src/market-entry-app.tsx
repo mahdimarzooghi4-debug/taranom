@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PayerScenarioPreview } from './payer-scenario-preview';
 
 type MarketId = 'MARKET-PUBLIC' | 'MARKET-SUPPORT' | 'MARKET-CORPORATE';
 type Market = {
@@ -161,6 +162,7 @@ export function MarketEntryApp() {
           </div>
           <p>این مقایسه مجوز پرداخت، صدور فاکتور، دسترسی سلامت یا پیشنهاد تجاری محسوب نمی‌شود. انتخاب بازار به تنهایی هیچ استحقاقی نمی‌سازد.</p>
         </section>
+        <PayerScenarioPreview markets={source.markets} initial={selected} />
         <section aria-labelledby="market-scope-title">
           <h2 id="market-scope-title">{active ? 'مسیر انتخابی' : 'سه مسیر مصوب در دامنه برنامه'}</h2>
           <div className="market-grid">

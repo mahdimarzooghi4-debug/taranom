@@ -79,6 +79,10 @@ app.MapGet("/internal/ops/v1/market-entry",
 app.MapPost("/internal/ops/v1/waiting-preview",
     (Func<HttpContext, Task<IResult>>)WaitingPreview.Evaluate);
 
+// Synthetic two-field payer what-if, never a payment or financial authorization.
+app.MapPost("/internal/ops/v1/payer-scenario-preview",
+    (Func<HttpContext, Task<IResult>>)PayerScenarioHttp.Evaluate);
+
 // TRN-TECH-093: opt-in, same-origin synthetic-only cost inspection.
 app.MapPost(SyntheticCostWorkbenchHttp.Path,
     (Func<HttpContext, Task<IResult>>)SyntheticCostWorkbenchHttp.Inspect);
@@ -161,6 +165,7 @@ internal static class OpsFallback
         if ((ProductPageSource.IsExplicitPage(path) && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/waiting-preview" && !HttpMethods.IsPost(method)) ||
+            (path == "/internal/ops/v1/payer-scenario-preview" && !HttpMethods.IsPost(method)) ||
             (path == SyntheticCostWorkbenchHttp.Path && !HttpMethods.IsPost(method)) ||
             (path == SyntheticCostChoiceWorkbenchHttp.Path && !HttpMethods.IsPost(method)) ||
             (path == "/operations" && !HttpMethods.IsGet(method)) ||
