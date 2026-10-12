@@ -258,6 +258,7 @@ export function MemberSupportDemo() {
         نسخه {x.revision}: یادداشت <code>{x.noteRef}</code> — ثبت‌کننده ادعایی <code>{x.claimedActorRef}</code>
       </li>)}</ul>
     </section>}
+    {!current && <p role="status" data-testid="support-history-status">{timelineMessage}</p>}
     {current && <section className="panel" aria-label="تاریخچه پرونده پشتیبانی آزمایشی">
       <h3>تاریخچه نسخه‌ها و وضعیت پیشین پرونده آزمایشی</h3>
       <p>فقط رویدادهای Journal، بدون احراز هویت یا پاسخ رسمی بیمه‌گر.</p>
