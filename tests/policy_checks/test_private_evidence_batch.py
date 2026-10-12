@@ -169,6 +169,11 @@ class PrivateEvidenceBatchTests(unittest.TestCase):
         self.assertEqual(self.manifest.read_bytes(), b"existing-private-evidence")
         self.assertFalse(self.report.exists())
 
+    def test_failed_fsync_removes_partial_new_private_manifest(self):
+        with patch.object(batch.os, "fsync",
+                          side_effect=OSError("confidential disk detail")):
+            self.denied("PRIVATE_OUTPUT_WRITE_FAILED")
+
     def test_unsafe_output_parent_denied(self):
         self.private.chmod(0o755)
         self.denied("UNSAFE_PRIVATE_OUTPUT_DIRECTORY")

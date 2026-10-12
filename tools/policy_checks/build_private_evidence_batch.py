@@ -122,18 +122,23 @@ def _source_inventory(root: Path) -> tuple[dict, bytes]:
 
 def _write_new(path: Path, data: dict) -> tuple[int, int]:
     fd = None
+    created_identity = None
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                      0o600)
         identity = os.fstat(fd)
+        created_identity = (identity.st_dev, identity.st_ino)
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             fd = None
             stream.write(json.dumps(data, sort_keys=True, indent=2,
                                     ensure_ascii=True) + "\n")
             stream.flush()
             os.fsync(stream.fileno())
-        return identity.st_dev, identity.st_ino
+        return created_identity
     except OSError:
+        # A failed write/fsync may have left a partial, private file. Remove
+        # only the inode that THIS invocation exclusively created.
+        _unlink_ours(path, created_identity)
         _deny("PRIVATE_OUTPUT_WRITE_FAILED")
     finally:
         if fd is not None:
