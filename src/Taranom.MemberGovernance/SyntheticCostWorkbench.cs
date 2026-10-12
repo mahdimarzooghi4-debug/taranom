@@ -19,12 +19,13 @@ public sealed record SyntheticCostWorkbenchRead(
 
 public static class SyntheticCostWorkbench
 {
-    public static SyntheticCostWorkbenchRead Inspect(
+    internal static SyntheticCostPreview BuildCanonical(
         string? memberRef, Guid previewId, long previewRevision,
         IReadOnlyList<SyntheticCostWorkbenchLine>? supplied)
     {
-        static SyntheticCostWorkbenchRead Invalid() =>
-            new("Invalid", null, Array.Empty<SyntheticCostWorkbenchLineRead>());
+        static SyntheticCostPreview Invalid() =>
+            new(SyntheticCostPreviewState.Invalid, null, Guid.Empty, 0,
+                System.Collections.Immutable.ImmutableArray<SyntheticCostLine>.Empty, null);
         if (supplied is null || supplied.Count != 5) return Invalid();
         var lines = new List<SyntheticCostLine>(5);
         foreach (var input in supplied)
@@ -46,10 +47,16 @@ public static class SyntheticCostWorkbench
             lines.Add(new(component, state, amount, input.Currency, input.SourceRef,
                 input.EvidenceRef ?? Guid.Empty, input.SourceRevision));
         }
-        var preview = SyntheticCostPreviewBuilder.Build(
-            memberRef, previewId, previewRevision, lines);
+        return SyntheticCostPreviewBuilder.Build(memberRef, previewId, previewRevision, lines);
+    }
+
+    public static SyntheticCostWorkbenchRead Inspect(
+        string? memberRef, Guid previewId, long previewRevision,
+        IReadOnlyList<SyntheticCostWorkbenchLine>? supplied)
+    {
+        var preview = BuildCanonical(memberRef, previewId, previewRevision, supplied);
         if (preview.State == SyntheticCostPreviewState.Invalid)
-            return Invalid();
+            return new("Invalid", null, Array.Empty<SyntheticCostWorkbenchLineRead>());
         return new(preview.State.ToString(), preview.Fingerprint,
             preview.Lines.Select(line => new SyntheticCostWorkbenchLineRead(
                 line.Component.ToString(), line.State.ToString(),

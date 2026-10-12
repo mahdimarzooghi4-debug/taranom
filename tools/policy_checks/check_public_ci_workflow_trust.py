@@ -74,6 +74,10 @@ DISPATCHER_BRANCHES = {
         "sprint-84-synthetic-five-source-cost-workbench",
         "sprint-83-manual-uncertain-command-recovery",
     ),
+    "sprint-85-synthetic-cost-choice-continuity.yml": (
+        "sprint-85-synthetic-cost-choice-continuity",
+        "sprint-84-synthetic-five-source-cost-workbench",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

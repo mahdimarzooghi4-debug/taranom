@@ -1,4 +1,5 @@
 import {useRef, useState, type FormEvent} from 'react';
+import {SyntheticCostChoiceWorkbench} from './synthetic-cost-choice-workbench';
 
 // TRN-TECH-093: this widget is stripped from ordinary builds by its caller.
 // Only literal test references, anonymous local evaluation, no legal choice.
@@ -7,12 +8,12 @@ type Line = {
   component: string; state: EvidenceState; amount: string; currency: string;
   sourceRef: string; evidenceRef: string; sourceRevision: string;
 };
-type Draft = {memberRef: string; previewId: string; previewRevision: string; lines: Line[]};
+export type Draft = {memberRef: string; previewId: string; previewRevision: string; lines: Line[]};
 type EvaluatedLine = {
   component: string; state: EvidenceState; amount: string | null;
   currency: string | null; sourceRef: string | null;
 };
-type Result = {
+export type Result = {
   contract: string; syntheticOnly: boolean; state: string; fingerprint: string;
   lines: EvaluatedLine[]; choiceCarriedForward: boolean; walletMutated: boolean;
   clinicalConsentGranted: boolean; financialCommitmentCreated: boolean;
@@ -187,6 +188,7 @@ export function SyntheticCostWorkbench() {
         <button type="submit" disabled={busy}>ارزیابی دستی با موتور .NET</button>
       </form>
       {error ? <p role="alert">{error}</p> : null}
+      <SyntheticCostChoiceWorkbench draft={draft} preview={result} />
       {result ? (
         <div role="status" data-testid="synthetic-cost-result">
           <p><strong>وضعیت موتور .NET: {result.state}</strong></p>

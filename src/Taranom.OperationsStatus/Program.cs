@@ -82,6 +82,8 @@ app.MapPost("/internal/ops/v1/waiting-preview",
 // TRN-TECH-093: opt-in, same-origin synthetic-only cost inspection.
 app.MapPost(SyntheticCostWorkbenchHttp.Path,
     (Func<HttpContext, Task<IResult>>)SyntheticCostWorkbenchHttp.Inspect);
+app.MapPost(SyntheticCostChoiceWorkbenchHttp.Path,
+    (Func<HttpContext, Task<IResult>>)SyntheticCostChoiceWorkbenchHttp.Inspect);
 
 app.Use(async (context, next) =>
 {
@@ -160,6 +162,7 @@ internal static class OpsFallback
             (path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/waiting-preview" && !HttpMethods.IsPost(method)) ||
             (path == SyntheticCostWorkbenchHttp.Path && !HttpMethods.IsPost(method)) ||
+            (path == SyntheticCostChoiceWorkbenchHttp.Path && !HttpMethods.IsPost(method)) ||
             (path == "/operations" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/market-entry" && !HttpMethods.IsGet(method)) ||
             ((path is "/markets" or "/markets/individuals" or
