@@ -91,10 +91,6 @@ DISPATCHER_BRANCHES = {
         "sprint-84-center-guided-event-workflow",
         "sprint-83-manual-uncertain-command-recovery",
     ),
-    "integration-through-sprint-86.yml": (
-        "integration/through-sprint-86",
-        "main",
-    ),
     MAINLINE_DISPATCHER_NAME: (
         "main",
         "main",

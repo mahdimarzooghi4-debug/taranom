@@ -19,3 +19,7 @@ Real workflow corpus static scan must pass, and isolated hostile fixtures must r
 ## Non-release
 
 No genuine IdP/member BFF, clinical record, insurer, finance, PSP, AI runtime, real paid contract or deployment is added. TRN-TECH-012 is still NOT CODE-AUTHORIZED. The nationwide first official three-market launch remains `DENIED_BY_DEFAULT`, 17 national gates `BLOCKED_UNVERIFIED`, completion `UNBASELINED`. Sprint87 stays Draft/Open/Unmerged until explicit owner Merge; automatic COMMENT review never replaces independent human review. Do not execute Stage/QA Gate/Release/Production.
+
+## Retire redundant integration-only dispatcher
+
+The Integration #97 `integration-through-sprint-86.yml` dispatcher was designed for the one-time PR targeting `main`, but its `pull_request: branches [main]` trigger would duplicate the **same full 14-job suite** on every subsequent PR even after the integration was merged. Once the mandatory mainline dispatcher exists, keeping the obsolete integration listener adds duplicate tests without independent evidence. Sprint 87 retires only that obsolete tracked workflow file and its exact allowlist entry; its historical blob and successful PR #97 runs remain immutable in Git history. The Sprint87 branch listener and new mandatory mainline listener continue the full 14 jobs with no missing gate.
