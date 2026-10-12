@@ -52,7 +52,7 @@ export function ReleaseSourcePanel({audience}:{audience:'MEMBER'|'CENTER'}){
   style={{border:'1px solid currentColor',borderRadius:'0.5rem',marginBlock:'1rem',padding:'1rem'}}>
   <h2>کنترل وضعیت انتشار از منبع واقعی .NET</h2>
   <p>فضای {audience==='MEMBER'?'عضو':'مرکز'} فاقد احراز هویت و فعال‌سازی خدمات واقعی است.</p>
-  <p role="status" aria-live="polite" data-testid="release-source-state">
+  <p aria-live="polite" data-testid="release-source-state">
    {state.kind==='OFFLINE'&&'منبع ملی متصل نیست؛ هیچ خدمت یا مجوزی تأیید نشده است.'}
    {state.kind==='LOADING'&&'بررسی منبع ۱۷گانه؛ هیچ مجوزی فعال نیست.'}
    {state.kind==='UNVERIFIABLE'&&'منبع ملی قابل تأیید نیست؛ هیچ خدمت یا مجوزی فعال نیست.'}
