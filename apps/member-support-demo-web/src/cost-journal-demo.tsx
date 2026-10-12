@@ -30,7 +30,7 @@ const good=(raw:unknown):raw is State=>{
   v.historyCount===v.choiceRevision&&typeof v.outcome==='string';
 };
 export function CostJournalDemo() {
-  const [previewId,setPreviewId]=useState(crypto.randomUUID());
+  const [previewId,setPreviewId]=useState<string>(crypto.randomUUID());
   const [memberRef,setMemberRef]=useState('test:cost-member');
   const [revision,setRevision]=useState('1');
   const [lines,setLines]=useState<Line[]>(clean);
