@@ -233,3 +233,7 @@ TRN-TECH-089: all 15 existing Member and Center pages on loopback ASP.NET 4318 n
 ## Sprint 81 — Interactive payer choice and individual wallet ownership for all markets (2026-10-12)
 
 [TRN-TECH-090](../technical/90-three-market-payer-individual-ownership.md) / [Sprint81](../sprints/89-sprint-81-three-market-payer-guide.md): the same existing source-validated three-market React workspace now offers a real interactive comparison of self-paid vs future contracted third-party subscription under TRN-BIZ-029. Person always owns healthcare wallet and membership, and sponsor gets no implicit clinical access. No finance/product activation; missing/forged source removes guidance, not pretending approval. Full 14 Push/PR jobs and human review remain gates.
+
+## Sprint 82 — No duplicate support case on lost PostgreSQL acknowledgement (2026-10-12)
+
+[TRN-TECH-091](../technical/91-support-uncertain-write-idempotent-recovery.md) / [Sprint82](../sprints/90-sprint-82-support-uncertain-write-retry.md): the existing genuine test-only member support PostgreSQL workflow now preserves an immutable command envelope and original requestId after an ambiguous HTTP outcome, blocks further writes and permits only explicit exact replay. Real Chromium/PostgreSQL tests drop an accepted response **after commit** and prove retry yields Replayed with no duplicate journal event; forged success remains untrusted. No legal complaint/real member service. 17 national blockers and production denial unchanged; full 14 Push/PR CI mandatory.

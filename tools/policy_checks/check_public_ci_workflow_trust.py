@@ -62,6 +62,10 @@ DISPATCHER_BRANCHES = {
         "sprint-81-three-market-payer-ownership-guide",
         "sprint-80-runtime-release-source-member-center",
     ),
+    "sprint-82-support-uncertain-write-idempotency.yml": (
+        "sprint-82-support-uncertain-write-idempotency",
+        "sprint-81-three-market-payer-ownership-guide",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
