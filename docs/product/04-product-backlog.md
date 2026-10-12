@@ -225,3 +225,7 @@ Owner requested large, substantive packages. [TRN-TECH-070](../technical/70-offl
 ## Sprint 79 — real opt-in CI-only cross-portal QA into PostgreSQL (2026-10-12)
 
 [TRN-TECH-088](../technical/88-cross-portal-postgres-qa-journeys.md) / [Sprint79](../sprints/87-sprint-79-cross-portal-postgres-qa.md) extend the actual functioning 4318 Member and Center preview and 4320 **isolated** support/center event journal to a fully automated real browser QA walkthrough. In one PostgreSQL job, only an explicit CI compiled opt-in shows clearly labeled hyperlinks between the two hosts. QA browser follows, writes first-party synthetic-only event through true .NET/PostgreSQL, reloads and verifies exact accepted version, then returns to denied-only Member/Center overview. No BFF, real member identity, clinical, insurer or payment authority is inferred or exposed. Every normal browser build still has no link to a running test workflow. All 14 exact-head Push and PR jobs incl the independent actual pg_dump/restore remain required; national release remains DENIED_BY_DEFAULT.
+
+## Sprint 80 — Canonical .NET national blockers in Member and Center
+
+TRN-TECH-089: all 15 existing Member and Center pages on loopback ASP.NET 4318 now display the existing canonical 17 blocked dimensions and evidence references; invalid, READY, duplicate or unavailable source fails closed and removes stale details. Standalone browsers never fetch source. Official three-market national first release DENIED_BY_DEFAULT. Push+PR full 14-job CI and human review gates retained.

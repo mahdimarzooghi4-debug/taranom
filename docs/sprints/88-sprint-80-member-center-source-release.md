@@ -1,0 +1,3 @@
+# Sprint 80 — Canonical national release evidence in Member and Center
+
+Date 2026-10-12. Contract TRN-TECH-089. Parent Draft PR #87 77c4b4c3e291b45aad40e34f1c2a64f9702ee5ea Push/PR 14/14 success. Implementation surfaces the existing source-backed 17 national blockers on live local Member and Center React workspaces and makes bad/stale data fail closed. Normal independent builds remain offline. No login, medical, insurance, provider, payment or authority added. Mandatory 14 full Push and PR regressions and preliminary COMMENT review only. All 17 gates BLOCKED_UNVERIFIED, national first release DENIED_BY_DEFAULT, no merge/deploy.

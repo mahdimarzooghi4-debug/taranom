@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import {ReleaseSourcePanel} from './release-source-panel';
 
 type PageKey =
   | 'overview' | 'membership' | 'credit' | 'consents' | 'care'
@@ -508,6 +509,7 @@ export function MemberApp() {
                 <span className="preview-label">پیش‌نمایش ساختاری</span>
                 <span>بدون حساب واقعی، بدون داده درمانی و بدون اتصال مالی</span>
               </div>
+              <ReleaseSourcePanel audience="MEMBER"/>
               <section className="hero" aria-labelledby="page-title">
                 <div className="hero-content">
                   <span className="hero-kicker">وب‌اپ عضو ترنم <span aria-hidden="true">/</span> رابط اولیه</span>

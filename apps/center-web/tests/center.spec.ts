@@ -463,3 +463,9 @@ test('CENTER-QA-79: regular center preview cannot offer a test-only database jum
   await expect(page.getByRole('navigation',{name:'گردش‌کار آزمایشی ایزوله'})).toHaveCount(0);
   await expect(page.getByText('مدیر مرکز هنوز احراز نشده است')).toBeVisible();
 });
+
+test('CENTER-80 standalone preview never guesses release status',async({page})=>{
+ const requests:string[]=[];page.on('request',r=>{if(r.url().includes('/internal/ops/v1/status'))requests.push(r.url());});
+ await page.goto('/center/doctors');await expect(page.getByTestId('release-source-state')).toContainText('منبع ملی متصل نیست');
+ expect(requests).toEqual([]);
+});

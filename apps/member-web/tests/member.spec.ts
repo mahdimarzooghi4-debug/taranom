@@ -1259,3 +1259,9 @@ test('WEB-QA-79: ordinary member preview cannot expose the ephemeral PostgreSQL 
   await expect(page.getByRole('navigation',{name:'گردش‌کار آزمایشی ایزوله'})).toHaveCount(0);
   await expect(page.getByRole('heading',{level:1,name:'پشتیبانی و شکایات'})).toBeVisible();
 });
+
+test('MEMBER-80 disconnected standalone does not fetch release status',async({page})=>{
+ const requests:string[]=[];page.on('request',r=>{if(r.url().includes('/internal/ops/v1/status'))requests.push(r.url());});
+ await page.goto('/member/records');await expect(page.getByTestId('release-source-state')).toContainText('منبع ملی متصل نیست');
+ expect(requests).toEqual([]);
+});

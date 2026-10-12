@@ -54,6 +54,10 @@ DISPATCHER_BRANCHES = {
         "sprint-79-ephemeral-cross-portal-qa-journey",
         "sprint-78-unified-loopback-product-surfaces",
     ),
+    "sprint-80-runtime-release-source-member-center.yml": (
+        "sprint-80-runtime-release-source-member-center",
+        "sprint-79-ephemeral-cross-portal-qa-journey",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

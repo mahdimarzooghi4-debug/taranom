@@ -1,0 +1,14 @@
+name: Sprint 80 Member Center Live Denial Regression
+on:
+  push:
+    branches: [sprint-80-runtime-release-source-member-center]
+  pull_request:
+    branches: [sprint-79-ephemeral-cross-portal-qa-journey]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

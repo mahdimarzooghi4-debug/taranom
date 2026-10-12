@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import {ReleaseSourcePanel} from './release-source-panel';
 
 type SectionKey = 'overview' | 'departments' | 'doctors' | 'qualifications' | 'audit';
 type ActionKey = 'department' | 'doctor' | 'assignment' | 'end-affiliation';
@@ -211,6 +212,7 @@ export function CenterApp() {
                 <span>پیش‌نمایش ساختاری</span>
                 بدون ورود واقعی، بدون پزشک نمونه، بدون اطلاعات بیمار
               </div>
+              <ReleaseSourcePanel audience="CENTER"/>
               <section className="hero">
                 <div className="hero-copy">
                   <p className="hero-kicker">پنل مرکز درمانی / {section.kicker}</p>
