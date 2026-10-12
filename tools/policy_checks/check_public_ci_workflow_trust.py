@@ -13,8 +13,29 @@ import re
 import sys
 
 WORKFLOW_DIR = Path(".github/workflows")
+# These two special source files are the entire local reusable-workflow trust
+# envelope; all historical workflows retain their original strict step rules.
+REUSABLE_NAME = "taranom-full-regression-reusable.yml"
+DISPATCHER_NAME = "sprint-71-shared-secure-ci-gates.yml"
+REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
+REQUIRED_FULL_JOBS = frozenset({
+    "internal-contract-tests",
+    "synthetic-sprint01-regression",
+    "member-web-sprint02-regression",
+    "isolated-proofing-postgres",
+    "internal-clinical-center-governance",
+    "center-web-browser-tests",
+    "isolated-center-postgres",
+    "center-authority-negative-tests",
+    "protected-center-interlock-tests",
+    "protected-center-interlock-postgres",
+    "evidence-review-intake-tests",
+    "isolated-review-evidence-postgres",
+    "real-local-ops-http-react",
+    "ephemeral-center-workflow-full-stack",
+})
 MAX_WORKFLOW_BYTES = 128 * 1024
-ALLOWED_TRIGGERS = frozenset({"push", "pull_request", "workflow_dispatch"})
+ALLOWED_TRIGGERS = frozenset({"push", "pull_request", "workflow_dispatch", "workflow_call"})
 APPROVED_ACTIONS = frozenset({
     "actions/checkout", "actions/setup-dotnet", "actions/setup-node",
     "actions/upload-artifact",
@@ -24,7 +45,7 @@ ACTION_STEP = re.compile(r"^(\s*)-\s+uses:\s+(\S+)(?:\s+#.*)?$")
 ROOT_KEY = re.compile(r"^([A-Za-z_-][A-Za-z0-9_-]*):\s*(?:#.*)?$")
 TRIGGER_KEY = re.compile(r"^  ([a-z_]+):(?:\s*.*)?$")
 JOB_KEY = re.compile(r"^  ([a-z][a-z0-9_-]+):(?:\s*#.*)?$")
-UNSAFE_EVENT = re.compile(r"^\s*(?:pull_request_target|workflow_run|repository_dispatch|schedule|release|deployment|deployment_status|issue_comment|workflow_call):")
+UNSAFE_EVENT = re.compile(r"^\s*(?:pull_request_target|workflow_run|repository_dispatch|schedule|release|deployment|deployment_status|issue_comment):")
 # Sensitive use expressions and token emission are outside the intended
 # no-secrets synthetic CI boundary. This is deliberately conservative.
 SECRET_EXPR = re.compile(r"\$\{\{\s*(?:secrets|vars)\.", re.I)
@@ -70,6 +91,14 @@ def inspect_workflow(path: Path) -> list[str]:
     triggers = {m.group(1) for s in trigger_lines if (m := TRIGGER_KEY.match(s))}
     if not triggers or not triggers <= ALLOWED_TRIGGERS:
         violations.add("UNSAFE_OR_UNKNOWN_WORKFLOW_EVENT")
+    if "workflow_call" in triggers and (
+            path.name != REUSABLE_NAME or triggers != {"workflow_call"}):
+        violations.add("UNAUTHORIZED_WORKFLOW_CALL")
+    if path.name == REUSABLE_NAME and triggers != {"workflow_call"}:
+        violations.add("REUSABLE_TRIGGER_NOT_ISOLATED")
+    if path.name == DISPATCHER_NAME and triggers != {
+            "push", "pull_request", "workflow_dispatch"}:
+        violations.add("DISPATCHER_TRIGGERS_CHANGED")
     if any(UNSAFE_EVENT.match(s) for s in active):
         violations.add("PRIVILEGED_OR_UNSAFE_WORKFLOW_EVENT")
 
@@ -88,7 +117,35 @@ def inspect_workflow(path: Path) -> list[str]:
         violations.add("OIDC_TOKEN_FORBIDDEN")
 
     job_lines = active[jobs_pos + 1:]
-    job_count = len([s for s in job_lines if JOB_KEY.fullmatch(s)])
+    job_names = [m.group(1) for s in job_lines if (m := JOB_KEY.fullmatch(s))]
+    # The only job-level uses is a literal local same-commit call in the
+    # explicitly named Sprint71 dispatcher; no with/secrets/if/runner/steps.
+    if path.name == DISPATCHER_NAME:
+        if job_lines != [
+            "  full-regression:",
+            "    uses: " + REUSABLE_SOURCE,
+        ]:
+            violations.add("UNSAFE_OR_INVALID_REUSABLE_CALL")
+        if any(re.match(r"^\s*(?:with|secrets|if|continue-on-error|environment):", s)
+               for s in active):
+            violations.add("REUSABLE_CALL_PRIVILEGE_OR_SKIP")
+        return sorted(violations)
+    if path.name == REUSABLE_NAME:
+        if set(job_names) != REQUIRED_FULL_JOBS or len(job_names) != 14:
+            violations.add("REQUIRED_FULL_CI_JOB_MISSING_OR_EXTRA")
+        # An omitted job body / inserted conditional skip is never accepted.
+        if any(re.match(r"^\s*(?:if|continue-on-error|secrets|with):", s)
+               for s in job_lines):
+            # with: is permitted solely inside an approved first-party pinned
+            # action step; it is checked below, not prohibited universally.
+            if any(re.match(r"^\s*(?:if|continue-on-error|secrets):", s)
+                   for s in job_lines):
+                violations.add("REUSABLE_JOB_SKIP_OR_SECRET_FORBIDDEN")
+    else:
+        # No non-dispatcher workflow may invoke a reusable job.
+        if any(re.match(r"^    uses:", s) for s in job_lines):
+            violations.add("UNAUTHORIZED_REUSABLE_JOB")
+    job_count = len(job_names)
     runner_count = sum(bool(re.fullmatch(r"    runs-on:\s+ubuntu-latest(?:\s+#.*)?", s))
                        for s in job_lines)
     if job_count < 1 or runner_count != job_count:

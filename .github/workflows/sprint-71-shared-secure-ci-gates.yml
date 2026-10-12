@@ -1,0 +1,14 @@
+name: Sprint 71 Secure Shared Full Regression
+on:
+  push:
+    branches: [sprint-71-shared-secure-ci-gates]
+  pull_request:
+    branches: [sprint-70-private-evidence-batch-workbench]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
