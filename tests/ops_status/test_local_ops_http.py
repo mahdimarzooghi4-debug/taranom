@@ -186,5 +186,7 @@ if __name__ == "__main__":
         verify_ops_host_and_route_denial()
         verify_ops_denial_not_overridden_by_browser_claims()
     except Exception:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         print("DENIED: REAL_LOCAL_OPS_HTTP_CONTRACT_UNVERIFIED", file=sys.stderr)
         raise SystemExit(1)
