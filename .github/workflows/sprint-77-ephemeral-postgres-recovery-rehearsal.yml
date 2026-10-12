@@ -1,0 +1,14 @@
+name: Sprint 77 Ephemeral PostgreSQL Recovery Full Regression
+on:
+  push:
+    branches: [sprint-77-ephemeral-postgres-recovery-rehearsal]
+  pull_request:
+    branches: [sprint-76-private-fhir-capability-preflight]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
