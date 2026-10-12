@@ -151,7 +151,9 @@ def _catalog(container, database):
     rows = {}
     for table in names:
         # No untrusted interpolation: table names are strict internal_test_*.
-        sql = 'COPY (SELECT row_to_json(t) FROM public."' + table + '" t) TO STDOUT;'
+        # SELECT outputs JSON text directly. COPY text would double-escape
+        # command_json backslashes, corrupting valid nested event JSON.
+        sql = 'SELECT row_to_json(t)::text FROM public."' + table + '" t;'
         rows[table] = canonical_rows(_query(container, database, sql))
     for table in ("internal_test_support_event", "internal_test_center_event"):
         if rows[table][0] < 1:

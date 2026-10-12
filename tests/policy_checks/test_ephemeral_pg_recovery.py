@@ -56,6 +56,20 @@ class EphemeralRecoveryContractTests(unittest.TestCase):
         self.assertNotEqual(rec.canonical_rows(a),
                             rec.canonical_rows(b'{"id":2,"ok":true}\n'))
 
+    def test_nested_event_command_json_survives_raw_json_line(self):
+        row = json.dumps({
+            "case_ref": "test:case",
+            "command_json": json.dumps({"CaseRef": "test:case",
+                                        "Extra": "test:quoted\\\"x\\\""}),
+            "revision": 1
+        }).encode()
+        count, digest = rec.canonical_rows(row + b"\\n")
+        self.assertEqual(count, 1)
+        self.assertEqual(len(digest), 64)
+        # COPY text format escapes JSON backslashes again and is *not*
+        # acceptable as a source for json.loads on PostgreSQL output.
+        self.assertIn(b"\\\\", row)
+
     def test_invalid_rows_do_not_create_false_recovery_evidence(self):
         for value in (b"{bad", b"\xff", b'x'*(rec.MAX_QUERY_SIZE+1)):
             with self.assertRaises(rec.RecoveryError):
