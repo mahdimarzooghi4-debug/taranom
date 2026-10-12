@@ -72,9 +72,9 @@ export function PayerScenarioPreview({markets,initial}:{markets:Market[];initial
    </label>
   </div>
   <button type="button" disabled={state.kind==='CHECKING'} onClick={()=>void check()}>
-   بررسی فرضی مرز پرداخت‌کننده
+   مقایسه فرضی مسئولیت‌ها
   </button>
-  <p role="status" aria-live="polite" data-testid="payer-preview-status">
+  <p aria-live="polite" data-testid="payer-preview-status">
    {state.kind==='IDLE'&&'هنوز سناریویی بررسی نشده؛ هیچ عضویت یا پرداختی فعال نیست.'}
    {state.kind==='CHECKING'&&'در حال بررسی سیاست از منبع .NET؛ بدون پرداخت واقعی.'}
    {state.kind==='UNVERIFIABLE'&&'نتیجه قابل تأیید نیست؛ هیچ وضعیت یا مجوزی فعال نشده است.'}
