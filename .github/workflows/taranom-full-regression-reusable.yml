@@ -600,15 +600,18 @@ jobs:
           cd ../member-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
+          python3 ../../tests/policy_checks/test_local_portal_csp.py
           npm run build -- --base=/member-portal/
           mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/member-portal
           cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/member-portal/
+          CI=true python3 ../../tools/policy_checks/authorize_local_portal_csp.py --audience member
           cd ../center-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
           npm run build -- --base=/center-portal/
           mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/center-portal
           cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/center-portal/
+          CI=true python3 ../../tools/policy_checks/authorize_local_portal_csp.py --audience center
       - name: Install browser for real HTTP backend/frontend integration
         run: |
           cd apps/ops-web
@@ -701,12 +704,14 @@ jobs:
           VITE_TARANOM_LOCAL_QA_HOP=1 npm run build -- --base=/member-portal/
           mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/member-portal
           cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/member-portal/
+          CI=true python3 ../../tools/policy_checks/authorize_local_portal_csp.py --audience member
           cd ../center-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
           VITE_TARANOM_LOCAL_QA_HOP=1 npm run build -- --base=/center-portal/
           mkdir -p ../../src/Taranom.OperationsStatus/wwwroot/center-portal
           cp -R dist/. ../../src/Taranom.OperationsStatus/wwwroot/center-portal/
+          CI=true python3 ../../tools/policy_checks/authorize_local_portal_csp.py --audience center
       - name: Install real Chromium for interactive persistent case workflow
         run: |
           cd apps/center-demo-web

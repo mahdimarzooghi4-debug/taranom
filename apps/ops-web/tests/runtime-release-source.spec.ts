@@ -1,26 +1,5 @@
 import {expect,test} from '@playwright/test';
 
-test('SOURCE-80-00 diagnostic real API shape vs browser transport',async({page,request})=>{
- const raw=await request.get('/internal/ops/v1/status');
- const body=await raw.json();
- const browser=await page.goto('/member').then(async()=>await page.evaluate(async()=>{
-  try{
-   const res=await fetch('/internal/ops/v1/status',{method:'GET',cache:'no-store',credentials:'omit'});
-   const json=await res.json();
-   return {code:res.status,keys:Object.keys(json),dimensionKeys:Object.keys(json.dimensions?.[0]||{})};
-  }catch(error){return {error:String(error)};}
- }));
- console.log('SOURCE80_DEBUG',JSON.stringify({
-   http:raw.status(),keys:Object.keys(body),dimensionKeys:Object.keys(body.dimensions?.[0]||{}),
-   dimensions:body.dimensions?.length,firstId:body.dimensions?.[0]?.id,
-   inventory:body.inventory,runtime:body.runtime,
-   availableValues:body.dimensions?.map((d:any)=>({id:d.id,status:d.status,labelLength:d.label?.length,
-    evidenceCount:d.missingEvidence?.length,evidenceUnique:new Set(d.missingEvidence||[]).size})),
-   browser
- }));
- expect(raw.status()).toBe(200);
-});
-
 test('SOURCE-80-01 real Member and Center pages show complete .NET release blockers',async({page})=>{
  for(const path of ['/member','/member/support','/member/consents','/center','/center/doctors','/center/audit']){
   await page.goto(path);
