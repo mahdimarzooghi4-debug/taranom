@@ -26,7 +26,10 @@ def verify():
             assert code==200,(path,code)
             assert b"<html" in body.lower()
             assert prefix.encode() in body,(path,"wrong asset base")
-            assert b"/assets/index-" not in body,(path,"shared asset collision")
+            # Only naked root-level asset URLs can collide with the
+            # separately compiled Ops bundle; /member-portal/assets is valid.
+            assert b'src="/assets/' not in body, (path, "shared script collision")
+            assert b'href="/assets/' not in body, (path, "shared style collision")
             assert headers.get("Cache-Control")=="no-store"
             assert headers.get("X-Content-Type-Options")=="nosniff"
             assert headers.get("Access-Control-Allow-Origin") is None
