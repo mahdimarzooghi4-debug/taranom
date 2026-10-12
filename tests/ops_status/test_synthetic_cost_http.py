@@ -32,7 +32,8 @@ def send(value, headers=None, raw=None, method="POST"):
         with urlopen(req, timeout=8) as res:
             return res.status, json.loads(res.read()), res.headers
     except HTTPError as err:
-        return err.code, json.loads(err.read()) if err.code != 404 else {}, err.headers
+        raw_error = err.read()
+        return err.code, json.loads(raw_error) if raw_error.strip() else {}, err.headers
 
 
 def claim(line, amount="80"):
