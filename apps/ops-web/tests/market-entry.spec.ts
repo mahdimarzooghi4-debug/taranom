@@ -70,7 +70,7 @@ test('MARKET-05 unknown market paths are 404, no fake login, no hidden payments'
 test('MARKET-81 real source guides member vs third-party payer without changing ownership',async({page})=>{
  await page.goto('/markets');
  await expect(page.getByTestId('payer-guide')).toBeVisible();
- await expect(page.getByTestId('payer-guide').locator('.market-tile')).toHaveCount(3);
+ await expect(page.getByTestId('payer-guide').locator('.payer-tile')).toHaveCount(3);
  await expect(page.getByTestId('payer-guide')).toContainText('مالک عضویت و کیف پول درمانی: همیشه شخص عضو');
  await page.getByRole('radio',{name:/حامی یا سازمان/}).check();
  await expect(page.getByTestId('payer-market-MARKET-PUBLIC')).toContainText('به‌عنوان مسیر پرداخت شخص ثالث تعریف نشده');

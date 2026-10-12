@@ -141,7 +141,7 @@ export function MarketEntryApp() {
             {source.markets.map(m => {
               const conditional = payerMode === 'THIRD_PARTY';
               const potentiallyRelevant = !conditional || m.thirdPartyPayerContractRequired;
-              return <article className="market-tile" key={m.id}
+              return <article className="payer-tile" key={m.id}
                 data-testid={'payer-market-' + m.id}>
                 <h3>{m.label}</h3>
                 <p>{potentiallyRelevant

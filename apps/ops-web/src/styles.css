@@ -9,3 +9,7 @@
 
 /* TRN-TECH-081 approved three-market orientation, never live onboarding */
 .market-hero{background:#183e53}.market-nav{display:flex;flex-wrap:wrap;gap:.65rem;margin:1rem 0}.market-nav a{display:inline-block;border:1px solid #3c6073;background:white;border-radius:9px;color:#164158;padding:.65rem 1rem;text-decoration:none}.market-nav a[aria-current="page"]{background:#163f56;color:#fff;font-weight:700}.market-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:1rem}.market-tile{background:#fff;border:1px solid #b7cfdd;border-radius:12px;padding:1rem;overflow-wrap:anywhere}.market-tile h3{margin-top:0}.market-denial{color:#973d29;font-weight:700}.market-tile small{display:block;color:#365468;overflow-wrap:anywhere}@media(max-width:650px){.market-nav{flex-direction:column}.market-grid{grid-template-columns:1fr}.market-hero{padding:1.2rem}}
+
+/* TRN-TECH-090: distinct comparison tiles, preserving three original market cards. */
+.payer-tile { border: 1px solid currentColor; border-radius: 0.7rem; padding: 1rem; min-width: 0; }
+.payer-tile p { line-height: 1.75; }
