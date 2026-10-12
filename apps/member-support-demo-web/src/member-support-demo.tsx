@@ -11,6 +11,56 @@ type Support = {
   evidenceRef: string | null; claimedSubmitterRef: string | null;
   followUpCount: number; followUps: FollowUp[];
 };
+type SupportHistory = {
+  contract: 'TRN-TECH-084'; syntheticOnly: true; memberAuthenticated: false;
+  complaintLegallySubmitted: false; insurerContacted: false;
+  clinicalReviewCompleted: false; nationalReleaseAllowed: false;
+  caseRef: string; currentRevision: number; afterRevision: number;
+  hasMore: boolean; nextAfterRevision: number | null;
+  events: {revision:number; action:'SUBMIT_UNVERIFIED'|'FOLLOW_UP_UNVERIFIED';
+           noteRef:string|null; hypotheticalOnly:true}[];
+};
+type SupportHistorical = {
+  contract:'TRN-TECH-084'; syntheticOnly:true; memberAuthenticated:false;
+  complaintLegallySubmitted:false; insurerContacted:false;
+  clinicalReviewCompleted:false; nationalReleaseAllowed:false;
+  caseRef:string; currentRevision:number; asOfRevision:number; snapshot:Support;
+};
+function denied(v:Partial<SupportHistory>):boolean {
+  return v.contract==='TRN-TECH-084' && v.syntheticOnly===true &&
+    v.memberAuthenticated===false && v.complaintLegallySubmitted===false &&
+    v.insurerContacted===false && v.clinicalReviewCompleted===false &&
+    v.nationalReleaseAllowed===false;
+}
+function historyValid(data:unknown, current:Support, after:number):data is SupportHistory {
+  if(!data || typeof data!=='object')return false;
+  const v=data as Partial<SupportHistory>;
+  if(!denied(v) || v.caseRef!==current.caseRef ||
+    v.currentRevision!==current.revision || v.afterRevision!==after ||
+    typeof v.hasMore!=='boolean' || !Array.isArray(v.events) || v.events.length>2)return false;
+  let last=after;
+  for(const e of v.events) {
+    if(!e || !Number.isSafeInteger(e.revision) || e.revision!==last+1 ||
+      e.revision>current.revision || e.hypotheticalOnly!==true ||
+      (e.action!=='SUBMIT_UNVERIFIED' && e.action!=='FOLLOW_UP_UNVERIFIED') ||
+      (e.action==='SUBMIT_UNVERIFIED')!==(e.revision===1) ||
+      (e.action==='SUBMIT_UNVERIFIED' ? e.noteRef!==null :
+       typeof e.noteRef!=='string' || !testRef(e.noteRef)))return false;
+    last=e.revision;
+  }
+  return v.hasMore
+    ? v.events.length===2 && v.nextAfterRevision===last && last<current.revision
+    : v.nextAfterRevision===null && last===current.revision;
+}
+function historicalValid(data:unknown,current:Support,at:number):data is SupportHistorical {
+  if(!data || typeof data!=='object')return false;
+  const x=data as Partial<SupportHistorical>;
+  return denied(x) && x.caseRef===current.caseRef &&
+    x.currentRevision===current.revision && x.asOfRevision===at &&
+    verified(x.snapshot,current.caseRef) && x.snapshot.revision===at &&
+    x.snapshot.outcome==='HISTORICAL_READ';
+}
+
 const testRef = (s: string): boolean =>
   s.length <= 128 && /^test:[A-Za-z0-9_:-]+$/.test(s);
 const zero = '00000000-0000-0000-0000-000000000000';
@@ -48,9 +98,13 @@ export function MemberSupportDemo() {
   const [current, setCurrent] = useState<Support | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('این فرم فقط درخواست‌ها و ارجاعات آزمایشی را ذخیره می‌کند.');
+  const [timeline, setTimeline] = useState<SupportHistory|null>(null);
+  const [past, setPast] = useState<SupportHistorical|null>(null);
+  const [asOf, setAsOf] = useState('0');
+  const [timelineMessage, setTimelineMessage] = useState('تاریخچه هنوز خوانده نشده است.');
 
   async function read() {
-    setBusy(true); setCurrent(null);
+    setBusy(true); setCurrent(null); setTimeline(null); setPast(null);
     if (!testRef(caseRef)) {
       setMessage('فقط شناسه پرونده آزمایشی با پیشوند test: مجاز است.');
       setBusy(false); return;
@@ -80,7 +134,8 @@ export function MemberSupportDemo() {
       setMessage('ارجاعات آزمایشی معتبر نیستند یا به پرونده اولیه تعلق ندارند.');
       return;
     }
-    setBusy(true);
+    setBusy(true); setTimeline(null); setPast(null);
+    setTimelineMessage('بعد از تغییر پرونده، تاریخچه باید دوباره خوانده شود.');
     try {
       const payload = {
         requestId: crypto.randomUUID(),
@@ -110,13 +165,51 @@ export function MemberSupportDemo() {
     } finally { setBusy(false); }
   }
 
+  async function readTimeline(after:number) {
+    if(!current || busy || !Number.isSafeInteger(after) || after<0)return;
+    setBusy(true); setTimeline(null); setPast(null);
+    try {
+      const response=await fetch('/internal/demo/v1/support/'+encodeURIComponent(caseRef)+
+        '/history?afterRevision='+after+'&limit=2',
+        {credentials:'omit',cache:'no-store'});
+      if(!response.ok)throw Error('HISTORY_UNAVAILABLE');
+      const v:unknown=await response.json();
+      if(!historyValid(v,current,after))throw Error('HISTORY_NOT_VERIFIED');
+      setTimeline(v);
+      setTimelineMessage('فقط رخدادهای آزمایشی Journal نمایش داده شدند.');
+    }catch{
+      setCurrent(null); setTimeline(null); setPast(null);
+      setTimelineMessage('تاریخچه قابل تأیید نیست؛ پرونده فعلی نیز باید بازخوانی شود.');
+    }finally{setBusy(false);}
+  }
+  async function readPast() {
+    if(!current || busy || !/^(0|[1-9][0-9]*)$/.test(asOf) ||
+      !Number.isSafeInteger(Number(asOf))){
+      setTimelineMessage('شماره نسخه تاریخی نامعتبر است.');return;
+    }
+    const revision=Number(asOf);
+    setBusy(true);setPast(null);
+    try{
+      const response=await fetch('/internal/demo/v1/support/'+encodeURIComponent(caseRef)+
+        '/versions/'+revision,{credentials:'omit',cache:'no-store'});
+      if(!response.ok)throw Error('HISTORY_UNAVAILABLE');
+      const v:unknown=await response.json();
+      if(!historicalValid(v,current,revision))throw Error('HISTORY_MISMATCH');
+      setPast(v);
+      setTimelineMessage('نسخه تاریخی آزمایشی بازسازی شد؛ این وضعیت فعلی نیست.');
+    }catch{
+      setCurrent(null);setTimeline(null);setPast(null);
+      setTimelineMessage('نسخه تاریخی قابل تأیید نیست؛ پرونده را دوباره بخوانید.');
+    }finally{setBusy(false);}
+  }
+
   return <section className="panel" aria-labelledby="support-demo-title">
     <h2 id="support-demo-title">ثبت و پیگیری درخواست پشتیبانی آزمایشی عضو</h2>
     <p>این گردش مستقل از مدیریت مرکز است. تنها شناسه‌های ساختگی را ثبت می‌کند و هیچ شکایت واقعی، اقدام بیمه‌ای، تشخیص یا تسویه‌ای را انجام نمی‌دهد.</p>
     <div className="fields">
       <label htmlFor="sup-case">پرونده آزمایشی
         <input id="sup-case" dir="ltr" value={caseRef}
-          onChange={e => { setCaseRef(e.target.value); setCurrent(null); }} autoComplete="off" />
+          onChange={e => { setCaseRef(e.target.value); setCurrent(null); setTimeline(null); setPast(null); }} autoComplete="off" />
       </label>
       <label htmlFor="sup-member">شناسه عضو فرضی
         <input id="sup-member" dir="ltr" value={memberRef}
@@ -164,6 +257,37 @@ export function MemberSupportDemo() {
       <ul>{current.followUps.map(x => <li key={x.revision}>
         نسخه {x.revision}: یادداشت <code>{x.noteRef}</code> — ثبت‌کننده ادعایی <code>{x.claimedActorRef}</code>
       </li>)}</ul>
+    </section>}
+    {current && <section className="panel" aria-label="تاریخچه پرونده پشتیبانی آزمایشی">
+      <h3>تاریخچه نسخه‌ها و وضعیت پیشین پرونده آزمایشی</h3>
+      <p>فقط رویدادهای Journal، بدون احراز هویت یا پاسخ رسمی بیمه‌گر.</p>
+      <button disabled={busy} type="button" onClick={() => void readTimeline(0)}>
+        بارگذاری تاریخچه از ابتدا
+      </button>
+      {timeline && <>
+        <p>از نسخه {timeline.afterRevision} | نسخه جاری {timeline.currentRevision}</p>
+        <ol data-testid="support-timeline">{timeline.events.map(e => <li key={e.revision}>
+          نسخه {e.revision}: {e.action==='SUBMIT_UNVERIFIED'
+            ? 'درخواست اولیه تأییدنشده' : 'پیگیری تأییدنشده'} {e.noteRef||''}
+        </li>)}</ol>
+        {timeline.hasMore && timeline.nextAfterRevision!==null &&
+          <button disabled={busy} type="button" onClick={() => void readTimeline(timeline.nextAfterRevision!)}>
+            صفحه بعد تاریخچه
+          </button>}
+      </>}
+      <label htmlFor="support-asof">نسخه گذشته برای بررسی
+        <input id="support-asof" dir="ltr" value={asOf} maxLength={19} autoComplete="off"
+          onChange={e => { setAsOf(e.target.value); setPast(null); }}/>
+      </label>
+      <button type="button" disabled={busy} onClick={() => void readPast()}>
+        نمایش نسخه تاریخی
+      </button>
+      <p data-testid="support-history-status" role="status">{timelineMessage}</p>
+      {past && <section aria-label="بازسازی تاریخی پرونده پشتیبانی آزمایشی">
+        <p>نسخه تاریخی: {past.asOfRevision} | نسخه جاری: {past.currentRevision}</p>
+        <p>پیگیری‌های تأییدنشده در نسخه تاریخی: {past.snapshot.followUpCount}</p>
+        <p>شکایت قانونی: خیر | تماس با بیمه: خیر | احراز هویت عضو: خیر</p>
+      </section>}
     </section>}
   </section>;
 }

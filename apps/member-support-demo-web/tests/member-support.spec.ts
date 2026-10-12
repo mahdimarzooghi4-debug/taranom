@@ -179,3 +179,61 @@ test('GATEWAY-03: forwarded authority is refused rather than implicitly trusted'
     expect((await res.json()).nationalReleaseAllowed).toBe(false);
   }
 });
+
+
+test('SUPPORT-HISTORY-01 real journal pages and as-of reconstruction via Chromium', async ({page})=>{
+  await newSupport(page);
+  await page.getByRole('button',{name:'ثبت درخواست اولیه آزمایشی'}).click();
+  await expect(page.getByTestId('support-status')).toContainText('فقط ارجاع آزمایشی ثبت شد');
+  for(const note of [unique('note-a'),unique('note-b')]){
+    await page.getByLabel('ارجاع یادداشت پیگیری تأییدنشده').fill(note);
+    await page.getByRole('button',{name:'ثبت ارجاع پیگیری آزمایشی'}).click();
+    await expect(page.getByTestId('support-status')).toContainText('فقط ارجاع آزمایشی ثبت شد');
+  }
+  const current=page.getByRole('region',{name:'وضعیت پرونده پشتیبانی آزمایشی'});
+  await expect(current).toContainText('نسخه: 3');
+  await page.getByRole('button',{name:'بارگذاری تاریخچه از ابتدا'}).click();
+  await expect(page.getByTestId('support-timeline').locator('li')).toHaveCount(2);
+  await page.getByRole('button',{name:'صفحه بعد تاریخچه'}).click();
+  await expect(page.getByTestId('support-timeline').locator('li')).toHaveCount(1);
+  await expect(page.getByTestId('support-timeline')).toContainText('نسخه 3');
+  await page.getByLabel('نسخه گذشته برای بررسی').fill('1');
+  await page.getByRole('button',{name:'نمایش نسخه تاریخی'}).click();
+  const past=page.getByRole('region',{name:'بازسازی تاریخی پرونده پشتیبانی آزمایشی'});
+  await expect(past).toContainText('نسخه تاریخی: 1');
+  await expect(past).toContainText('پیگیری‌های تأییدنشده در نسخه تاریخی: 0');
+  await expect(current).toContainText('نسخه: 3');
+  await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
+});
+
+test('SUPPORT-HISTORY-02 network failure clears cached timeline and state',async({page})=>{
+  await newSupport(page);
+  await page.getByRole('button',{name:'ثبت درخواست اولیه آزمایشی'}).click();
+  await expect(page.getByTestId('support-status')).toContainText('فقط ارجاع آزمایشی ثبت شد');
+  await page.getByRole('button',{name:'بارگذاری تاریخچه از ابتدا'}).click();
+  await expect(page.getByTestId('support-timeline').locator('li')).toHaveCount(1);
+  await page.route('**/internal/demo/v1/support/**/history?**',route=>route.abort());
+  await page.getByRole('button',{name:'بارگذاری تاریخچه از ابتدا'}).click();
+  await expect(page.getByTestId('support-history-status')).toContainText('تاریخچه قابل تأیید نیست');
+  await expect(page.getByTestId('support-timeline')).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'وضعیت پرونده پشتیبانی آزمایشی'})).toHaveCount(0);
+});
+
+test('SUPPORT-HISTORY-03 invalid cursors, version and Host fail closed',async({request})=>{
+  const base='/internal/demo/v1/support/'+encodeURIComponent(unique('hist-negative'));
+  for(const s of ['afterRevision=-1&limit=2','afterRevision=00&limit=2',
+    'afterRevision=0&limit=21','afterRevision=0&limit=2&actor=admin',
+    'afterRevision=0&afterRevision=1&limit=2']){
+    const res=await request.get(base+'/history?'+s);
+    expect(res.status(),s).toBe(400);
+    expect((await res.json()).memberAuthenticated).toBe(false);
+  }
+  for(const value of ['-1','001','999','abc']){
+    const res=await request.get(base+'/versions/'+value);
+    expect(res.status(),value).toBe(400);
+  }
+  const denied=await request.get(base+'/history?afterRevision=0&limit=2',
+    {headers:{Host:'attacker.example:4320'}});
+  expect(denied.status()).toBe(403);
+  expect((await denied.json()).nationalReleaseAllowed).toBe(false);
+});
