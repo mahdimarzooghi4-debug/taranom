@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 type MarketId='MARKET-PUBLIC'|'MARKET-SUPPORT'|'MARKET-CORPORATE';
 type PayerMode='MEMBER'|'SPONSOR';
 type Market={id:MarketId;label:string;missingEvidence:string[]};
@@ -33,10 +33,12 @@ export function PayerScenarioPreview({markets,initial}:{markets:Market[];initial
  const [marketId,setMarketId]=useState<MarketId>(initial??'MARKET-PUBLIC');
  const [payer,setPayer]=useState<PayerMode>('MEMBER');
  const [state,setState]=useState<State>({kind:'IDLE'});
+ const generation=useRef(0);
  const actual=markets.find(m=>m.id===marketId);
  const sponsorAvailable=marketId!=='MARKET-PUBLIC';
  useEffect(()=>setState({kind:'IDLE'}),[marketId,payer]);
  async function check(){
+  const ticket=++generation.current;
   if(!actual||(!sponsorAvailable&&payer==='SPONSOR')){
    setState({kind:'UNVERIFIABLE'});return;
   }
@@ -50,8 +52,8 @@ export function PayerScenarioPreview({markets,initial}:{markets:Market[];initial
    if(!response.ok)throw Error('NOT_AVAILABLE');
    const data:unknown=await response.json();
    if(!valid(data,actual,payer))throw Error('INVALID');
-   setState({kind:'HYPOTHETICAL',data});
-  }catch{setState({kind:'UNVERIFIABLE'});}
+   if(ticket===generation.current)setState({kind:'HYPOTHETICAL',data});
+  }catch{if(ticket===generation.current)setState({kind:'UNVERIFIABLE'});}
  }
  return <section className="panel payer-scenario" aria-labelledby="payer-title">
   <h2 id="payer-title">بررسی فرضی مسئولیت پرداخت حق اشتراک</h2>
@@ -59,12 +61,12 @@ export function PayerScenarioPreview({markets,initial}:{markets:Market[];initial
   <div className="payer-grid">
    <label>بازار مورد بررسی
     <select aria-label="بازار مورد بررسی" value={marketId} onChange={e=>{
-     setMarketId(e.target.value as MarketId);setPayer('MEMBER');setState({kind:'IDLE'});
+     generation.current++;setMarketId(e.target.value as MarketId);setPayer('MEMBER');setState({kind:'IDLE'});
     }}>{markets.map(m=><option key={m.id} value={m.id}>{m.label}</option>)}</select>
    </label>
    <label>پرداخت‌کننده فرضی حق اشتراک
     <select aria-label="پرداخت‌کننده فرضی حق اشتراک" value={payer} onChange={e=>{
-     setPayer(e.target.value as PayerMode);setState({kind:'IDLE'});
+     generation.current++;setPayer(e.target.value as PayerMode);setState({kind:'IDLE'});
     }}>
      <option value="MEMBER">خود عضو</option>
      {sponsorAvailable&&<option value="SPONSOR">حامی صرفاً مشروط به قرارداد معتبر</option>}

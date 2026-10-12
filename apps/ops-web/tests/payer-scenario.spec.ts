@@ -67,3 +67,23 @@ test('PAYER-81-05 Changing market/payer clears old scenario; no external calls',
  await expect(page.getByLabel('پرداخت‌کننده فرضی حق اشتراک')).toHaveValue('MEMBER');
  expect(outside).toEqual([]);
 });
+
+test('PAYER-81-06 delayed response cannot resurrect previous payer after changing market',async({page})=>{
+ let allow!:()=>void;
+ let signal!:()=>void;
+ const entered=new Promise<void>(resolve=>{signal=resolve;});
+ const held=new Promise<void>(resolve=>{allow=resolve;});
+ await page.route('**/internal/ops/v1/payer-scenario-preview',async route=>{
+  signal();await held;await route.continue();
+ });
+ await page.goto('/markets/corporate');
+ await page.getByLabel('پرداخت‌کننده فرضی حق اشتراک').selectOption('SPONSOR');
+ await page.getByRole('button',{name:'مقایسه فرضی مسئولیت‌ها'}).click();
+ await entered;
+ await page.getByLabel('بازار مورد بررسی').selectOption('MARKET-PUBLIC');
+ allow();
+ await page.waitForTimeout(450);
+ await expect(page.getByTestId('payer-preview-result')).toHaveCount(0);
+ await expect(page.getByTestId('payer-preview-status')).toContainText('هنوز سناریویی بررسی نشده');
+ await expect(page.getByLabel('پرداخت‌کننده فرضی حق اشتراک')).toHaveValue('MEMBER');
+});
