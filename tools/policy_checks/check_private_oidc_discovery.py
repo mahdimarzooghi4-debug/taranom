@@ -100,7 +100,10 @@ def _validate_metadata(raw: bytes, host: str) -> dict:
         _deny("UNSIGNED_TOKENS_ADVERTISED")
     # Future browser login must require PKCE, but its implementation remains
     # blocked pending TRN-TECH-012 human contract approval.
-    if "S256" not in meta.get("code_challenge_methods_supported", []):
+    methods = meta.get("code_challenge_methods_supported")
+    if (not isinstance(methods, list) or len(methods) > 60
+            or any(not isinstance(m, str) for m in methods)
+            or "S256" not in methods):
         _deny("PKCE_S256_NOT_ADVERTISED")
     # Never imply tokens or keys were fetched/validated.
     return {
@@ -136,6 +139,8 @@ def _fetch_pinned(host: str, ip: str) -> bytes:
                     "\r\n\r\n").encode("ascii"))
                 response = http.client.HTTPResponse(secured, method="GET")
                 response.begin()
+                if sum(len(k) + len(v) + 4 for k, v in response.getheaders()) > MAX_HEADERS_BYTES:
+                    _deny("DISCOVERY_HEADERS_TOO_LARGE")
                 if response.status != 200:
                     _deny("DISCOVERY_HTTP_NOT_OK_OR_REDIRECT")
                 media = response.getheader("Content-Type", "").split(";")[0].strip().lower()

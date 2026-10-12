@@ -126,6 +126,12 @@ class OidcDiscoveryTests(unittest.TestCase):
         self.denied(payload(id_token_signing_alg_values_supported=["RS256","none"]),
                     "UNSIGNED_TOKENS_ADVERTISED")
 
+    def test_pkce_dictionary_and_string_do_not_fake_s256_support(self):
+        self.denied(payload(code_challenge_methods_supported={"S256": False}),
+                    "PKCE_S256_NOT_ADVERTISED")
+        self.denied(payload(code_challenge_methods_supported="S256"),
+                    "PKCE_S256_NOT_ADVERTISED")
+
     def test_missing_fields_invalid_json_and_duplicate_keys(self):
         self.denied(payload(authorization_endpoint=None),
                     "UNTRUSTED_DISCOVERY_ENDPOINT")
