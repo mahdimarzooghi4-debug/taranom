@@ -229,3 +229,7 @@ Owner requested large, substantive packages. [TRN-TECH-070](../technical/70-offl
 ## Sprint 80 — Canonical .NET national blockers in Member and Center
 
 TRN-TECH-089: all 15 existing Member and Center pages on loopback ASP.NET 4318 now display the existing canonical 17 blocked dimensions and evidence references; invalid, READY, duplicate or unavailable source fails closed and removes stale details. Standalone browsers never fetch source. Official three-market national first release DENIED_BY_DEFAULT. Push+PR full 14-job CI and human review gates retained.
+
+## Sprint 81 — Conditional payer models with individual wallet and clinical privacy (2026-10-12)
+
+[TRN-TECH-090](../technical/90-three-market-payer-boundary-preview.md) / [Sprint81](../sprints/89-sprint-81-payer-boundary-preview.md) provide a real .NET/React interactive hypothetical policy checker for individual/support/corporate, using only five business-allowed market/payer combinations. Sponsor billing needs a real valid future contract and never owns membership, wallet or personal clinical access. Strict request validation, malformed/forged/unknown cases rejected; no payment, identities, finance or activation. All 17 initial release requirements blocked, full 14-job CI mandatory.

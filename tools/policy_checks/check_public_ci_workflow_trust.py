@@ -58,6 +58,10 @@ DISPATCHER_BRANCHES = {
         "sprint-80-runtime-release-source-member-center",
         "sprint-79-ephemeral-cross-portal-qa-journey",
     ),
+    "sprint-81-three-market-payer-boundary-preview.yml": (
+        "sprint-81-three-market-payer-boundary-preview",
+        "sprint-80-runtime-release-source-member-center",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

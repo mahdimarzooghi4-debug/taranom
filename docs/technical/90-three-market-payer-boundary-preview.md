@@ -1,0 +1,15 @@
+# TRN-TECH-090 — Three-market payer responsibility boundary preview
+
+**Date:** 2026-10-12. **Parent:** PR #88 Draft/Open/unmerged exact HEAD 8301c2eb20b9070b902042f7c81ad678bd979225, both Push and PR CI 14/14 SUCCESS; Code Review COMMENTED only, no independent human approval. Approved Business TRN-BIZ-024/025/026/028/029/030/040 and technical TRN-TECH-071/081/087/089.
+
+## Accepted ownership separation
+Direct public membership is represented as self-paid only. Support/corporate policy permits a hypothetical member-paid or sponsor-paid membership, but sponsor payment is subject to an actual independently valid contract, which does NOT exist here. Membership and healthcare wallet always belong to the individual. Sponsor funding cannot confer treatment/clinical data access or wallet spending control. Split payment, invoice, rate, discount, payment provider, refunds and real contract terms are intentionally unknown and must not be inferred.
+
+## Deliverable
+Existing localhost-only 4318 ASP.NET Kestrel gets a narrowly bounded stateless HTTP POST payer-scenario-preview: exact marketId and payerMode, max 256 bytes even without Content-Length, no duplicate or extra fields, illegal public sponsor/unknown combinations 400, unknown/changed source 503, spoofed Host rejected by existing middleware, wrong method 405, untrusted Origin denied. No user IDs, monetary amounts, contract IDs, terms, provider credentials or personal data are accepted. A successful result is only HYPOTHETICAL_POLICY_ONLY, a *business-structure* possibility, pinned to valid source 17 BLOCKED_UNVERIFIED inventory for that market; every activation/payment/authorization/contract-verified flag false, and individual wallet/membership ownership true. No persistence and no external calls.
+
+Inside the existing market React page, an accessible two-select policy preview allows the user to choose market and payer, run a manually triggered server check, then see payer/owner/data-rights/contract-unknown responsibilities side by side. Response must match the chosen inputs and exact source missingEvidence, with strict false permissions. Changed choice or fetch failure destroys old result; no form fields for real patient, sponsor organization, finance or personal data. No payment button, contract, provider, IdP, or onboarding link is created.
+
+CI acceptance: true Python HTTP all five permitted combinations and negative malformed/overlarge/mixed field / Host / Origin cases; true Chromium on all three markets, sponsor privacy, direct individual, stale-state and forged authority. Canonical shared 14 jobs on exact-head Push and PR, existing PostgreSQL/backup and member/center tests retained without waiver.
+
+**Not a product launch:** TRN-TECH-012 real member session is NOT CODE-AUTHORIZED, no provider/insurer/financial/clinical data or legal contract. All 17 national release dimensions remain BLOCKED_UNVERIFIED, full first nationwide comprehensive 3-market release DENIED_BY_DEFAULT, product percentage UNBASELINED. PR Draft/Open/Unmerged, no Ready/Merge/Stage/QA Gate/Release Approval/Production. Initial Code Review COMMENT not independent signoff.

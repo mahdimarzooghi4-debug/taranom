@@ -631,6 +631,7 @@ jobs:
           test "$ready" = "1"
           python3 tests/ops_status/test_local_ops_http.py
           python3 tests/ops_status/test_three_market_entry_http.py
+          python3 tests/ops_status/test_payer_scenario_http.py
           python3 tests/ops_status/test_unified_local_surfaces_http.py
           cd apps/ops-web
           CI=true npm run test:e2e
