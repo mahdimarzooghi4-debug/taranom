@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import {exportRecovery,importRecovery,type SupportCommand,type PendingWrite} from './manual-recovery';
 
 type FollowUp = { revision: number; noteRef: string; claimedActorRef: string };
 type Support = {
@@ -11,16 +12,6 @@ type Support = {
   evidenceRef: string | null; claimedSubmitterRef: string | null;
   followUpCount: number; followUps: FollowUp[];
 };
-type SupportCommand = {
-  requestId:string; expectedRevision:number;
-  action:'SUBMIT_UNVERIFIED'|'FOLLOW_UP_UNVERIFIED';
-  memberRef:string;topic:'MEDICAL_SERVICE_COMPLAINT'|'INSURANCE_COVERAGE_DISPUTE';
-  unverifiedEvidenceRef:string;claimedSubmitterRef:string;
-  originalSubmissionRequestId:string;
-  claimedFollowUpActorRef:string|null;
-  unverifiedFollowUpNoteRef:string|null;
-};
-type PendingWrite = {caseRef:string;command:SupportCommand};
 type SupportHistory = {
   contract: 'TRN-TECH-084'; syntheticOnly: true; memberAuthenticated: false;
   complaintLegallySubmitted: false; insurerContacted: false;
@@ -110,6 +101,7 @@ export function MemberSupportDemo() {
   // Immutable snapshot of the one outstanding uncertain command. Never
   // create a fresh requestId for its retry; no browser storage or real actor.
   const [pendingWrite, setPendingWrite] = useState<PendingWrite|null>(null);
+  const [manualRecoveryText, setManualRecoveryText] = useState('');
   const [message, setMessage] = useState('این فرم فقط درخواست‌ها و ارجاعات آزمایشی را ذخیره می‌کند.');
   const [timeline, setTimeline] = useState<SupportHistory|null>(null);
   const [past, setPast] = useState<SupportHistorical|null>(null);
@@ -207,6 +199,30 @@ export function MemberSupportDemo() {
     await sendExact(pending);
   }
 
+  function importManualRecovery() {
+    if(busy || pendingWrite)return;
+    const restored=importRecovery(manualRecoveryText);
+    if(!restored){
+      setCurrent(null);setTimeline(null);setPast(null);
+      setMessage('رسید بازیابی آزمایشی معتبر نیست؛ هیچ درخواستی ارسال نشد.');
+      return;
+    }
+    // Never POST on import. On explicit manual retry the existing .NET
+    // idempotency contract determines whether this was already committed.
+    setCurrent(null);setTimeline(null);setPast(null);
+    setCaseRef(restored.caseRef);
+    setMemberRef(restored.command.memberRef);
+    setEvidenceRef(restored.command.unverifiedEvidenceRef);
+    setSubmitter(restored.command.claimedSubmitterRef);
+    setTopic(restored.command.topic);
+    setActor(restored.command.claimedFollowUpActorRef ?? 'test:followup-actor-demo');
+    setNote(restored.command.unverifiedFollowUpNoteRef ?? 'test:note-demo');
+    setPendingWrite(restored);
+    setManualRecoveryText('');
+    setTimelineMessage('رسید بازیابی وارد شد؛ برای خواندن تاریخچه باید دستور تعیین تکلیف شود.');
+    setMessage('رسید آزمایشی وارد شد؛ هیچ دستوری ارسال نشده است. فقط تکرار دستی همان UUID مجاز است.');
+  }
+
   async function readTimeline(after:number) {
     if(!current || busy || !Number.isSafeInteger(after) || after<0)return;
     setBusy(true); setTimeline(null); setPast(null);
@@ -285,11 +301,28 @@ export function MemberSupportDemo() {
       <p>وضعیت ثبت در PostgreSQL نامعلوم است؛ از ساخت دستور دوم جلوگیری شده است.</p>
       <p>شناسه همان درخواست آزمایشی: <code>{pendingWrite.command.requestId}</code></p>
       <p>نسخه مورد انتظار: {pendingWrite.command.expectedRevision}</p>
-      <p>این شناسه فقط تا بازماندن همین صفحه در حافظه مرورگر نگه داشته می‌شود. پس از Reload امکان بازیابی آن از حافظه وجود ندارد.</p>
+      <p>این رسید فقط به شناسه‌های ساختگی مربوط است، امضا یا اختیار قانونی ندارد و نباید حاوی داده واقعی یا سلامت باشد.</p>
+      <p>برای بازیابی پس از Reload، متن زیر را خودتان کپی و در جایی امن برای آزمون نگه دارید؛ برنامه آن را ذخیره نمی‌کند.</p>
+      <label htmlFor="pending-recovery-capsule">رسید دستی بازیابی آزمایشی</label>
+      <textarea id="pending-recovery-capsule" dir="ltr" readOnly
+        data-testid="pending-recovery-capsule" value={exportRecovery(pendingWrite)}
+        rows={5} spellCheck={false} aria-label="رسید دستی بازیابی آزمایشی"/>
+      <p>پس از Reload، فقط با واردکردن دستی این رسید می‌توان همان UUID را بازسازی کرد. هیچ تکراری خودکار نیست.</p>
       <button type="button" disabled={busy} onClick={()=>void sendExact(pendingWrite)}>
         تکرار امن همان دستور آزمایشی
       </button>
     </section>}
+    <section aria-label="ورود دستی رسید بازیابی آزمایشی" data-testid="manual-recovery-import">
+      <h3>بازیابی دستور نامطمئن پس از بازکردن دوباره صفحه</h3>
+      <p>فقط متن رسید ساختگی TRN-TECH-092؛ این سند امضا نشده و مجوز عضویت یا شکایت نیست.</p>
+      <label htmlFor="manual-recovery-import-text">متن رسید بازیابی آزمایشی</label>
+      <textarea id="manual-recovery-import-text" dir="ltr" rows={4}
+        value={manualRecoveryText} spellCheck={false} maxLength={4000}
+        disabled={busy || pendingWrite!==null}
+        onChange={e=>setManualRecoveryText(e.target.value)}/>
+      <button type="button" disabled={busy || pendingWrite!==null}
+        onClick={importManualRecovery}>بارگذاری رسید بازیابی بدون ارسال</button>
+    </section>
     <div className="actions">
       <button disabled={busy || pendingWrite!==null} type="button" onClick={() => void read()}>بازخوانی پرونده پشتیبانی آزمایشی</button>
       <button disabled={busy || pendingWrite!==null || !current || current.revision !== 0} type="button"
