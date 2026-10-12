@@ -82,7 +82,8 @@ def run():
     base["attempt"] = None
     base["current"]["previewRevision"] = 2
     code, revised = send(base)
-    assert code == 200 and revised["continuity"] == "ChangedPreviewRequiresSeparateReview"
+    # Existing domain distinguishes missing evidence from otherwise complete revision changes.
+    assert code == 200 and revised["continuity"] == "CurrentMissingRequiresSeparateReview"
     assert revised["changedComponents"] == []
     assert_denied(revised)
     base["attempt"] = command(previous,preview["fingerprint"],rev=1)
@@ -95,6 +96,23 @@ def run():
     assert send(base)[1]["continuity"] == "CurrentMissingRequiresSeparateReview"
     base["current"]["lines"][0].update(state="ConflictingClaims",amount=None,currency=None)
     assert send(base)[1]["continuity"] == "CurrentConflictRequiresSeparateReview"
+    # A fully provisional (still UNVERIFIED) five-lane estimate is the
+    # distinct "changed preview" path when there are no missing sources.
+    complete = body()
+    for line in complete["lines"]:
+        claim(line)
+    full_preview = cost_send(complete)[1]
+    full_command = command(complete, full_preview["fingerprint"])
+    full_case = dict(previous=complete,current=copy.deepcopy(complete),
+                     history=[],attempt=full_command)
+    assert send(full_case)[1]["outcome"] == "RecordedUnverified"
+    full_case["history"] = [full_command]
+    full_case["attempt"] = None
+    full_case["current"]["previewRevision"] = 2
+    code, changed_preview = send(full_case)
+    assert code == 200 and changed_preview["continuity"] == "ChangedPreviewRequiresSeparateReview"
+    assert changed_preview["changedComponents"] == []
+    assert_denied(changed_preview)
     print("PASS: real .NET choice, exact retry, stale/revision conflict and no automatic carry")
 
     bad = []
