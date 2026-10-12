@@ -30,8 +30,13 @@ test('RECOVERY-83-01 response lost after committed submission; manual receipt su
   const receipt=await page.getByTestId('pending-recovery-capsule').inputValue();
   expect(JSON.parse(receipt).contract).toBe('TRN-TECH-092');
   expect(JSON.parse(receipt).command).toEqual(bodies[0]);
-  const original=await (await request.get('/internal/demo/v1/support/'+encodeURIComponent(caseRef))).json();
-  expect(original.revision).toBe(1);
+  // The uncertain UI is shown before the asynchronous HTTP request
+  // has necessarily reached and committed in PostgreSQL. Wait for real
+  // durable readback; never treat the browser's pending state as a DB ACK.
+  await expect.poll(async()=>{
+    const response=await request.get('/internal/demo/v1/support/'+encodeURIComponent(caseRef));
+    return response.ok()?(await response.json()).revision:-1;
+  },{message:'real synthetic PostgreSQL first write committed'}).toBe(1);
   await page.reload();
   await expect(page.getByTestId('pending-support-write')).toHaveCount(0);
   await page.getByLabel('متن رسید بازیابی آزمایشی').fill(receipt);
