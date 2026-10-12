@@ -90,6 +90,10 @@ DISPATCHER_BRANCHES = {
         "sprint-84-center-guided-event-workflow",
         "sprint-83-manual-uncertain-command-recovery",
     ),
+    "integration-through-sprint-86.yml": (
+        "integration/through-sprint-86",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
