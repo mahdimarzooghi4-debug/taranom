@@ -13,7 +13,8 @@ def call(data=None,method="POST",headers=None,url=URL):
         with urlopen(Request(url,method=method,headers=h,data=raw),timeout=8) as r:
             return r.status,r.headers,json.loads(r.read())
     except HTTPError as ex:
-        return ex.code,ex.headers,json.loads(ex.read())
+        raw=ex.read()
+        return ex.code,ex.headers,json.loads(raw) if raw else {}
 
 def run():
     for market in ("MARKET-PUBLIC","MARKET-SUPPORT","MARKET-CORPORATE"):
