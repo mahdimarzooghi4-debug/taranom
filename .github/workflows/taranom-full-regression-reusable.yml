@@ -32,6 +32,11 @@ jobs:
           python3 tools/policy_checks/render_epic_progress_console.py --root . --html TestResults/fullci-epic-console.html --csv TestResults/fullci-epic-console.csv
           test -s TestResults/fullci-epic-console.html
           test -s TestResults/fullci-epic-console.csv
+      - name: Inventory SDK, npm, NuGet, actions and container build source declarations
+        run: |
+          python3 -m unittest discover -s tests/policy_checks -p 'test_build_input_inventory.py' -v
+          python3 tools/policy_checks/check_build_input_inventory.py --root . --report-json TestResults/fullci-build-input-inventory.json
+          python3 -c "import json; a=json.load(open('TestResults/fullci-build-input-inventory.json')); assert a['status']=='DECLARED_BUILD_INPUTS_CHECKED_NOT_ATTESTED' and a['npmApplications']==5 and a['sourceFingerprint'] and not a['supplyChainAttested'] and not a['nationalReleaseAllowed']"
       - name: Deny unsafe public GitHub Actions workflow definitions
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_public_ci_workflow_trust.py' -v
