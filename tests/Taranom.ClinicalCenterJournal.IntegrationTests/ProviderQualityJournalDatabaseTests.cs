@@ -163,7 +163,7 @@ public sealed class ProviderQualityJournalDatabaseTests
         var emptyCase=Case();
         Assert.Equal(SyntheticProviderQualityNoteOutcome.OriginalScopeMissing,
             (await Apply(store,emptyCase,Note(root,SyntheticProviderQualityNoteAction.RecordUnverifiedTaranomStandardNote)
-                with{CaseRef=emptyCase})).Outcome);
+                with{CaseRef=emptyCase,ExpectedRevision=0})).Outcome);
         Assert.Equal(1,(await Read(store,c)).Revision);
     }
 
