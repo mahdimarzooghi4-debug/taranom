@@ -156,7 +156,7 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
         var (db,store)=await OpenAsync();await using var _=db;
         var id=Case();var root=Root();var concern=Concern(root);
         await store.ApplyAsync(id,root,TestContext.Current.CancellationToken);
-        await store.ApplyAsync(id,concern);
+        await store.ApplyAsync(id,concern,TestContext.Current.CancellationToken);
         await store.ApplyAsync(id,Oversight(root,2),TestContext.Current.CancellationToken);
         Assert.Equal(SyntheticAccessNoteOutcome.Replayed,
             (await store.ApplyAsync(id,root,TestContext.Current.CancellationToken)).Outcome);
@@ -195,7 +195,7 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
         var (db,store)=await OpenAsync();await using var _=db;
         var id=Case();var first=Root();await store.ApplyAsync(id,first,TestContext.Current.CancellationToken);
         var a=Concern(first);var b=Oversight(first);
-        var results=await Task.WhenAll(store.ApplyAsync(id,a,TestContext.Current.CancellationToken),store.ApplyAsync(id,b));
+        var results=await Task.WhenAll(store.ApplyAsync(id,a,TestContext.Current.CancellationToken),store.ApplyAsync(id,b,TestContext.Current.CancellationToken));
         Assert.Single(results,x=>x.Outcome==SyntheticAccessNoteOutcome.RecordedUnverified);
         Assert.Single(results,x=>x.Outcome==SyntheticAccessNoteOutcome.StaleRevision);
         Assert.Equal(2,await CountAsync("internal_test_clinical_access_audit",id));
