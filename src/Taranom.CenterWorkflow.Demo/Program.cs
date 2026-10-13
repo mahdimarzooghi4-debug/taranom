@@ -23,6 +23,9 @@ await PgProofingCaseJournal.InitializeIsolatedTestSchemaAsync(dataSource);
 // TRN-TECH-114: reuse existing immutable work-item journal for unverified
 // historic-period evidence, never claim actual benefit approval or finance.
 await PgLateEvidenceWorkItemJournal.InitializeIsolatedTestSchemaAsync(dataSource);
+// TRN-TECH-115: isolated non-diagnostic coordination, not a provider API.
+await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
+    .InitializeAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
 // TRN-TECH-110: support HTTP must never inherit the schema-owner connection;
 // the support journal gets only bounded DML on its three synthetic tables.
@@ -37,6 +40,8 @@ Taranom.CenterWorkflow.Demo.ProofingDemoHttp.Store =
     new PgProofingCaseJournal(dataSource);
 Taranom.CenterWorkflow.Demo.LateEvidenceHttp.Store =
     new PgLateEvidenceWorkItemJournal(dataSource);
+Taranom.CenterWorkflow.Demo.CareCoordinationHttp.Store =
+    new Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal(dataSource);
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(4320));
@@ -151,6 +156,10 @@ app.MapGet("/internal/demo/v1/late-evidence/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/late-evidence/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.WriteAsync);
+app.MapGet("/internal/demo/v1/care-coordination/{caseRef}",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareCoordinationHttp.ReadAsync);
+app.MapPost("/internal/demo/v1/care-coordination/{caseRef}/commands",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareCoordinationHttp.WriteAsync);
 
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 // Exact local member entrypoint is required: the generic root fallback must
@@ -169,6 +178,9 @@ app.MapGet("/member-demo/proofing", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
 app.MapGet("/member-demo/late-evidence", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+        "member-demo", "index.html"), "text/html; charset=utf-8"));
+app.MapGet("/member-demo/coordination", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
 if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")

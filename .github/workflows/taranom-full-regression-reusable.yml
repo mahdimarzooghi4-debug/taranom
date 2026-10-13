@@ -746,6 +746,7 @@ jobs:
           python3 tests/center_demo/test_real_center_demo_http.py
           python3 tests/center_demo/test_proofing_correction_http.py
           python3 tests/center_demo/test_late_evidence_work_item_http.py
+          python3 tests/center_demo/test_care_coordination_http.py
           python3 tests/center_demo/test_support_history_http.py
           # TRN-TECH-109: genuine concurrent writer lock + unlocked read,
           # same synthetic PostgreSQL source and current loopback host.

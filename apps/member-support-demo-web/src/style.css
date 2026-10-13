@@ -20,3 +20,10 @@ select{display:block;width:100%;padding:.5rem;border:2px solid #456a82;border-ra
 .late-workbench .events {background:white;padding:1rem;border-radius:9px}
 .late-workbench label {display:block;margin:.6rem 0}
 .late-workbench button {margin:.35rem}
+
+.care-demo {max-width:940px;margin:auto;padding:1rem}
+.care-demo .risk {background:#fff5e8;border-right:4px solid #995623;padding:.85rem}
+.care-demo fieldset {margin:1rem 0;padding:1rem;border:1px solid #b9cbd5;border-radius:8px}
+.care-demo button {margin:.35rem}
+.care-demo button:disabled {opacity:.45}
+.care-demo .timeline {padding:1rem;background:white;border-radius:8px}

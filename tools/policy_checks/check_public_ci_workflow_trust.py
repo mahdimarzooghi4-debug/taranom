@@ -171,6 +171,10 @@ DISPATCHER_BRANCHES = {
         "sprint-105-late-evidence-human-note-workflow",
         "sprint-104-synthetic-identity-correction-reverification",
     ),
+    "sprint-106-nonclinical-care-coordination-journal.yml": (
+        "sprint-106-nonclinical-care-coordination-journal",
+        "sprint-105-late-evidence-human-note-workflow",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
