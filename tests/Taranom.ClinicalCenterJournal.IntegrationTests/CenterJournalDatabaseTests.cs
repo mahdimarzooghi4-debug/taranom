@@ -20,8 +20,14 @@ public sealed class CenterJournalDatabaseTests
     {
         var ct = TestContext.Current.CancellationToken;
         await using var admin = NpgsqlDataSource.Create(AdminConnection);
-        await PgClinicalCenterJournal.InitializeIsolatedTestSchemaAsync(admin, ct);
+        // Schema ACL updates in both test classes target public.nspacl.
+        // Serialize test-only bootstrap ACROSS processes, not just xUnit tasks.
         await using var cn = await admin.OpenConnectionAsync(ct);
+        await using var tx = await cn.BeginTransactionAsync(ct);
+        await using (var gate = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(77110042)", cn, tx))
+            await gate.ExecuteNonQueryAsync(ct);
+        await PgClinicalCenterJournal.InitializeIsolatedTestSchemaAsync(admin, ct);
         await using var grants = new NpgsqlCommand("""
             DO $role$
             BEGIN
@@ -47,8 +53,9 @@ public sealed class CenterJournalDatabaseTests
             GRANT SELECT,INSERT ON internal_test_center_event,
                 internal_test_center_audit,internal_test_center_denial
                 TO taranom_sprint06_center_test;
-            """, cn);
+            """, cn, tx);
         await grants.ExecuteNonQueryAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     private static async Task<(NpgsqlDataSource Db, PgClinicalCenterJournal Store)> ConnectAsync()
