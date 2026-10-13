@@ -123,7 +123,7 @@ internal sealed class PgClinicalCenterJournal(NpgsqlDataSource dataSource)
             await init.ExecuteNonQueryAsync(ct);
         }
 
-        var current = await RehydrateLockedAsync(connection, tx, centerRef, ct);
+        var current = await RehydrateVerifiedAsync(connection, tx, centerRef, ct, lockCenterRow: true);
         var changed = CenterReducer.Apply(current, command);
         if (changed.Outcome != CenterOutcome.Applied)
         {
@@ -207,8 +207,15 @@ internal sealed class PgClinicalCenterJournal(NpgsqlDataSource dataSource)
     {
         ValidateCenter(centerRef);
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var tx = await connection.BeginTransactionAsync(ct);
-        var result = await RehydrateLockedAsync(connection, tx, centerRef, ct, missingAllowed: true);
+        // All journal, audit and projection SELECTs must see ONE committed
+        // PostgreSQL MVCC snapshot; unlike FOR UPDATE this never acquires a
+        // writer row lock. Writers still serialize under their original lock.
+        await using var tx = await connection.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead, ct);
+        await using (var readOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", connection, tx))
+            await readOnly.ExecuteNonQueryAsync(ct);
+        var result = await RehydrateVerifiedAsync(connection, tx, centerRef, ct,
+            missingAllowed: true, lockCenterRow: false);
         await tx.CommitAsync(ct);
         return result;
     }
@@ -231,14 +238,17 @@ internal sealed class PgClinicalCenterJournal(NpgsqlDataSource dataSource)
             ("request", requestId), ("outcome", (int)outcome), ("version", version));
     }
 
-    private static async Task<CenterSnapshot> RehydrateLockedAsync(
+    private static async Task<CenterSnapshot> RehydrateVerifiedAsync(
         NpgsqlConnection connection, NpgsqlTransaction tx, string centerRef,
-        CancellationToken ct, bool missingAllowed = false)
+        CancellationToken ct, bool missingAllowed = false, bool lockCenterRow = true)
     {
         long version;
-        await using (var get = new NpgsqlCommand("""
+        await using (var get = new NpgsqlCommand(lockCenterRow ? """
             SELECT current_version FROM internal_test_center
             WHERE center_ref=@center FOR UPDATE
+            """ : """
+            SELECT current_version FROM internal_test_center
+            WHERE center_ref=@center
             """, connection, tx))
         {
             get.Parameters.AddWithValue("center", centerRef);
