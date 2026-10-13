@@ -81,6 +81,7 @@ internal static class ProofingDemoHttp
             }
             bool Num(string k, out long n)
             {
+                n = 0;
                 var e = root.GetProperty(k);
                 return e.ValueKind == JsonValueKind.Number &&
                     e.TryGetInt64(out n) && n is >= 0 and < long.MaxValue;
