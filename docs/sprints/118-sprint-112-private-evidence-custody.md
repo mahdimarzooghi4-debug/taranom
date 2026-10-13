@@ -1,6 +1,6 @@
-# Sprint 111 — Confidential custody hardening for genuine private evidence intake
+# Sprint 112 — Confidential custody hardening for genuine private evidence intake
 
-**Contract:** [TRN-TECH-120](../technical/TRN-TECH-120-private-evidence-verifier-custody.md). **Parent:** Draft/Open Sprint110 #121 HEAD `66bb7ec99b1e8f6cf21116143cd75531585575f2` with exact 14-job Push #38407763653 and PR #38407774821 SUCCESS; COMMENTED technical review only.
+**Contract:** [TRN-TECH-121](../technical/TRN-TECH-121-private-evidence-verifier-custody.md). **Parent:** merged Sprint111 PR #122 on main `7e9dcd24c8aaf1db81889752e920575d9ea186ac`, which includes Sprint110 #121. Prior technical review was COMMENTED only, not independent human approval.
 
 **Outcome:** close report overwrite/symlink/world-readable and weak manifest-permission gaps in original private evidence CLI. Full new-only 0600 private report, strict operator-private manifest owner/single-link and path, descriptor-based file creation/cleanup on errors, and preserve existing empty-template no-network Public CI path. No actual docs read or published, never human evidence verification.
 

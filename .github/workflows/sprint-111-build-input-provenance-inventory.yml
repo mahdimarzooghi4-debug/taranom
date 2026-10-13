@@ -1,7 +1,7 @@
-name: Sprint 111 Private Evidence Custody Output Safety Full Regression
+name: Sprint 111 Build Input Provenance Inventory Full Regression
 on:
   push:
-    branches: [sprint-111-private-evidence-custody-output-safety]
+    branches: [sprint-111-build-input-provenance-inventory]
   pull_request:
     branches: [sprint-110-provider-quality-oversight-journal]
   workflow_dispatch:

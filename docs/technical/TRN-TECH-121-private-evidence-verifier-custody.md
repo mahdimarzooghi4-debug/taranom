@@ -1,6 +1,6 @@
-# TRN-TECH-120 — Private evidence verifier custody, manifest and report safety
+# TRN-TECH-121 — Private evidence verifier custody, manifest and report safety
 
-**Sprint111 — 2026-10-13. Parent:** Sprint110 PR #121 Draft/Open on `66bb7ec99b1e8f6cf21116143cd75531585575f2`; both exact-head Push #38407763653 and Mainline #38407774821 full 14/14 SUCCESS; preliminary COMMENTED review only. **Accepted basis:** TRN-TECH-064/079/082 private custody and 17 DENIED launch obligations, TRN-BIZ-028/030/035/036/040/041.
+**Sprint112 — 2026-10-13. Parent:** Sprint111 PR #122 merged on `7e9dcd24c8aaf1db81889752e920575d9ea186ac` (parent exact Sprint110 HEAD `66bb7ec99b1e8f6cf21116143cd75531585575f2`); both exact-head Push #38407763653 and Mainline #38407774821 full 14/14 SUCCESS; preliminary COMMENTED review only. **Accepted basis:** TRN-TECH-064/079/082 private custody and 17 DENIED launch obligations, TRN-BIZ-028/030/035/036/040/041.
 
 ## Material, verified implementation problem
 
