@@ -91,6 +91,13 @@ def inspect(root: Path) -> dict:
                     raise SourceError("FLOATING_NPM_DIRECT_DEPENDENCY")
                 if header.get(label,{})!=deps:
                     raise SourceError("STALE_NPM_DIRECT_DEPENDENCY")
+                # Matching root metadata is insufficient: direct npm inputs
+                # must exist in the actual lock package entries.
+                for direct_name, direct_version in deps.items():
+                    direct = locked["packages"].get("node_modules/"+direct_name)
+                    if (not isinstance(direct,dict)
+                            or direct.get("version")!=direct_version):
+                        raise SourceError("DIRECT_NPM_PACKAGE_NOT_LOCKED")
             for name, body in locked["packages"].items():
                 if not name: continue
                 if (not name.startswith("node_modules/") or not isinstance(body,dict)

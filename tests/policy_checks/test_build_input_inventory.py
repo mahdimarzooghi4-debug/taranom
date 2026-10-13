@@ -16,6 +16,10 @@ def prepare(root):
         lock={"lockfileVersion":3,"packages":{"":dict(pkg),"node_modules/react":{
             "version":"19.2.0","resolved":"https://registry.npmjs.org/react/-/react-19.2.0.tgz",
             "integrity":proof}}}
+        lock["packages"]["node_modules/typescript"]={
+            "version":"5.9.3",
+            "resolved":"https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+            "integrity":proof}
         put(root,base+"/package.json",json.dumps(pkg))
         put(root,base+"/package-lock.json",json.dumps(lock))
     put(root,"src/A/A.csproj",'<Project><PackageReference Include="Npgsql" Version="10.0.3" /></Project>')
@@ -33,7 +37,7 @@ class BuildInventoryTests(unittest.TestCase):
         self.assertFalse(v["nationalReleaseAllowed"])
     def test_declared_only_never_actual_attestation(self):
         a=self.check();self.assertEqual("DECLARED_BUILD_INPUTS_CHECKED_NOT_ATTESTED",a["status"],a)
-        self.assertEqual(5,a["npmApplications"]);self.assertEqual(5,a["npmLockedPackages"])
+        self.assertEqual(5,a["npmApplications"]);self.assertEqual(10,a["npmLockedPackages"])
         self.assertEqual(1,a["nugetPackageDeclarations"])
         self.assertEqual(1,a["pinnedGithubActions"])
         self.assertEqual(1,a["mutableContainerTags"])
@@ -68,6 +72,18 @@ class BuildInventoryTests(unittest.TestCase):
         prepare(self.root);x=json.loads(p.read_text())
         x["packages"]["node_modules/react"]["integrity"]="sha512-aaaa"
         p.write_text(json.dumps(x));self.denied("INVALID_NPM_INTEGRITY")
+    def test_direct_npm_package_omitted_from_lock_is_denied(self):
+        p=self.root/"apps/member-web/package-lock.json"
+        locked=json.loads(p.read_text())
+        del locked["packages"]["node_modules/react"]
+        p.write_text(json.dumps(locked))
+        self.denied("DIRECT_NPM_PACKAGE_NOT_LOCKED")
+    def test_direct_npm_version_disagrees_with_lock_is_denied(self):
+        p=self.root/"apps/center-web/package-lock.json"
+        locked=json.loads(p.read_text())
+        locked["packages"]["node_modules/typescript"]["version"]="5.9.2"
+        p.write_text(json.dumps(locked))
+        self.denied("DIRECT_NPM_PACKAGE_NOT_LOCKED")
     def test_symlinked_lock_and_unpinned_ci_action_denied(self):
         p=self.root/"apps/member-web/package-lock.json"
         original=p.read_text();p.unlink()
