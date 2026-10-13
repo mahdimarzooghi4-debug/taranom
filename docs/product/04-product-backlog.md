@@ -289,3 +289,8 @@ The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fc
 ## Sprint 93 — Center department doctor-affiliation roster (2026-10-13)
 
 [TRN-TECH-102](../technical/TRN-TECH-102-center-department-doctor-roster.md) and [Sprint93](../sprints/99-sprint-93-center-department-roster.md) introduce a version-pinned, read-only `Center → Department → unverified DoctorAffiliation` roster, derived exclusively from the existing canonical PostgreSQL center event/audit journal. It supports historical observation of the department before an affiliation ends, without keeping ended doctors on the current roster, and rejects stale revision, cross-center, real identifiers and forged legal/clinical/financial permission. No separate network admin, real doctor signup, licence, contract or health-record access is introduced. National launch remains DENIED_BY_DEFAULT and the 17 external gates BLOCKED_UNVERIFIED.
+
+
+## Sprint 94 — Source-attested one-doctor center affiliation history (2026-10-13)
+
+[TRN-TECH-103](../technical/TRN-TECH-103-single-doctor-center-affiliation-history.md) and [Sprint94](../sprints/100-sprint-94-doctor-affiliation-history.md) add a same-center, version-pinned record of each synthetic doctor's unverified affiliation, department assignments and eventual end of affiliation. The bounded read is reconstructed from the unchanged original PostgreSQL event+audit journal, with sparse pagination, historical versions, unrelated-event stale refusal, and no additional schema, clinician identity, licence, contract or medical permission. The national first-release gate remains DENIED_BY_DEFAULT, all 17 dimensions BLOCKED_UNVERIFIED.

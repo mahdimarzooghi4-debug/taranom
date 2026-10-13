@@ -123,6 +123,10 @@ DISPATCHER_BRANCHES = {
         "sprint-93-center-department-roster",
         "sprint-92-full-ci-test-census",
     ),
+    "sprint-94-doctor-affiliation-history.yml": (
+        "sprint-94-doctor-affiliation-history",
+        "sprint-93-center-department-roster",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
