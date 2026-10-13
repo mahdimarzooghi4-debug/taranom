@@ -160,9 +160,10 @@ public sealed class ProviderQualityJournalDatabaseTests
         Assert.Equal(SyntheticProviderQualityNoteOutcome.Invalid,
             (await Apply(store,c,Note(root,SyntheticProviderQualityNoteAction.RecordUnverifiedIncidentHandoffReference)
                 with{UnverifiedIncidentRef=null})).Outcome);
+        var emptyCase=Case();
         Assert.Equal(SyntheticProviderQualityNoteOutcome.OriginalScopeMissing,
-            (await Apply(store,Case(),Note(root,SyntheticProviderQualityNoteAction.RecordUnverifiedTaranomStandardNote)
-                with{CaseRef=Case()})).Outcome);
+            (await Apply(store,emptyCase,Note(root,SyntheticProviderQualityNoteAction.RecordUnverifiedTaranomStandardNote)
+                with{CaseRef=emptyCase})).Outcome);
         Assert.Equal(1,(await Read(store,c)).Revision);
     }
 
