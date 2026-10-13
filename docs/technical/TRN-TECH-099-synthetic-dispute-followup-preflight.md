@@ -1,0 +1,19 @@
+# TRN-TECH-099 — Two-journal synthetic insurance follow-up preflight
+
+Date: 2026-10-13. Approved Business TRN-BIZ-045/049/050/051/052. Parent: Sprint 89 PR #100, HEAD `58116b9890d3d76acbaad79cdfa4e360ffefd54e`, exact-head Push and PR 14/14 success.
+
+## Bounded technical contract
+
+TRN-BIZ-049 reserves coverage and correction decisions for licensed insurers while permitting Taranom to coordinate member dispute tracking. The existing local-only synthetic PostgreSQL support journal already owns `FOLLOW_UP_UNVERIFIED`, original submission lineage, atomic append+audit, expectedRevision and exact request UUID replay. The existing cost journal owns the preview and unverified choice revisions.
+
+Add only `GET /internal/demo/v1/cost-previews/{previewId}/support-link/{caseRef}/follow-up-preflight?expectedCostChoiceRevision=N&expectedSupportRevision=M`. The isolated localhost 4320 host is guarded by its existing synthetic-only environment and the additional `TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY`. Input must contain canonical lowercase nonzero UUID, test-only case reference, and exactly the two unique decimal query parameters without leading zeros; support revision must be positive. Rehydrate both **existing** source journals, verify original insurance-dispute type, unverified evidence reference `test:cost-preview:<uuid>`, same test-only member and test-only submitter, then require exact revision equality. Re-read both original journals and fail closed on observable revision/fingerprint drift. Return the original immutable submission UUID, original submitter, current source revisions and only synthetic reference fields, with every authority/legal/clinical/financial/release flag `false`. Missing source 404, incorrect scope 409, changed revision 409, invalid input 400, corrupted source 503. Error responses do not expose linked identity/reference fields.
+
+## Actual explicit follow-up
+
+The browser shows the action only after a manually reattested cost-to-support link. On a separate click, it fetches the source-pinned preflight. It constructs a single `FOLLOW_UP_UNVERIFIED` command with new request UUID, expected support revision, original submission UUID, same member/topic/evidence and original submitter, test-only note and claimed note actor. Existing `SupportHttp.WriteAsync` and `PgSyntheticSupportJournal.ApplyAsync` exclusively own validation/append; no new POST, schema, store or decision reducer. On an unambiguous 409 the command is rejected and a fresh review is required; on a lost HTTP ACK it freezes the *exact* original UUID and payload, disabling case editing until manual exact retry. Accepted responses must attest one new revision and the exact note ref/actor; the earlier link result must be invalidated and manually reviewed again. Cross-journal preflight is not an atomic distributed transaction and does not establish insurer or legal truth.
+
+## Tests, gates, explicit non-goals
+
+Real Kestrel/PostgreSQL tests cover preflight, exact replay, concurrent same-revision follows, changed support/cost revisions, source/member/medical-topic mismatch, invalid/doubled query and hostile Host/forwarded. Chromium exercises a manual follow-up, persisted read after reload, lost ACK after genuine PG commit and exact replay, test-only inputs. The existing **14 canonical jobs** remain unchanged and run on the exact Sprint90 Push and permanent Mainline PR CI HEAD. Keep Draft/Open/Unmerged with preliminary COMMENT review; no Stage/QA/Release/Production.
+
+This is not insurer contact, claim adjudication, legal complaint, healthcare receipt, payment, wallet movement, verified member identity or clinical consent. TRN-TECH-012 remains NOT CODE-AUTHORIZED. All 17 national launch criteria remain BLOCKED_UNVERIFIED, first comprehensive nationwide three-market release DENIED_BY_DEFAULT, completion UNBASELINED.

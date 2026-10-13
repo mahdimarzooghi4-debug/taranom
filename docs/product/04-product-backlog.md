@@ -269,3 +269,8 @@ The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fc
 ## Sprint 89 — Frozen-revision audit timeline for unverified cost choice (2026-10-13)
 
 [TRN-TECH-098](../technical/TRN-TECH-098-synthetic-cost-choice-point-in-time-history.md) and [Sprint89](../sprints/95-sprint-89-synthetic-cost-history.md) reuse the canonical append-only PostgreSQL cost choice and audit journal for bounded page-by-page event history and as-of historical versions. An expectedCurrentRevision pins the event cursor to prevent mixed-version pages when a concurrent synthetic writer appends. No legal member choice, payment or insurer adjustment is inferred. Comprehensive first national three-market launch remains DENIED_BY_DEFAULT; all 17 real readiness gates BLOCKED_UNVERIFIED.
+
+
+## Sprint 90 — Manual revision-pinned insurance support follow-up (2026-10-13)
+
+[TRN-TECH-099](../technical/TRN-TECH-099-synthetic-dispute-followup-preflight.md) and [Sprint90](../sprints/96-sprint-90-insurance-followup-journal.md) reuse the existing versioned PostgreSQL insurance support journal: manually cross-verify the member and cost-preview reference, preflight both independent revisions, append a scoped test-only follow-up via the existing support reducer with exact original case lineage, and recover uncertain outcomes by exact UUID replay. No insurer reply, adjustment, legal complaint, payment or clinical authority follows. Nationwide launch remains DENIED_BY_DEFAULT and all 17 requirements BLOCKED_UNVERIFIED.

@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {CostSupportFollowUp} from './cost-support-followup';
 
 // TRN-TECH-097: manual nonbinding insurance-dispute intake against two
 // existing test-only PG journals. No claim of legal receipt or coverage.
@@ -52,6 +53,7 @@ export function CostSupportHandoff({source}:{source:Cost}) {
   const [created,setCreated]=useState(false);
   const [review,setReview]=useState<Correlation|null>(null);
   const [busy,setBusy]=useState(false);
+  const [followUpPending,setFollowUpPending]=useState(false);
   const [message,setMessage]=useState('رابطه دو Journal هنوز بررسی نشده است.');
   const evidence='test:cost-preview:'+source.previewId;
   function reset(ref:string) {
@@ -86,7 +88,7 @@ export function CostSupportHandoff({source}:{source:Cost}) {
     } finally {setBusy(false);}
   }
   async function create(){
-    if(busy||pending||created||!testRef(caseRef))return;
+    if(busy||pending||followUpPending||created||!testRef(caseRef))return;
     setBusy(true);setReview(null);
     let command:Submission|null=null;
     try{
@@ -112,7 +114,7 @@ export function CostSupportHandoff({source}:{source:Cost}) {
     if(command)void sendExact(command);
   }
   async function inspect(){
-    if(busy||pending||!testRef(caseRef))return;
+    if(busy||pending||followUpPending||!testRef(caseRef))return;
     setBusy(true);setReview(null);
     try{
       const res=await fetch('/internal/demo/v1/cost-previews/'+
@@ -134,17 +136,20 @@ export function CostSupportHandoff({source}:{source:Cost}) {
     <p>مرجع شاهد ساختگی: <code dir="ltr">{evidence}</code></p>
     <label>شناسه پرونده اعتراض ساختگی
       <input aria-label="پرونده اختلاف بیمه" dir="ltr" value={caseRef}
-        disabled={busy||pending!==null}
+        disabled={busy||pending!==null||followUpPending}
         onChange={e=>reset(e.target.value)}/>
     </label>
     <div className="actions">
-      <button type="button" disabled={busy||pending!==null||created||!testRef(caseRef)}
+      <button type="button" disabled={busy||pending!==null||followUpPending||created||!testRef(caseRef)}
         onClick={()=>void create()}>ثبت دستی اعتراض آزمایشی در Journal پشتیبانی</button>
-      <button type="button" disabled={busy||pending!==null||!testRef(caseRef)}
+      <button type="button" disabled={busy||pending!==null||followUpPending||!testRef(caseRef)}
         onClick={()=>void inspect()}>راستی‌آزمایی مستقل رابطه دو Journal</button>
       {pending?<button type="button" disabled={busy}
         onClick={()=>void sendExact(pending)}>تکرار دقیق UUID درخواست نامطمئن</button>:null}
     </div>
+    {review?<CostSupportFollowUp source={source} caseRef={caseRef}
+      link={review} onPending={setFollowUpPending}
+      onRecorded={(result)=>{setReview(null);setCreated(true);setMessage(result);}}/>:null}
     {review?<div data-testid="cost-support-linked-result">
       <p>نتیجه: {review.outcome}</p>
       <p>نسخه انتخاب هزینه: {review.costChoiceRevision} · نسخه اعتراض: {review.supportRevision}</p>
