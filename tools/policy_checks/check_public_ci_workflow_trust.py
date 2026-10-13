@@ -187,6 +187,10 @@ DISPATCHER_BRANCHES = {
         "sprint-109-clinical-access-transparency-journal",
         "sprint-108-consent-source-integrity-hardening",
     ),
+    "sprint-110-provider-quality-oversight-journal.yml": (
+        "sprint-110-provider-quality-oversight-journal",
+        "sprint-109-clinical-access-transparency-journal",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

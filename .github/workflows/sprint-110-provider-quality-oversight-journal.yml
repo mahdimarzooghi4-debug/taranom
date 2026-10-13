@@ -1,0 +1,14 @@
+name: Sprint 110 Provider Quality Oversight Journal Full Regression
+on:
+  push:
+    branches: [sprint-110-provider-quality-oversight-journal]
+  pull_request:
+    branches: [sprint-109-clinical-access-transparency-journal]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
