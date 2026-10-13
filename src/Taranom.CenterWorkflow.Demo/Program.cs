@@ -18,6 +18,10 @@ if (connection.Database != "taranom_sprint64_center" ||
 await using var dataSource = NpgsqlDataSource.Create(connection.ConnectionString);
 await PgClinicalCenterJournal.InitializeIsolatedTestSchemaAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
+// TRN-TECH-110: support HTTP must never inherit the schema-owner connection;
+// the support journal gets only bounded DML on its three synthetic tables.
+await using var supportRuntime = await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal
+    .CreateRestrictedTestRuntimeAsync(dataSource, connection);
 // TRN-TECH-095: reuse the EXISTING synthetic cost-awareness tables and
 // append-only event journal only when explicitly enabled in isolated CI.
 if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")
@@ -112,7 +116,7 @@ if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEM
 
 // Separate synthetic-only member support case; no actual member/insurer/provider.
 Taranom.CenterWorkflow.Demo.SupportHttp.Store =
-    new Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal(dataSource);
+    new Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal(supportRuntime);
 app.MapGet("/internal/demo/v1/support/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/support/{caseRef}/commands",

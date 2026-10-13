@@ -679,6 +679,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+      - name: Mint a fresh ephemeral support journal test password
+        run: |
+          password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          printf 'TARANOM_SUPPORT_RUNTIME_TEST_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
       - name: Build existing event-sourced center journal with isolated ASP.NET demo host
         run: |
           dotnet restore src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj

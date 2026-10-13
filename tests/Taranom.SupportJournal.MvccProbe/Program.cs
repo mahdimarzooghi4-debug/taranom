@@ -76,6 +76,80 @@ using (var first = await Accepted(0, true))
     if (first.RootElement.GetProperty("revision").GetInt64() != 1)
         throw new InvalidOperationException("INITIAL_SUPPORT_WRITE_FAILED");
 }
+
+/* TRN-TECH-110: the runtime role used by the actual support HTTP handler
+ * must be distinct from the PG owner and lack power to erase history,
+ * alter schema, or read a different center bounded context. */
+var limited = new NpgsqlConnectionStringBuilder(settings.ConnectionString)
+{
+    Username = "taranom_sprint101_support_test",
+    Password = Environment.GetEnvironmentVariable("TARANOM_SUPPORT_RUNTIME_TEST_PASSWORD")
+        ?? throw new InvalidOperationException("SUPPORT_TEST_PASSWORD_UNAVAILABLE"),
+    Pooling = false
+};
+await using var restricted = NpgsqlDataSource.Create(limited.ConnectionString);
+await using (var runtime = await restricted.OpenConnectionAsync())
+await using (var current = new NpgsqlCommand("""
+    SELECT current_user, session_user, rolsuper, rolcreatedb, rolcreaterole
+    FROM pg_roles WHERE rolname=current_user
+    """, runtime))
+await using (var who = await current.ExecuteReaderAsync())
+{
+    if (!await who.ReadAsync() ||
+        who.GetString(0) != "taranom_sprint101_support_test" ||
+        who.GetString(1) != "taranom_sprint101_support_test" ||
+        who.GetBoolean(2) || who.GetBoolean(3) || who.GetBoolean(4))
+        throw new InvalidOperationException("SUPPORT_RUNTIME_NOT_LOW_PRIVILEGE");
+}
+async Task MustBeDenied(string sql)
+{
+    await using var cn = await restricted.OpenConnectionAsync();
+    await using var cmd = new NpgsqlCommand(sql, cn);
+    cmd.Parameters.AddWithValue("case", caseRef);
+    try
+    {
+        await cmd.ExecuteNonQueryAsync();
+    }
+    catch (PostgresException e) when (e.SqlState == "42501")
+    {
+        return; // PostgreSQL permission denial, not an application stub.
+    }
+    throw new InvalidOperationException("SUPPORT_RUNTIME_UNAUTHORIZED_SQL_SUCCEEDED");
+}
+await MustBeDenied("""
+    UPDATE internal_test_support_event SET command_json='tampered'
+    WHERE case_ref=@case
+    """);
+await MustBeDenied("""
+    DELETE FROM internal_test_support_event WHERE case_ref=@case
+    """);
+await MustBeDenied("""
+    UPDATE internal_test_support_audit SET event_digest='tampered'
+    WHERE case_ref=@case
+    """);
+await MustBeDenied("""
+    DELETE FROM internal_test_support_audit WHERE case_ref=@case
+    """);
+await MustBeDenied("""
+    DELETE FROM internal_test_support_case WHERE case_ref=@case
+    """);
+await MustBeDenied("ALTER TABLE internal_test_support_event DISABLE TRIGGER ALL");
+await MustBeDenied("TRUNCATE TABLE internal_test_support_event CASCADE");
+await MustBeDenied("SELECT count(*) FROM internal_test_center WHERE center_ref=@case");
+await MustBeDenied("SELECT count(*) FROM internal_test_center_event WHERE center_ref=@case");
+await MustBeDenied("CREATE TABLE public.internal_test_support_intruder (id integer)");
+// Reading must still work with the restricted role, as must the existing
+// Kestrel writes that use precisely this datasource.
+await using (var conn = await restricted.OpenConnectionAsync())
+await using (var read = new NpgsqlCommand("""
+    SELECT count(*) FROM internal_test_support_event WHERE case_ref=@case
+    """, conn))
+{
+    read.Parameters.AddWithValue("case", caseRef);
+    if ((long)(await read.ExecuteScalarAsync() ?? 0L) != 1)
+        throw new InvalidOperationException("RUNTIME_CANNOT_READ_OWN_SUPPORT_HISTORY");
+}
+
 await using var pg = NpgsqlDataSource.Create(settings.ConnectionString);
 await using var cn = await pg.OpenConnectionAsync();
 await using var held = await cn.BeginTransactionAsync();
@@ -137,4 +211,4 @@ await using var count = new NpgsqlCommand("""
 count.Parameters.AddWithValue("case", caseRef);
 if ((long)(await count.ExecuteScalarAsync() ?? 0L) != 11)
     throw new InvalidOperationException("SUPPORT_AUDIT_EVENT_COUNT_CHANGED");
-Console.WriteLine("PASS: genuine support writer lock does not block consistent READ ONLY MVCC; concurrent 11-event audited chain, no real authority");
+Console.WriteLine("PASS: support runtime role denied 10 cross-scope/history/DDL mutations; real HTTP MVCC and 11-event audited chain remain intact");

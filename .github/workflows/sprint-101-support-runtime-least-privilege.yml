@@ -1,0 +1,14 @@
+name: Sprint 101 Support Runtime Least Privilege Full Regression
+on:
+  push:
+    branches: [sprint-101-support-runtime-least-privilege]
+  pull_request:
+    branches: [sprint-100-support-mvcc-isolated-read]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

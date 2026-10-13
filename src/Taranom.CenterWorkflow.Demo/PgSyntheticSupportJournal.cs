@@ -12,6 +12,82 @@ namespace Taranom.CenterWorkflow.Demo;
 // All decisions are still delegated to canonical SyntheticSupportIntake.Apply.
 internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
 {
+    // Credentials are a TEST-ONLY CI fixture. These do not authorize
+    // deployment and must never be connected to real member/support data.
+    internal const string RestrictedRuntimeRole = "taranom_sprint101_support_test";
+    internal static async Task<NpgsqlDataSource> CreateRestrictedTestRuntimeAsync(
+        NpgsqlDataSource owner, NpgsqlConnectionStringBuilder admin)
+    {
+        if (Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY") != "CI_EPHEMERAL_ONLY" ||
+            admin.Database != "taranom_sprint64_center" ||
+            admin.Host is not ("127.0.0.1" or "localhost") || admin.Port != 5432)
+            throw new InvalidOperationException("SUPPORT_RESTRICTED_RUNTIME_TEST_ONLY");
+        // A fresh, private-to-this-CI-job credential is supplied by the
+        // ephemeral workflow. No hardcoded or checked-in role password.
+        var password = Environment.GetEnvironmentVariable("TARANOM_SUPPORT_RUNTIME_TEST_PASSWORD");
+        if (password is not { Length: >= 40 and <= 96 } ||
+            password.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_')))
+            throw new InvalidOperationException("SUPPORT_TEST_PASSWORD_UNAVAILABLE");
+
+        // Initialize DDL above with the isolated schema owner, but never
+        // hand that privileged owner datasource to support HTTP handlers.
+        // The runtime needs exactly these DML privileges for the existing
+        // immutable event+paired-audit journal and version CAS.
+        const string grants = """
+            DO $role$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='taranom_sprint101_support_test') THEN
+                    CREATE ROLE taranom_sprint101_support_test
+                        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+                END IF;
+            END;
+            $role$;
+            REVOKE ALL ON TABLE internal_test_support_case,
+                internal_test_support_event, internal_test_support_audit FROM PUBLIC;
+            GRANT USAGE ON SCHEMA public TO taranom_sprint101_support_test;
+            GRANT SELECT, INSERT, UPDATE ON TABLE internal_test_support_case
+                TO taranom_sprint101_support_test;
+            GRANT SELECT, INSERT ON TABLE internal_test_support_event,
+                internal_test_support_audit TO taranom_sprint101_support_test;
+            """;
+        await using (var conn = await owner.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(grants, conn))
+        {
+            await command.ExecuteNonQueryAsync();
+            // Token was validated to ASCII alphanumeric, dash and underscore;
+            // cannot terminate the quoted SQL literal.
+            await using var setPassword = new NpgsqlCommand(
+                "ALTER ROLE taranom_sprint101_support_test PASSWORD '" + password + "'", conn);
+            await setPassword.ExecuteNonQueryAsync();
+        }
+        var restricted = new NpgsqlConnectionStringBuilder(admin.ConnectionString)
+        {
+            Username = RestrictedRuntimeRole, Password = password,
+            Pooling = false
+        };
+        var runtime = NpgsqlDataSource.Create(restricted.ConnectionString);
+        try
+        {
+            await using var conn = await runtime.OpenConnectionAsync();
+            await using var command = new NpgsqlCommand("""
+                SELECT current_user, session_user, rolsuper, rolcreatedb, rolcreaterole
+                FROM pg_roles WHERE rolname=current_user
+                """, conn);
+            await using var row = await command.ExecuteReaderAsync();
+            if (!await row.ReadAsync() ||
+                row.GetString(0) != RestrictedRuntimeRole ||
+                row.GetString(1) != RestrictedRuntimeRole ||
+                row.GetBoolean(2) || row.GetBoolean(3) || row.GetBoolean(4))
+                throw new InvalidOperationException("SUPPORT_RUNTIME_ROLE_NOT_ISOLATED");
+            return runtime;
+        }
+        catch
+        {
+            await runtime.DisposeAsync();
+            throw;
+        }
+    }
+
     internal static async Task InitializeAsync(NpgsqlDataSource data)
     {
         const string sql = """
