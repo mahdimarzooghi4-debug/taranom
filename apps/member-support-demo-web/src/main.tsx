@@ -4,6 +4,7 @@ import { MemberSupportDemo } from './member-support-demo';
 import { CostJournalDemo } from './cost-journal-demo';
 import { PayerEvidenceWorkbench } from './payer-evidence-workbench';
 import { ProofingCorrectionDemo } from './proofing-correction-demo';
+import { LateEvidenceWorkItemDemo } from './late-evidence-work-item-demo';
 import './style.css';
 
 function MemberSupportSurface() {
@@ -21,6 +22,7 @@ function MemberSupportSurface() {
       </div>
       <p><a href="/member-demo/payer">بازرسی آزمایشی تعهد پرداخت در بازارهای فردی، حمایتی و سازمانی</a></p>
       <p><a href="/member-demo/proofing">چرخه آزمایشی اصلاح هویت و احراز مجدد، بدون داده واقعی</a></p>
+      <p><a href="/member-demo/late-evidence">گردش آزمایشی مدرک دوره گذشته و یادداشت بررسی مستقل</a></p>
       <MemberSupportDemo />
       <footer>TRN-TECH-076 | فقط localhost و test: | بدون دسترسی به پرونده بالینی یا مالی</footer>
     </main>
@@ -37,4 +39,7 @@ createRoot(el).render(<StrictMode>{window.location.pathname === '/member-demo/co
   : window.location.pathname === '/member-demo/proofing'
   ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی عضو</a>
       <ProofingCorrectionDemo /></main>
+  : window.location.pathname === '/member-demo/late-evidence'
+  ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی عضو</a>
+      <LateEvidenceWorkItemDemo /></main>
   : <MemberSupportSurface />}</StrictMode>);

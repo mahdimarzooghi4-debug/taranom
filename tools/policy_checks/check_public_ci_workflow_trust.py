@@ -167,6 +167,10 @@ DISPATCHER_BRANCHES = {
         "sprint-104-synthetic-identity-correction-reverification",
         "sprint-103-payer-evidence-operational-workbench",
     ),
+    "sprint-105-late-evidence-human-note-workflow.yml": (
+        "sprint-105-late-evidence-human-note-workflow",
+        "sprint-104-synthetic-identity-correction-reverification",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

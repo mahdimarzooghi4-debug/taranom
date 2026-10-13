@@ -13,3 +13,10 @@ select{display:block;width:100%;padding:.5rem;border:2px solid #456a82;border-ra
 .proofing-workbench button:disabled {opacity:.45}
 .proofing-workbench .history {background:white;border:1px solid #cbd9e1;border-radius:8px;padding:1rem}
 .proofing-workbench strong {font-weight:750}
+
+.late-workbench {max-width:920px;margin:1rem auto;padding:1rem}
+.late-workbench .safety {padding:.9rem;background:#fff4ed;border-right:4px solid #965329}
+.late-workbench fieldset {padding:1rem;border:1px solid #c5d2d9;border-radius:8px;margin:1rem 0}
+.late-workbench .events {background:white;padding:1rem;border-radius:9px}
+.late-workbench label {display:block;margin:.6rem 0}
+.late-workbench button {margin:.35rem}
