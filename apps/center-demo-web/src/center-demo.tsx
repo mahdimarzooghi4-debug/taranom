@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import {DepartmentRoster} from './department-roster';
 import {DoctorAffiliationHistory} from './doctor-affiliation-history';
 import {CenterAuditWorkspace} from './center-audit-workspace';
+import {makeCenterRecoveryReceipt, parseCenterRecoveryReceipt} from './center-command-receipt';
+import type {RecoveryKind, UncertainCenterCommand} from './center-command-receipt';
 
 type Doctor = { doctorRef: string; affiliation: 'PendingIndependentVerification' | 'Ended'; departmentRefs: string[] };
 type Snapshot = {
@@ -66,13 +68,9 @@ function validHistorical(v: unknown, center: string, version: number, current: n
     x.asOfVersion === version && valid(x.snapshot, center) &&
     x.snapshot.currentVersion === version;
 }
-type Kind = 'DEFINE_DEPARTMENT' | 'RECORD_DOCTOR' | 'ASSIGN_DOCTOR' | 'END_DOCTOR';
-// TRN-TECH-106: the exact original command bytes must survive an ambiguous
-// acknowledgement within this one page lifetime. Never synthesize a new UUID
-// or expectedVersion for a manual retry.
-type UncertainCenterCommand = {
-  center: string; expectedVersion: number; kind: Kind; body: string;
-};
+type Kind = RecoveryKind;
+// TRN-TECH-106 retains the exact original request bytes for manual replay.
+// TRN-TECH-107 can export those bytes to human custody across browser reloads.
 const validRef = (value: string) => /^test:[A-Za-z0-9_-]{1,123}$/.test(value) && value.length <= 128;
 function valid(value: unknown, center: string): value is Snapshot {
   if (!value || typeof value !== 'object') return false;
@@ -129,6 +127,9 @@ export function CenterDemo() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState<UncertainCenterCommand | null>(null);
+  const [importText, setImportText] = useState('');
+  const [importFeedback, setImportFeedback] = useState(
+    'ورود رسید فقط به درخواست دستی انجام می‌شود و هیچ دستور شبکه‌ای ارسال نمی‌کند.');
   const [history, setHistory] = useState<HistoryPage | null>(null);
   const [historical, setHistorical] = useState<Historical | null>(null);
   const [historicalVersion, setHistoricalVersion] = useState('0');
@@ -153,9 +154,11 @@ export function CenterDemo() {
       if (!response.ok) throw Error('READ_DENIED');
       const payload: unknown = await response.json();
       if (!valid(payload, center)) throw Error('INVALID_RESPONSE');
-      setSnapshot(payload);
+      // Source read alone cannot conclude an earlier uncertain command.
+      // Do not re-expose a current snapshot as actionable while unresolved.
+      setSnapshot(uncertain ? null : payload);
       setStatus(uncertain
-        ? 'وضعیت مرکز خوانده شد، اما نتیجه دستور قبلی همچنان نامعلوم است؛ فقط همان درخواست را دستی بازیابی کنید.'
+        ? 'منبع خوانده شد، اما نتیجه دستور قبلی نامعلوم است؛ فقط همان درخواست را دستی بازیابی کنید.'
         : 'اطلاعات آزمایشی از PostgreSQL خوانده شد. هیچ مدیر یا پزشک واقعی احراز نشده است.');
     } catch {
       setStatus('خواندن پایگاه‌داده آزمایشی امکان‌پذیر نیست؛ وضعیت معتبر فرض نمی‌شود.');
@@ -240,6 +243,29 @@ export function CenterDemo() {
   async function retryUncertain() {
     if (pending || !uncertain || uncertain.center !== center) return;
     await sendCommand(uncertain);
+  }
+
+  function importReceipt() {
+    if (pending || uncertain) return;
+    const receipt = parseCenterRecoveryReceipt(importText);
+    if (!receipt) {
+      setImportFeedback('رسید رد شد: ساختار یا شناسه یا دستور آزمایشی معتبر نیست. هیچ درخواست HTTP ارسال نشد.');
+      return;
+    }
+    // Explicit import NEVER calls sendCommand or refresh. Only a later
+    // separate human click can submit the original source-pinned bytes.
+    const original = JSON.parse(receipt.body) as {departmentRef: string | null; doctorRef: string | null};
+    setCenter(receipt.center);
+    if (original.departmentRef !== null) setDepartment(original.departmentRef);
+    if (original.doctorRef !== null) setDoctor(original.doctorRef);
+    setSnapshot(null);
+    setHistory(null);
+    setHistorical(null);
+    setHistoryStatus('رسید وارد شد؛ هیچ وضعیت تاریخی معتبر تلقی نمی‌شود.');
+    setUncertain(receipt);
+    setImportText('');
+    setImportFeedback('رسیدِ بدون امضا وارد شد؛ هیچ POST انجام نشده است. فقط با کلیک جداگانه، درخواست قبلی دوباره ارسال می‌شود.');
+    setStatus('درخواست قبلی از رسید دستی بارگذاری شد؛ نتیجه آن نامعلوم است.');
   }
 
   async function loadHistory(afterVersion: number) {
@@ -340,9 +366,27 @@ export function CenterDemo() {
           <button type="button" disabled={pending} onClick={() => void retryUncertain()}>
             تلاش دستی مجدد با همان درخواست
           </button>
-          <p>این رسید فقط در حافظه همین صفحه است. بستن یا بارگذاری مجدد صفحه آن را از بین می‌برد؛
-            نتیجه را ثبت‌شده یا ردشده فرض نکنید. هیچ حقی برای مدیر یا پزشک ایجاد نمی‌شود.</p>
+          <label htmlFor="center-receipt-export">متن رسید آزمایشی برای کپی دستی
+            <textarea id="center-receipt-export" dir="ltr" rows={5} readOnly
+              value={makeCenterRecoveryReceipt(uncertain)} />
+          </label>
+          <p>این JSON بدون امضا و غیرمحرمانه است، صرفاً برای test:. اگر خودتان کپی نکنید،
+            با بستن یا بارگذاری مجدد صفحه از دست می‌رود. کپی آن اثبات ثبت، هویت یا اختیار نیست.</p>
         </section>}
+        <section className="center-receipt-import" aria-label="ورود دستی رسید پس از بارگذاری مجدد">
+          <h3>بازیابی دستی رسید آزمایشی قبلی</h3>
+          <p>فقط متن JSON قبلاً کپی‌شده را وارد کنید. ورود رسید هیچ فرمانی اجرا نمی‌کند؛
+            درخواست فقط پس از کلیک مستقل روی دکمه تلاش مجدد ارسال می‌شود.</p>
+          <label htmlFor="center-receipt-import">چسباندن رسید آزمایشی پس از بارگذاری مجدد
+            <textarea id="center-receipt-import" dir="ltr" rows={4}
+              maxLength={2400} autoComplete="off" spellCheck={false}
+              disabled={pending || !!uncertain} value={importText}
+              onChange={e => setImportText(e.target.value)} />
+          </label>
+          <button type="button" disabled={pending || !!uncertain || !importText.trim()}
+            onClick={importReceipt}>بارگذاری رسید بدون ارسال</button>
+          <p data-testid="center-receipt-feedback" aria-live="polite">{importFeedback}</p>
+        </section>
         <section className="guided-workflow" aria-label="راهنمای چهارمرحله‌ای رویداد مرکز" data-testid="center-guided-flow">
           <h3>راهنمای عملی ثبت رخدادهای مرکز — فقط داده ساختگی</h3>
           <p>مرحله بعد صرفاً از آخرین نسخه خوانده‌شده PostgreSQL انتخاب می‌شود.

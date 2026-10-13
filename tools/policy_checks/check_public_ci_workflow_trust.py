@@ -139,6 +139,10 @@ DISPATCHER_BRANCHES = {
         "sprint-97-center-uncertain-command-recovery",
         "sprint-96-center-mvcc-snapshot-isolation",
     ),
+}    "sprint-98-center-portable-retry-receipt.yml": (
+        "sprint-98-center-portable-retry-receipt",
+        "sprint-97-center-uncertain-command-recovery",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
