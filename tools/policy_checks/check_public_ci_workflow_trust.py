@@ -143,11 +143,11 @@ DISPATCHER_BRANCHES = {
         "sprint-98-center-portable-retry-receipt",
         "sprint-97-center-uncertain-command-recovery",
     ),
-}    "sprint-99-selective-center-doctor-unassignment.yml": (
+    "sprint-99-selective-center-doctor-unassignment.yml": (
         "sprint-99-selective-center-doctor-unassignment",
         "sprint-98-center-portable-retry-receipt",
     ),
-
+}
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
     "internal-contract-tests",

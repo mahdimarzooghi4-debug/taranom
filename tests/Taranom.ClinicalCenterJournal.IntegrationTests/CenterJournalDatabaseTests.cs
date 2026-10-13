@@ -400,7 +400,8 @@ public sealed class CenterJournalDatabaseTests
     {
         var (db, store) = await ConnectAsync();
         await using var _ = db;
-        var center = NewCenter("selective"), doctor = "test:doctor";
+        var center = NewCenter("selective");
+        var doctor = "test:doctor";
         var a = "test:ward-a"; var b = "test:ward-b";
         await Apply(store, center, Cmd(center, CenterCommandKind.DefineDepartment, 0, a));
         await Apply(store, center, Cmd(center, CenterCommandKind.DefineDepartment, 1, b));
