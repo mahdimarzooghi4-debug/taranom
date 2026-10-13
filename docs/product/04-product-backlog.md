@@ -284,3 +284,8 @@ The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fc
 ## Sprint 92 — mandatory source-to-runner test census (2026-10-13)
 
 [TRN-TECH-101](../technical/TRN-TECH-101-mandatory-full-ci-test-census.md) and [Sprint92](../sprints/98-sprint-92-full-ci-test-census.md) address silent omission of `test_*.py` files from the canonical full-CI workflow: a green job cannot attest to a test never invoked. The read-only checker compares all existing policy, Ops HTTP and Center/PostgreSQL Python test scripts with exact executable test commands under their canonical job, rejects omitted, duplicate, noncanonical, renamed, symlinked and mislocated files, and preserves the unfiltered Chromium calls. Sprint 87's previously omitted mainline security test is now explicitly executed. This is a real CI coverage admission guard, not a product completeness percentage, code approval, Stage or national release.
+
+
+## Sprint 93 — Center department doctor-affiliation roster (2026-10-13)
+
+[TRN-TECH-102](../technical/TRN-TECH-102-center-department-doctor-roster.md) and [Sprint93](../sprints/99-sprint-93-center-department-roster.md) introduce a version-pinned, read-only `Center → Department → unverified DoctorAffiliation` roster, derived exclusively from the existing canonical PostgreSQL center event/audit journal. It supports historical observation of the department before an affiliation ends, without keeping ended doctors on the current roster, and rejects stale revision, cross-center, real identifiers and forged legal/clinical/financial permission. No separate network admin, real doctor signup, licence, contract or health-record access is introduced. National launch remains DENIED_BY_DEFAULT and the 17 external gates BLOCKED_UNVERIFIED.

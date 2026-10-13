@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import {DepartmentRoster} from './department-roster';
 
 type Doctor = { doctorRef: string; affiliation: 'PendingIndependentVerification' | 'Ended'; departmentRefs: string[] };
 type Snapshot = {
@@ -313,6 +314,9 @@ export function CenterDemo() {
           </div>
         </section>}
       </section>
+      {snapshot && <DepartmentRoster
+        key={center+':'+department+':'+snapshot.currentVersion}
+        center={center} department={department} version={snapshot.currentVersion}/>}
       <section className="panel" aria-labelledby="history-heading">
         <h2 id="history-heading">تاریخچه ثبت‌شده و بازسازی نسخه‌های گذشته (صرفاً آزمایشی)</h2>
         <p>رخدادها از ژورنال PostgreSQL همراه با کنترل یکپارچگی مجدد خوانده می‌شوند؛ نمایش آن‌ها مجوز فعالیت بالینی یا تأیید مدیر نیست.</p>
