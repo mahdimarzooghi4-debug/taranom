@@ -741,6 +741,9 @@ jobs:
           fi
           python3 tests/center_demo/test_real_center_demo_http.py
           python3 tests/center_demo/test_support_history_http.py
+          # TRN-TECH-109: genuine concurrent writer lock + unlocked read,
+          # same synthetic PostgreSQL source and current loopback host.
+          dotnet run --project tests/Taranom.SupportJournal.MvccProbe/Taranom.SupportJournal.MvccProbe.csproj --configuration Release
           python3 tests/center_demo/test_cost_journal_http.py
           python3 tests/center_demo/test_cost_support_handoff_http.py
           python3 tests/center_demo/test_cost_history_http.py

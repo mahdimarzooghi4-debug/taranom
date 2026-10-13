@@ -147,6 +147,10 @@ DISPATCHER_BRANCHES = {
         "sprint-99-selective-center-doctor-unassignment",
         "sprint-98-center-portable-retry-receipt",
     ),
+    "sprint-100-support-mvcc-isolated-read.yml": (
+        "sprint-100-support-mvcc-isolated-read",
+        "sprint-99-selective-center-doctor-unassignment",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -62,8 +62,13 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
     {
         EnsureSynthetic(caseRef);
         await using var conn = await database.OpenConnectionAsync();
-        await using var tx = await conn.BeginTransactionAsync();
-        var state = await RehydrateAsync(conn, tx, caseRef);
+        // One committed PostgreSQL MVCC snapshot for header, journal and
+        // paired audit. Never block behind a writer's case-row FOR UPDATE.
+        await using var tx = await conn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead);
+        await using (var readOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", conn, tx))
+            await readOnly.ExecuteNonQueryAsync();
+        var state = await RehydrateAsync(conn, tx, caseRef, lockCaseRow: false);
         await tx.CommitAsync();
         return state;
     }
@@ -134,12 +139,18 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
     }
 
     private static async Task<SyntheticSupportSnapshot> RehydrateAsync(
-        NpgsqlConnection conn, NpgsqlTransaction tx, string caseRef)
+        NpgsqlConnection conn, NpgsqlTransaction tx, string caseRef,
+        bool lockCaseRow = true)
     {
         long latest;
-        await using (var header = new NpgsqlCommand("""
+        // Writers MUST retain case-row locking and CAS. Read-only callers
+        // query the same header WITHOUT FOR UPDATE within REPEATABLE READ.
+        await using (var header = new NpgsqlCommand(lockCaseRow ? """
             SELECT current_revision FROM internal_test_support_case
             WHERE case_ref=@case FOR UPDATE
+            """ : """
+            SELECT current_revision FROM internal_test_support_case
+            WHERE case_ref=@case
             """, conn, tx))
         {
             header.Parameters.AddWithValue("case", caseRef);

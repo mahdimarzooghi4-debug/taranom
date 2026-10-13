@@ -1,0 +1,14 @@
+name: Sprint 100 Support MVCC Isolated Read Full Regression
+on:
+  push:
+    branches: [sprint-100-support-mvcc-isolated-read]
+  pull_request:
+    branches: [sprint-99-selective-center-doctor-unassignment]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
