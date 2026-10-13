@@ -172,6 +172,11 @@ def main():
         code, _, state = call(case + "/commands", command(expected, kind, d, doc))
         assert code == 200 and state["outcome"] == "Applied"
         assert state["currentVersion"] == expected + 1
+    # The original HTTP body/UUID may be replayed even after later accepted
+    # center events. Reissuing a newly generated UUID would not prove this.
+    code, _, late_replay = call(case + "/commands", first)
+    assert code == 200 and late_replay["outcome"] == "Replayed"
+    assert late_replay["currentVersion"] == 4 and late_replay["eventCount"] == 4
     code, _, state = call(case)
     assert code == 200 and state["currentVersion"] == 4 and state["eventCount"] == 4
     assert state["departments"] == [dept]

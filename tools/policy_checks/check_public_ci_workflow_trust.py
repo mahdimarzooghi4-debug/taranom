@@ -135,6 +135,10 @@ DISPATCHER_BRANCHES = {
         "sprint-96-center-mvcc-snapshot-isolation",
         "sprint-95-center-audit-workspace",
     ),
+    "sprint-97-center-uncertain-command-recovery.yml": (
+        "sprint-97-center-uncertain-command-recovery",
+        "sprint-96-center-mvcc-snapshot-isolation",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

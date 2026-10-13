@@ -67,6 +67,12 @@ function validHistorical(v: unknown, center: string, version: number, current: n
     x.snapshot.currentVersion === version;
 }
 type Kind = 'DEFINE_DEPARTMENT' | 'RECORD_DOCTOR' | 'ASSIGN_DOCTOR' | 'END_DOCTOR';
+// TRN-TECH-106: the exact original command bytes must survive an ambiguous
+// acknowledgement within this one page lifetime. Never synthesize a new UUID
+// or expectedVersion for a manual retry.
+type UncertainCenterCommand = {
+  center: string; expectedVersion: number; kind: Kind; body: string;
+};
 const validRef = (value: string) => /^test:[A-Za-z0-9_-]{1,123}$/.test(value) && value.length <= 128;
 function valid(value: unknown, center: string): value is Snapshot {
   if (!value || typeof value !== 'object') return false;
@@ -122,6 +128,7 @@ export function CenterDemo() {
   const [doctor, setDoctor] = useState('test:doctor-demo');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [pending, setPending] = useState(false);
+  const [uncertain, setUncertain] = useState<UncertainCenterCommand | null>(null);
   const [history, setHistory] = useState<HistoryPage | null>(null);
   const [historical, setHistorical] = useState<Historical | null>(null);
   const [historicalVersion, setHistoricalVersion] = useState('0');
@@ -147,49 +154,93 @@ export function CenterDemo() {
       const payload: unknown = await response.json();
       if (!valid(payload, center)) throw Error('INVALID_RESPONSE');
       setSnapshot(payload);
-      setStatus('اطلاعات آزمایشی از PostgreSQL خوانده شد. هیچ مدیر یا پزشک واقعی احراز نشده است.');
+      setStatus(uncertain
+        ? 'وضعیت مرکز خوانده شد، اما نتیجه دستور قبلی همچنان نامعلوم است؛ فقط همان درخواست را دستی بازیابی کنید.'
+        : 'اطلاعات آزمایشی از PostgreSQL خوانده شد. هیچ مدیر یا پزشک واقعی احراز نشده است.');
     } catch {
       setStatus('خواندن پایگاه‌داده آزمایشی امکان‌پذیر نیست؛ وضعیت معتبر فرض نمی‌شود.');
     } finally {
       setPending(false);
     }
   }
+  // Manual replay has exactly the same URI, byte-for-byte JSON body,
+  // original requestId and original expectedVersion, even if a later read
+  // sees another center revision. The PostgreSQL journal decides the result.
+  async function sendCommand(receipt: UncertainCenterCommand) {
+    setPending(true);
+    try {
+      const response = await fetch('/internal/demo/v1/centers/' +
+        encodeURIComponent(receipt.center) + '/commands', {
+        method: 'POST', credentials: 'omit', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' }, body: receipt.body
+      });
+      const payload: unknown = await response.json();
+      if (!valid(payload, receipt.center)) throw Error('UNVERIFIED_COMMAND_RESULT');
+
+      const accepted = response.status === 200 &&
+        ((payload.outcome === 'Applied' &&
+          payload.currentVersion === receipt.expectedVersion + 1) ||
+         (payload.outcome === 'Replayed' &&
+          payload.currentVersion > receipt.expectedVersion));
+      const rejected = response.status === 409 &&
+        (payload.outcome === 'StaleRevision' ||
+         payload.outcome === 'ConflictingReplay' ||
+         payload.outcome === 'NotApplicable') &&
+        payload.currentVersion >= receipt.expectedVersion;
+      if (!accepted && !rejected) throw Error('UNRECOGNIZED_COMMAND_RESULT');
+
+      // Only a verified conclusive database response resolves uncertainty.
+      setUncertain(null);
+      setSnapshot(payload);
+      setHistory(null);
+      setHistorical(null);
+      setHistoryStatus('با پاسخ قطعی ژورنال، نماهای تاریخی قبلی پاک شدند؛ دوباره بخوانید.');
+      setStatus(accepted
+        ? (payload.outcome === 'Applied'
+          ? texts[receipt.kind] + ' — فقط در پایگاه آزمایشی ثبت شد.'
+          : 'درخواست تکراری با همان شناسه بازیابی شد؛ هیچ رخداد جدیدی ایجاد نشد.')
+        : 'عملیات اعمال نشد: ' + payload.outcome + '؛ نسخه واقعی آزمایشی نمایش داده شد.');
+    } catch {
+      // Dropped HTTP ACK, invalid JSON, non-attested response or 503 cannot
+      // tell the browser whether PostgreSQL committed. No automatic retry.
+      setUncertain(receipt);
+      setSnapshot(null);
+      setHistory(null);
+      setHistorical(null);
+      setHistoryStatus('نتیجه نوشتن نامعلوم است؛ اطلاعات تاریخی قبلی نامعتبر شد.');
+      setStatus('نتیجه ثبت نامعلوم است؛ درخواست اصلی فقط در حافظه همین صفحه نگه داشته شد. از ارسال دستور تازه خودداری کنید.');
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function apply(kind: Kind) {
-    if (!snapshot || pending) return;
+    if (!snapshot || pending || uncertain) return;
     const dep = kind === 'DEFINE_DEPARTMENT' || kind === 'ASSIGN_DOCTOR' ? department : null;
     const doc = kind === 'DEFINE_DEPARTMENT' ? null : doctor;
     if (!validRef(center) || dep !== null && !validRef(dep) || doc !== null && !validRef(doc)) {
       setStatus('شناسه‌های بخش و پزشک باید آزمایشی و با پیشوند test: باشند.');
       return;
     }
-    setPending(true);
-    try {
-      const response = await fetch('/internal/demo/v1/centers/' + encodeURIComponent(center) + '/commands', {
-        method: 'POST', credentials: 'omit', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestId: crypto.randomUUID(), expectedVersion: snapshot.currentVersion,
-          kind, departmentRef: dep, doctorRef: doc
-        })
-      });
-      const payload: unknown = await response.json();
-      if (!valid(payload, center)) throw Error('INVALID_RESULT');
-      setSnapshot(payload);
-      setHistory(null);
-      setHistorical(null);
-      setHistoryStatus('با تغییر نسخه، تاریخچه قبلی نامعتبر شد؛ دوباره بخوانید.');
-      setStatus(response.ok
-        ? (payload.outcome === 'Applied' ? texts[kind] + ' — فقط در پایگاه آزمایشی ثبت شد.' :
-          'درخواست تکراری؛ هیچ رخداد جدیدی ایجاد نشد.')
-        : 'عملیات اعمال نشد: ' + payload.outcome + '؛ نسخه آزمایشی فعلی نمایش داده شد.');
-    } catch {
-      setSnapshot(null);
-      setStatus('عملیات ناموفق بود؛ وضعیت پایگاه‌داده نامعلوم است. ابتدا دوباره بخوانید.');
-    } finally {
-      setPending(false);
+    if (!Number.isSafeInteger(snapshot.currentVersion) ||
+        snapshot.currentVersion >= Number.MAX_SAFE_INTEGER) {
+      setStatus('نسخه خوانده‌شده برای ثبت امن نیست؛ هیچ دستور جدیدی ارسال نشد.');
+      return;
     }
+    const receipt: UncertainCenterCommand = {
+      center, expectedVersion: snapshot.currentVersion, kind,
+      body: JSON.stringify({
+        requestId: crypto.randomUUID(), expectedVersion: snapshot.currentVersion,
+        kind, departmentRef: dep, doctorRef: doc
+      })
+    };
+    await sendCommand(receipt);
   }
 
+  async function retryUncertain() {
+    if (pending || !uncertain || uncertain.center !== center) return;
+    await sendCommand(uncertain);
+  }
 
   async function loadHistory(afterVersion: number) {
     if (!snapshot || pending) return;
@@ -242,7 +293,9 @@ export function CenterDemo() {
     }
   }
 
-  const guidedStep=nextCenterStep(snapshot,center,department,doctor);
+  const guidedStep=uncertain
+    ? {code:'READ_FIRST', action:null, label:'نتیجه دستور پیشین نامعلوم است؛ ثبت مرحله تازه تا بازیابی همان درخواست ممنوع است.'} as NextCenterStep
+    : nextCenterStep(snapshot,center,department,doctor);
   return <>
     <a href="#main" className="skip">پرش به محتوای اصلی</a>
     <header>
@@ -259,22 +312,37 @@ export function CenterDemo() {
         <h2 id="center-workflow">گردش کامل آزمایشی مرکز</h2>
         <div className="fields">
           <label htmlFor="center">شناسه مرکز آزمایشی
-            <input id="center" dir="ltr" value={center} onChange={e => setCenter(e.target.value)} autoComplete="off" />
+            <input id="center" dir="ltr" value={center} disabled={pending || !!uncertain}
+              onChange={e => setCenter(e.target.value)} autoComplete="off" />
           </label>
           <label htmlFor="department">شناسه بخش آزمایشی
-            <input id="department" dir="ltr" value={department} onChange={e => setDepartment(e.target.value)} autoComplete="off" />
+            <input id="department" dir="ltr" value={department} disabled={pending || !!uncertain}
+              onChange={e => setDepartment(e.target.value)} autoComplete="off" />
           </label>
           <label htmlFor="doctor">شناسه پزشک آزمایشی
-            <input id="doctor" dir="ltr" value={doctor} onChange={e => setDoctor(e.target.value)} autoComplete="off" />
+            <input id="doctor" dir="ltr" value={doctor} disabled={pending || !!uncertain}
+              onChange={e => setDoctor(e.target.value)} autoComplete="off" />
           </label>
         </div>
         <div className="actions">
           <button type="button" disabled={pending} onClick={() => void refresh()}>بازخوانی مرکز از PostgreSQL</button>
           {(Object.keys(texts) as Kind[]).map(kind =>
-            <button key={kind} type="button" disabled={!snapshot || pending} onClick={() => void apply(kind)}>
+            <button key={kind} type="button" disabled={!snapshot || pending || !!uncertain} onClick={() => void apply(kind)}>
               {texts[kind]}
             </button>)}
         </div>
+        {uncertain && <section role="alert" className="center-uncertain" aria-label="بازیابی دستور با نتیجه نامعلوم">
+          <h3>وضعیت ثبت دستور نامعلوم است — فقط آزمایشی</h3>
+          <p>پاسخ قطعی PostgreSQL به مرورگر نرسیده است؛ ممکن است رویداد قبلاً ثبت شده باشد.
+            دکمه زیر فقط با همان شناسه درخواست، نسخه قبلی و متن تغییرناکرده دستور دوباره ارسال می‌کند.
+            هیچ تکرار خودکار یا دستور تازه‌ای مجاز نیست.</p>
+          <p>مرکز: <code>{uncertain.center}</code> | نسخه اولیه: {uncertain.expectedVersion}</p>
+          <button type="button" disabled={pending} onClick={() => void retryUncertain()}>
+            تلاش دستی مجدد با همان درخواست
+          </button>
+          <p>این رسید فقط در حافظه همین صفحه است. بستن یا بارگذاری مجدد صفحه آن را از بین می‌برد؛
+            نتیجه را ثبت‌شده یا ردشده فرض نکنید. هیچ حقی برای مدیر یا پزشک ایجاد نمی‌شود.</p>
+        </section>}
         <section className="guided-workflow" aria-label="راهنمای چهارمرحله‌ای رویداد مرکز" data-testid="center-guided-flow">
           <h3>راهنمای عملی ثبت رخدادهای مرکز — فقط داده ساختگی</h3>
           <p>مرحله بعد صرفاً از آخرین نسخه خوانده‌شده PostgreSQL انتخاب می‌شود.
@@ -288,7 +356,7 @@ export function CenterDemo() {
             <li>انتساب آزمایشی پزشک به بخش</li>
             <li>پایان وابستگی آزمایشی پزشک</li>
           </ol>
-          {guidedStep.action && <button type="button" disabled={!snapshot || pending}
+          {guidedStep.action && <button type="button" disabled={!snapshot || pending || !!uncertain}
             onClick={() => void apply(guidedStep.action!)}>
             ثبت مرحله بعد در PostgreSQL
           </button>}
