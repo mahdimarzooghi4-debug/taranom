@@ -212,3 +212,140 @@ count.Parameters.AddWithValue("case", caseRef);
 if ((long)(await count.ExecuteScalarAsync() ?? 0L) != 11)
     throw new InvalidOperationException("SUPPORT_AUDIT_EVENT_COUNT_CHANGED");
 Console.WriteLine("PASS: support runtime role denied 10 cross-scope/history/DDL mutations; real HTTP MVCC and 11-event audited chain remain intact");
+
+
+/* TRN-TECH-111 — genuine cost journal PostgreSQL writer lock and complete
+ * committed choice history via the ORIGINAL source-backed Kestrel route.
+ * No real money, insurer entitlement or authenticated clinical consent. */
+if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") != "CI_EPHEMERAL_ONLY")
+    throw new InvalidOperationException("SYNTHETIC_COST_PROBE_DISABLED");
+http.DefaultRequestHeaders.TryAddWithoutValidation("Origin","http://127.0.0.1:4320");
+var costId = Guid.NewGuid();
+var costMember = "test:cost-mvcc-" + suffix;
+var costRoot = "internal/demo/v1/cost-previews/" + costId.ToString("D");
+var components = new[] {
+    "ProviderService","PrimaryInsurance","SupplementalInsurance",
+    "TreatmentCredit","MemberRemainder"
+};
+var sample = new {
+    memberRef = costMember, previewId = costId, previewRevision = 1L,
+    lines = components.Select(component => new {
+        component, state = "Missing", amount = (string?)null,
+        currency = (string?)null, sourceRef = (string?)null,
+        evidenceRef = (Guid?)null, sourceRevision = 0L
+    }).ToArray()
+};
+using var costRegister = await http.PostAsJsonAsync(
+    "internal/demo/v1/cost-previews", sample);
+if (!costRegister.IsSuccessStatusCode)
+    throw new InvalidOperationException("COST_PREVIEW_REGISTRATION_FAILED");
+using var costRegistered = await JsonDocument.ParseAsync(
+    await costRegister.Content.ReadAsStreamAsync());
+var costFingerprint = costRegistered.RootElement.GetProperty(
+    "previewFingerprint").GetString()
+    ?? throw new InvalidOperationException("MISSING_COST_FINGERPRINT");
+if (costRegistered.RootElement.GetProperty("choiceRevision").GetInt64() != 0 ||
+    costRegistered.RootElement.GetProperty("historyCount").GetInt32() != 0 ||
+    costFingerprint.Length != 64)
+    throw new InvalidOperationException("COST_PREVIEW_SOURCE_INVALID");
+
+async Task<JsonDocument> ReadCost()
+{
+    using var response = await http.GetAsync(costRoot);
+    if (!response.IsSuccessStatusCode)
+        throw new InvalidOperationException("COST_MVCC_READ_FAILED");
+    var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+    var body = doc.RootElement;
+    foreach (var flag in new[] {
+        "memberAuthenticated","officialChoiceRecorded","choiceSignatureValid",
+        "financialCommitmentCreated","clinicalConsentGranted","walletMutated",
+        "insurerEntitlementVerified","officialEstimateVerified",
+        "nationalReleaseAllowed"
+    })
+        if (body.GetProperty(flag).GetBoolean())
+            throw new InvalidOperationException("COST_REAL_RIGHTS_ESCALATION");
+    var version = body.GetProperty("choiceRevision").GetInt64();
+    if (body.GetProperty("contract").GetString() != "TRN-TECH-095" ||
+        !body.GetProperty("syntheticOnly").GetBoolean() ||
+        body.GetProperty("previewId").GetGuid() != costId ||
+        body.GetProperty("memberRef").GetString() != costMember ||
+        body.GetProperty("previewFingerprint").GetString() != costFingerprint ||
+        body.GetProperty("historyCount").GetInt64() != version)
+        throw new InvalidOperationException("COST_JOURNAL_MIXED_SNAPSHOT");
+    return doc;
+}
+
+using (var lockedConn = await pg.OpenConnectionAsync())
+await using (var lockedTx = await lockedConn.BeginTransactionAsync())
+{
+    try
+    {
+        // The preview guard allows precisely OLD+1. Hold the uncommitted
+        // first choice revision with a real SQL UPDATE row lock, but do NOT
+        // insert any event. The reader must see committed revision zero.
+        await using var update = new NpgsqlCommand("""
+            UPDATE internal_test_cost_preview SET choice_revision=1
+            WHERE preview_ref=@preview AND choice_revision=0
+            """, lockedConn, lockedTx);
+        update.Parameters.AddWithValue("preview",costId);
+        if (await update.ExecuteNonQueryAsync() != 1)
+            throw new InvalidOperationException("COST_ROW_NOT_LOCKED");
+        var clock = Stopwatch.StartNew();
+        var inFlight = ReadCost();
+        if (await Task.WhenAny(inFlight,Task.Delay(TimeSpan.FromSeconds(7))) != inFlight)
+            throw new InvalidOperationException("COST_READ_BLOCKED_BEHIND_WRITER");
+        using var committed = await inFlight;
+        if (clock.Elapsed > TimeSpan.FromSeconds(7) ||
+            committed.RootElement.GetProperty("choiceRevision").GetInt64() != 0)
+            throw new InvalidOperationException("COST_DIRTY_UNCOMMITTED_REVISION");
+    }
+    finally { await lockedTx.RollbackAsync(); }
+}
+
+async Task ChoiceWriteSeries()
+{
+    for (long i = 0; i < 8; i++)
+    {
+        using var response = await http.PostAsJsonAsync(costRoot + "/choices", new {
+            requestId = Guid.NewGuid(), expectedRevision = i,
+            memberRef = costMember, previewId = costId,
+            previewRevision = 1L, previewFingerprint = costFingerprint,
+            choice = i % 2 == 0 ? "AcknowledgedUncertainty" : "Deferred"
+        });
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException("COST_CONCURRENT_WRITE_REJECTED");
+        using var accepted = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync());
+        if (accepted.RootElement.GetProperty("outcome").GetString()
+                != "RecordedUnverified" ||
+            accepted.RootElement.GetProperty("choiceRevision").GetInt64() != i + 1)
+            throw new InvalidOperationException("COST_WRONG_WRITE_REVISION");
+        await Task.Yield();
+    }
+}
+async Task CostReadSeries()
+{
+    for (var i = 0; i < 14; i++)
+    {
+        using var read = await ReadCost();
+        await Task.Yield();
+    }
+}
+await Task.WhenAll(ChoiceWriteSeries(), CostReadSeries(), CostReadSeries());
+using (var final = await ReadCost())
+{
+    if (final.RootElement.GetProperty("choiceRevision").GetInt64() != 8 ||
+        final.RootElement.GetProperty("historyCount").GetInt32() != 8 ||
+        final.RootElement.GetProperty("lastUnverifiedChoice").GetString() != "Deferred")
+        throw new InvalidOperationException("COST_FINAL_VERIFIED_READ_INVALID");
+}
+await using (var audit = new NpgsqlCommand("""
+    SELECT count(*) FROM internal_test_cost_choice_audit WHERE preview_ref=@preview
+    """, cn))
+{
+    audit.Parameters.AddWithValue("preview",costId);
+    if ((long)(await audit.ExecuteScalarAsync() ?? 0L) != 8)
+        throw new InvalidOperationException("COST_PAIRED_AUDIT_MISSING");
+}
+Console.WriteLine("PASS: cost journal unlocked read-only MVCC under real writer row lock; 8 concurrent source-backed choices/audits and all financial/clinical grants denied");
+

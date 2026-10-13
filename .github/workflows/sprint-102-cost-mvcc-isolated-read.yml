@@ -1,0 +1,14 @@
+name: Sprint 102 Cost MVCC Isolated Read Full Regression
+on:
+  push:
+    branches: [sprint-102-cost-mvcc-isolated-read]
+  pull_request:
+    branches: [sprint-101-support-runtime-least-privilege]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

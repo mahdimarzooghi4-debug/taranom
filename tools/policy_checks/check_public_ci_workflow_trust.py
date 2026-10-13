@@ -155,6 +155,10 @@ DISPATCHER_BRANCHES = {
         "sprint-101-support-runtime-least-privilege",
         "sprint-100-support-mvcc-isolated-read",
     ),
+    "sprint-102-cost-mvcc-isolated-read.yml": (
+        "sprint-102-cost-mvcc-isolated-read",
+        "sprint-101-support-runtime-least-privilege",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
