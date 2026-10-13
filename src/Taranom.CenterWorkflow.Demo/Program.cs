@@ -126,6 +126,12 @@ app.MapGet("/internal/demo/v1/support/{caseRef}/history",
 app.MapGet("/internal/demo/v1/support/{caseRef}/versions/{revision}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHistoryHttp.AtVersionAsync);
 
+// TRN-TECH-112: a stateless and synthetic-only inspection of the already
+// accepted three-market payer/individual-ownership decision. No membership
+// activation, payment, wallet, sponsor access or external API.
+app.MapPost("/internal/demo/v1/payer-evidence/check",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.PayerEvidenceHttp.CheckAsync);
+
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 // Exact local member entrypoint is required: the generic root fallback must
 // never silently render the CENTER HTML for a MEMBER browser path.
@@ -134,6 +140,9 @@ app.MapGet("/", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "index.html"), "text/html; charset=utf-8"));
 app.MapGet("/member-demo/", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+        "member-demo", "index.html"), "text/html; charset=utf-8"));
+app.MapGet("/member-demo/payer", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
 if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")

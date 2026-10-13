@@ -159,6 +159,10 @@ DISPATCHER_BRANCHES = {
         "sprint-102-cost-mvcc-isolated-read",
         "sprint-101-support-runtime-least-privilege",
     ),
+    "sprint-103-payer-evidence-operational-workbench.yml": (
+        "sprint-103-payer-evidence-operational-workbench",
+        "sprint-102-cost-mvcc-isolated-read",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

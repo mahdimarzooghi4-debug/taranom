@@ -1,0 +1,9 @@
+# Sprint 103 — Source-evaluated individual/sponsor payer boundary over real test-only HTTP and browser
+
+**Date:** 2026-10-13 | **Technical:** [TRN-TECH-112](../technical/TRN-TECH-112-three-market-payer-evidence-workbench.md) | **Business:** TRN-BIZ-028/029/024/025/026/035 | **Epics:** TRN-EP-01/03/08/12/13. **Parent:** PR #113 Draft/Open `a82b276927984fd6e9b8609087e60d2360165634`, Push #38391475561 and Mainline PR #38391479601 exact 14/14 green, Code Review COMMENTED only.
+
+**Substantive operational gap:** earlier three-market payer policy browser preview only used market + funding mode. The canonical strict member/contract/tenant/wallet-owner evidence gate had no real HTTP/browser path. Build one stateless Kestrel test-only endpoint reusing `SyntheticSubscriptionPayerBoundary.Evaluate` verbatim, with exact 14-field bounded POST and all denied rights. Add a separate Persian RTL interactive three-market workbench for 7 synthetic identity/contract refs and four evidence checks, with no stale-result retention or live authentication. No payment, activation, actual contract or medical/insurer consent.
+
+**Tests:** real Chromium and Kestrel for 5 permissible combinations that at most return FundingEvidencePresentOnly, exact cross-member/tenant and wrong market payer denials, sponsor private-clinical/wallet/cash denials even with all claimed flags Confirmed, missing/rejected evidence 409, invalid/origin spoof/duplicate JSON 400/403, responsive UI and stale response clearing. Existing 14-job full CI with PostgreSQL/Member/Center/Ops browsers, recovery, static workflow trust and national gates unchanged.
+
+**Governance:** No real identity/financial/health claims, no Code Authorization for actual Member BFF; all 17 national release gates BLOCKED_UNVERIFIED and comprehensive national first-release DENIED_BY_DEFAULT; completion UNBASELINED. Draft/Open/Unmerged, no Ready/Merge/Stage/QA/Release/Production; Code Review COMMENT preliminary only.
