@@ -131,6 +131,10 @@ DISPATCHER_BRANCHES = {
         "sprint-95-center-audit-workspace",
         "sprint-94-doctor-affiliation-history",
     ),
+    "sprint-96-center-mvcc-snapshot-isolation.yml": (
+        "sprint-96-center-mvcc-snapshot-isolation",
+        "sprint-95-center-audit-workspace",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
