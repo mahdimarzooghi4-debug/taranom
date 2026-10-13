@@ -175,6 +175,10 @@ DISPATCHER_BRANCHES = {
         "sprint-106-nonclinical-care-coordination-journal",
         "sprint-105-late-evidence-human-note-workflow",
     ),
+    "sprint-107-source-backed-epic-progress-ops.yml": (
+        "sprint-107-source-backed-epic-progress-ops",
+        "sprint-106-nonclinical-care-coordination-journal",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -166,3 +166,72 @@ test('OPS-AUTHORITY-04: normal real browser still displays mandatory 17 denied r
   await page.reload();
   await expect(page.locator('.dimensions li')).toHaveCount(17);
 });
+
+test('PROGRESS107-01 real Ops API projects all 39 unaccepted candidate evidence slots and 17 denied gates',async({request})=>{
+ const response=await request.get('/internal/ops/v1/epic-progress');
+ expect(response.status()).toBe(200);
+ expect(response.headers()['cache-control']).toBe('no-store');
+ expect(response.headers()['access-control-allow-origin']).toBeUndefined();
+ const body=await response.json();
+ expect(body.contract).toBe('TRN-TECH-116');
+ expect(body.status).toBe('DRAFT_EVIDENCE_CATALOG_ONLY');
+ expect(body.releaseAdmission).toBe('DENIED_BY_DEFAULT');
+ expect(body.epics).toHaveLength(13);
+ expect(body.provisionalCapabilities).toBe(39);
+ expect(body.epics.flatMap((e:{capabilities:unknown[]})=>e.capabilities)).toHaveLength(39);
+ expect(body.blockedDimensions).toHaveLength(17);
+ expect(body.linkedNonProductionCodeTestPairs+body.candidatesWithoutReferences).toBe(39);
+ expect(body.overallImplementationCompletionPct).toBeNull();
+ expect(body.formalAcceptancePct).toBeNull();
+ expect(body.weightsApproved).toBe(false);
+ expect(body.nationalReleaseAllowed).toBe(false);
+ expect((await request.post('/internal/ops/v1/epic-progress',{data:{weightsApproved:true}})).status()).toBe(405);
+ expect((await request.get('/operations/progress')).status()).toBe(200);
+ expect((await request.post('/operations/progress',{data:{status:'APPROVED'}})).status()).toBe(405);
+});
+test('PROGRESS107-02 real Persian React Operations displays complete filterable source and no Done estimate',async({page})=>{
+ await page.goto('/operations/progress');
+ await expect(page.getByRole('heading',{name:'میز عملیاتی شواهد پیشرفت ترنم'})).toBeVisible();
+ await expect(page.getByTestId('progress-source-status')).toContainText('تصویب‌نشده');
+ await expect(page.locator('[data-progress-epic]')).toHaveCount(13);
+ await page.getByLabel('نوع شاهد فنی').selectOption('NO_EVIDENCE');
+ await expect(page.locator('[data-progress-capability]')).toHaveCount(13);
+ await page.getByLabel('نوع شاهد فنی').selectOption('ALL');
+ await page.getByLabel('جست‌وجوی Epic و معیار').fill('TRN-CAP-01-02');
+ await expect(page.locator('[data-progress-epic]')).toHaveCount(1);
+ await expect(page.locator('[data-progress-capability]')).toHaveCount(1);
+ await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
+ await expect(page.getByText('درصد تکمیل: 100')).toHaveCount(0);
+});
+test('PROGRESS107-03 forged approval/percentage or bad registry response does not become a successful UI',async({page})=>{
+ await page.route('**/internal/ops/v1/epic-progress',async route=>{
+  const response=await route.fetch();
+  const bad=await response.json();
+  bad.overallImplementationCompletionPct=100;
+  bad.officialAcceptanceObserved=true;
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(bad)});
+ });
+ await page.goto('/operations/progress');
+ await expect(page.getByTestId('progress-source-status')).toContainText('منبع قابل تأیید نیست');
+ await expect(page.locator('[data-progress-epic]')).toHaveCount(0);
+});
+test('PROGRESS107-04 losing the actual evidence source clears a prior good result',async({page})=>{
+ await page.goto('/operations/progress');
+ await expect(page.locator('[data-progress-epic]')).toHaveCount(13);
+ await page.route('**/internal/ops/v1/epic-progress',route=>route.abort());
+ await page.getByRole('button',{name:'بازخوانی شواهد'}).click();
+ await expect(page.getByTestId('progress-source-status')).toContainText('منبع قابل تأیید نیست');
+ await expect(page.locator('[data-progress-epic]')).toHaveCount(0);
+ expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
+});
+test('PROGRESS107-05 unknown progress impersonation and forged authority fail closed',async({request})=>{
+ expect((await request.get('/operations/progress/admin')).status()).toBe(404);
+ expect((await request.get('/internal/ops/v1/epic-progress/approved')).status()).toBe(404);
+ const hostile=await request.get('/internal/ops/v1/epic-progress',
+  {headers:{Host:'untrusted.example:4318'},failOnStatusCode:false});
+ expect(hostile.status()).toBe(403);
+ expect((await hostile.json()).nationalReleaseAllowed).toBe(false);
+ const forwarded=await request.get('/internal/ops/v1/epic-progress',
+  {headers:{'X-Forwarded-Host':'hostile.example'},failOnStatusCode:false});
+ expect(forwarded.status()).toBe(403);
+});

@@ -39,6 +39,37 @@ def run():
 
 
 
+def verify_epic_progress():
+    """Source-linked DRAFT evidence catalogue, never Product-Done."""
+    status, headers, raw = call("/internal/ops/v1/epic-progress")
+    assert status == 200
+    body = json.loads(raw)
+    assert body["contract"] == "TRN-TECH-116"
+    assert body["status"] == "DRAFT_EVIDENCE_CATALOG_ONLY"
+    assert body["scope"] == "DRAFT_UNAPPROVED"
+    assert body["weightsApproved"] is False
+    assert body["officialAcceptanceObserved"] is False
+    assert body["nationalReleaseAllowed"] is False
+    assert body["productionReady"] is False
+    assert body["overallImplementationCompletionPct"] is None
+    assert body["formalAcceptancePct"] is None
+    assert body["epicCount"] == 13
+    assert body["provisionalCapabilities"] == 39
+    assert len(body["epics"]) == 13
+    assert all(len(e["capabilities"]) == 3 for e in body["epics"])
+    assert len(body["blockedDimensions"]) == 17
+    assert all(x["status"] == "BLOCKED_UNVERIFIED" for x in body["blockedDimensions"])
+    assert body["linkedNonProductionCodeTestPairs"] + body["candidatesWithoutReferences"] == 39
+    assert len(body["sourceFingerprint"]) == 64
+    assert headers.get("Cache-Control") == "no-store"
+    assert headers.get("Access-Control-Allow-Origin") is None
+    assert call("/internal/ops/v1/epic-progress", "POST")[0] == 405
+    assert call("/operations/progress")[0] == 200
+    assert call("/operations/progress", "POST")[0] == 405
+    assert call("/internal/ops/v1/epic-progress/approved")[0] == 404
+    print("PASS: real loopback source-backed 13-Epic/39-slot evidence and 17 denial dimensions")
+
+
 def waiting_preview(activation, observed, extras=None):
     body = {"activationUtc": activation, "observedUtc": observed}
     if extras:
@@ -183,6 +214,7 @@ def verify_ops_denial_not_overridden_by_browser_claims():
 if __name__ == "__main__":
     try:
         run()
+        verify_epic_progress()
         verify_waiting_preview()
         verify_ops_host_and_route_denial()
         verify_ops_denial_not_overridden_by_browser_claims()
