@@ -179,6 +179,10 @@ DISPATCHER_BRANCHES = {
         "sprint-107-source-backed-epic-progress-ops",
         "sprint-106-nonclinical-care-coordination-journal",
     ),
+    "sprint-108-consent-source-integrity-hardening.yml": (
+        "sprint-108-consent-source-integrity-hardening",
+        "sprint-107-source-backed-epic-progress-ops",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -321,6 +321,167 @@ public sealed class ConsentContractTests
         Assert.Equal(4, rows);
     }
 
+
+    // TRN-TECH-117: genuine PostgreSQL malicious source mutation tests.
+    // All changes use per-test random streams; no Production-like sources.
+    [Fact]
+    public async Task C108_One_HigherVersionInHeaderCannotForgeCurrentConsent()
+    {
+        var c = await SetupAsync();
+        await using var _ = c.DataSource;
+        var ct = TestContext.Current.CancellationToken;
+        await c.Store.ChangeAsync(c.Principal,c.Subject,c.Tenant,
+            SyntheticPurpose.SecondaryAiResearchTest,c.Scope,0,
+            "test:rejected-original",false,ct:ct);
+        Assert.False(await c.Store.EvaluateAsync(c.Principal,c.Subject,c.Tenant,
+            SyntheticPurpose.SecondaryAiResearchTest,c.Scope,ct));
+        await using var admin = NpgsqlDataSource.Create(
+            Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!);
+        await using(var cn=await admin.OpenConnectionAsync(ct))
+        await using(var command=new NpgsqlCommand("""
+            UPDATE synthetic_consent_stream SET version=2
+            WHERE tenant_ref=@tenant AND subject_ref=@subject AND purpose=@purpose
+              AND scope_ref=@scope
+            """,cn))
+        {
+            command.Parameters.AddWithValue("tenant",c.Tenant);
+            command.Parameters.AddWithValue("subject",c.Subject);
+            command.Parameters.AddWithValue("purpose","SecondaryAiResearchTest");
+            command.Parameters.AddWithValue("scope",c.Scope);
+            Assert.Equal(1,await command.ExecuteNonQueryAsync(ct));
+        }
+        var read=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            c.Store.EvaluateAsync(c.Principal,c.Subject,c.Tenant,
+                SyntheticPurpose.SecondaryAiResearchTest,c.Scope,ct));
+        Assert.Equal("CONSENT_SOURCE_UNVERIFIABLE",read.Message);
+        var writer=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            c.Store.ChangeAsync(c.Principal,c.Subject,c.Tenant,
+                SyntheticPurpose.SecondaryAiResearchTest,c.Scope,2,
+                "test:forged-next",true,ct:ct));
+        Assert.Equal("CONSENT_SOURCE_UNVERIFIABLE",writer.Message);
+    }
+
+    [Fact]
+    public async Task C108_Two_ForgedEvidenceUsingOldAuditNeverBecomesGrant()
+    {
+        var c=await SetupAsync();
+        await using var _=c.DataSource;
+        var ct=TestContext.Current.CancellationToken;
+        await c.Store.ChangeAsync(c.Principal,c.Subject,c.Tenant,
+            SyntheticPurpose.HealthDataShareTest,c.Scope,0,"test:real-withdraw",false,ct:ct);
+        await using var admin=NpgsqlDataSource.Create(
+            Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!);
+        await using(var cn=await admin.OpenConnectionAsync(ct))
+        await using(var tx=await cn.BeginTransactionAsync(ct))
+        {
+            await using(var forge=new NpgsqlCommand("""
+                INSERT INTO synthetic_consent_evidence
+                (tenant_ref,subject_ref,purpose,scope_ref,version,
+                 granted,actor_ref,audit_ref,previous_version)
+                SELECT tenant_ref,subject_ref,purpose,scope_ref,2,
+                       true,actor_ref,audit_ref,1
+                FROM synthetic_consent_evidence
+                WHERE tenant_ref=@tenant AND subject_ref=@subject
+                  AND purpose='HealthDataShareTest' AND scope_ref=@scope AND version=1
+                """,cn,tx))
+            {
+                forge.Parameters.AddWithValue("tenant",c.Tenant);
+                forge.Parameters.AddWithValue("subject",c.Subject);
+                forge.Parameters.AddWithValue("scope",c.Scope);
+                Assert.Equal(1,await forge.ExecuteNonQueryAsync(ct));
+            }
+            await using(var head=new NpgsqlCommand("""
+                UPDATE synthetic_consent_stream SET version=2
+                WHERE tenant_ref=@tenant AND subject_ref=@subject
+                  AND purpose='HealthDataShareTest' AND scope_ref=@scope
+                """,cn,tx))
+            {
+                head.Parameters.AddWithValue("tenant",c.Tenant);
+                head.Parameters.AddWithValue("subject",c.Subject);
+                head.Parameters.AddWithValue("scope",c.Scope);
+                Assert.Equal(1,await head.ExecuteNonQueryAsync(ct));
+            }
+            await tx.CommitAsync(ct);
+        }
+        var error=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            c.Store.EvaluateAsync(c.Principal,c.Subject,c.Tenant,
+                SyntheticPurpose.HealthDataShareTest,c.Scope,ct));
+        Assert.Equal("CONSENT_SOURCE_UNVERIFIABLE",error.Message);
+    }
+
+    [Fact]
+    public async Task C108_Three_DeletedReplayBreaksBothReadAndIdempotentWrite()
+    {
+        var c=await SetupAsync();
+        await using var _=c.DataSource;
+        var ct=TestContext.Current.CancellationToken;
+        var grant=await c.Store.ChangeAsync(c.Principal,c.Subject,c.Tenant,
+            SyntheticPurpose.CareCommunicationTest,c.Scope,0,"test:missing-replay",true,ct:ct);
+        Assert.Equal(1,grant.Version);
+        await using var admin=NpgsqlDataSource.Create(
+            Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!);
+        await using(var cn=await admin.OpenConnectionAsync(ct))
+        await using(var delete=new NpgsqlCommand("""
+            DELETE FROM synthetic_request_replay
+            WHERE tenant_ref=@tenant AND subject_ref=@subject
+              AND purpose='CareCommunicationTest' AND scope_ref=@scope
+            """,cn))
+        {
+            delete.Parameters.AddWithValue("tenant",c.Tenant);
+            delete.Parameters.AddWithValue("subject",c.Subject);
+            delete.Parameters.AddWithValue("scope",c.Scope);
+            Assert.Equal(1,await delete.ExecuteNonQueryAsync(ct));
+        }
+        var read=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            c.Store.EvaluateAsync(c.Principal,c.Subject,c.Tenant,
+                SyntheticPurpose.CareCommunicationTest,c.Scope,ct));
+        Assert.Equal("CONSENT_SOURCE_UNVERIFIABLE",read.Message);
+        var replay=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            c.Store.ChangeAsync(c.Principal,c.Subject,c.Tenant,
+                SyntheticPurpose.CareCommunicationTest,c.Scope,0,
+                "test:missing-replay",true,ct:ct));
+        Assert.Equal("CONSENT_SOURCE_UNVERIFIABLE",replay.Message);
+    }
+
+    [Fact]
+    public async Task C108_Four_AlteredReplayHashIsDetectedWhileNormalWithdrawalRemainsValid()
+    {
+        var c=await SetupAsync();
+        await using var _=c.DataSource;
+        var ct=TestContext.Current.CancellationToken;
+        await c.Store.ChangeAsync(c.Principal,c.Subject,c.Tenant,
+            SyntheticPurpose.SecondaryAiResearchTest,c.Scope,0,
+            "test:research-grant",true,ct:ct);
+        await c.Store.ChangeAsync(c.Principal,c.Subject,c.Tenant,
+            SyntheticPurpose.SecondaryAiResearchTest,c.Scope,1,
+            "test:research-withdraw",false,ct:ct);
+        Assert.False(await c.Store.EvaluateAsync(c.Principal,c.Subject,c.Tenant,
+            SyntheticPurpose.SecondaryAiResearchTest,c.Scope,ct));
+        var replay=await c.Store.ChangeAsync(c.Principal,c.Subject,c.Tenant,
+            SyntheticPurpose.SecondaryAiResearchTest,c.Scope,0,
+            "test:research-grant",true,ct:ct);
+        Assert.True(replay.Replayed);
+        Assert.Equal(1,replay.Version);
+        await using var admin=NpgsqlDataSource.Create(
+            Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!);
+        await using(var cn=await admin.OpenConnectionAsync(ct))
+        await using(var tamper=new NpgsqlCommand("""
+            UPDATE synthetic_request_replay SET input_hash='INVALID_TEST_HASH'
+            WHERE tenant_ref=@tenant AND subject_ref=@subject
+              AND purpose='SecondaryAiResearchTest' AND scope_ref=@scope
+              AND operation='WITHDRAW_TEST'
+            """,cn))
+        {
+            tamper.Parameters.AddWithValue("tenant",c.Tenant);
+            tamper.Parameters.AddWithValue("subject",c.Subject);
+            tamper.Parameters.AddWithValue("scope",c.Scope);
+            Assert.Equal(1,await tamper.ExecuteNonQueryAsync(ct));
+        }
+        var denial=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            c.Store.EvaluateAsync(c.Principal,c.Subject,c.Tenant,
+                SyntheticPurpose.SecondaryAiResearchTest,c.Scope,ct));
+        Assert.Equal("CONSENT_SOURCE_UNVERIFIABLE",denial.Message);
+    }
     [Fact]
     public async Task A04_AccessAllowAndDenyAreAuditedByTenant()
     {
