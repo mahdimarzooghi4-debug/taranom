@@ -84,6 +84,8 @@ app.MapGet("/internal/demo/v1/centers/{centerRef}/departments/{departmentRef}/ro
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CenterDepartmentRosterHttp.ReadAsync);
 app.MapGet("/internal/demo/v1/centers/{centerRef}/doctors/{doctorRef}/affiliation-history",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CenterDoctorAffiliationHttp.ReadAsync);
+app.MapGet("/internal/demo/v1/centers/{centerRef}/audit-workspace",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CenterAuditWorkspaceHttp.ReadAsync);
 
 // Separate persistent, TEST-ONLY cost-awareness journal; not a member
 // account, legal acknowledgement, insurer estimate or financial backend.

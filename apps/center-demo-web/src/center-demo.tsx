@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {DepartmentRoster} from './department-roster';
 import {DoctorAffiliationHistory} from './doctor-affiliation-history';
+import {CenterAuditWorkspace} from './center-audit-workspace';
 
 type Doctor = { doctorRef: string; affiliation: 'PendingIndependentVerification' | 'Ended'; departmentRefs: string[] };
 type Snapshot = {
@@ -321,6 +322,8 @@ export function CenterDemo() {
       {snapshot && validRef(doctor) && <DoctorAffiliationHistory
         key={center+':'+doctor+':'+snapshot.currentVersion}
         center={center} doctor={doctor} version={snapshot.currentVersion}/>}
+      {snapshot && <CenterAuditWorkspace key={center+':'+snapshot.currentVersion}
+        center={center} version={snapshot.currentVersion}/>}
       <section className="panel" aria-labelledby="history-heading">
         <h2 id="history-heading">تاریخچه ثبت‌شده و بازسازی نسخه‌های گذشته (صرفاً آزمایشی)</h2>
         <p>رخدادها از ژورنال PostgreSQL همراه با کنترل یکپارچگی مجدد خوانده می‌شوند؛ نمایش آن‌ها مجوز فعالیت بالینی یا تأیید مدیر نیست.</p>

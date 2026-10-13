@@ -294,3 +294,8 @@ The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fc
 ## Sprint 94 — Source-attested one-doctor center affiliation history (2026-10-13)
 
 [TRN-TECH-103](../technical/TRN-TECH-103-single-doctor-center-affiliation-history.md) and [Sprint94](../sprints/100-sprint-94-doctor-affiliation-history.md) add a same-center, version-pinned record of each synthetic doctor's unverified affiliation, department assignments and eventual end of affiliation. The bounded read is reconstructed from the unchanged original PostgreSQL event+audit journal, with sparse pagination, historical versions, unrelated-event stale refusal, and no additional schema, clinician identity, licence, contract or medical permission. The national first-release gate remains DENIED_BY_DEFAULT, all 17 dimensions BLOCKED_UNVERIFIED.
+
+
+## Sprint 95 — Atomic-source center audit workspace (2026-10-13)
+
+[TRN-TECH-104](../technical/TRN-TECH-104-center-audit-workspace.md) and [Sprint95](../sprints/101-sprint-95-center-audit-workspace.md) close an observable consistency gap: separate older center timeline and historical-state requests can read different underlying PostgreSQL versions. A new opt-in test-only view returns historical departments/doctor affiliations AND bounded center events from the **same canonical reattested snapshot** at caller-pinned current/as-of versions, rejecting stale changes and refusing to infer clinical, legal or financial rights. The old read endpoints stay intact for established tests; the new integrated workspace is the preferred coherent review view. National release remains DENIED_BY_DEFAULT with 17 external BLOCKED_UNVERIFIED requirements.

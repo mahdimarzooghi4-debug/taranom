@@ -127,6 +127,10 @@ DISPATCHER_BRANCHES = {
         "sprint-94-doctor-affiliation-history",
         "sprint-93-center-department-roster",
     ),
+    "sprint-95-center-audit-workspace.yml": (
+        "sprint-95-center-audit-workspace",
+        "sprint-94-doctor-affiliation-history",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
