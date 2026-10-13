@@ -172,6 +172,11 @@ def main():
         code, _, state = call(case + "/commands", command(expected, kind, d, doc))
         assert code == 200 and state["outcome"] == "Applied"
         assert state["currentVersion"] == expected + 1
+    # The original HTTP body/UUID may be replayed even after later accepted
+    # center events. Reissuing a newly generated UUID would not prove this.
+    code, _, late_replay = call(case + "/commands", first)
+    assert code == 200 and late_replay["outcome"] == "Replayed"
+    assert late_replay["currentVersion"] == 4 and late_replay["eventCount"] == 4
     code, _, state = call(case)
     assert code == 200 and state["currentVersion"] == 4 and state["eventCount"] == 4
     assert state["departments"] == [dept]
@@ -334,9 +339,48 @@ def verify_support():
     print("PASS: canonical synthetic support submit/followup persisted, replay-safe, rights denied")
 
 
+
+def verify_selective_unassignment():
+    from test_doctor_affiliation_history_http import history
+    from test_department_roster_http import roster
+    suffix = uuid4().hex
+    center = "test:selective-center-"+suffix
+    ward_a,ward_b,doctor = ("test:ward-a-"+suffix,"test:ward-b-"+suffix,"test:doctor-"+suffix)
+    for rev,kind,dep,doc in [
+        (0,"DEFINE_DEPARTMENT",ward_a,None),(1,"DEFINE_DEPARTMENT",ward_b,None),
+        (2,"RECORD_DOCTOR",None,doctor),(3,"ASSIGN_DOCTOR",ward_a,doctor),
+        (4,"ASSIGN_DOCTOR",ward_b,doctor)]:
+        code,_,result = call(center+"/commands",command(rev,kind,dep,doc))
+        assert code==200 and result["currentVersion"]==rev+1,(code,result)
+    original=command(5,"UNASSIGN_DOCTOR",ward_a,doctor)
+    code,_,removed=call(center+"/commands",original)
+    assert code==200 and removed["currentVersion"]==6 and removed["eventCount"]==6
+    assert removed["doctors"][0]["departmentRefs"]==[ward_b]
+    assert removed["doctors"][0]["affiliation"]=="PendingIndependentVerification"
+    assert removed["professionalQualificationVerified"] is False
+    code,_,replay=call(center+"/commands",original)
+    assert code==200 and replay["outcome"]=="Replayed" and replay["eventCount"]==6
+    code,_,duplicate=call(center+"/commands",command(6,"UNASSIGN_DOCTOR",ward_a,doctor))
+    assert code==409 and duplicate["outcome"]=="NotApplicable"
+    assert call(center+"/commands",command(6,"UNASSIGN_DOCTOR",None,doctor))[0]==400
+    assert call(center+"/commands",command(6,"UNASSIGN_DOCTOR","real:ward",doctor))[0]==400
+    assert call(center+"/versions/5")[2]["snapshot"]["doctors"][0]["departmentRefs"]==sorted([ward_a,ward_b])
+    assert call(center+"/versions/6")[2]["snapshot"]["doctors"][0]["departmentRefs"]==[ward_b]
+    page=call(center+"/history?afterVersion=5&limit=2")[2]
+    assert [e["kind"] for e in page["events"]]==["UnassignDoctorFromDepartment"]
+    code,lineage=history(center,doctor,6,6,after=5)
+    assert code==200 and lineage["events"][0]["departmentRef"]==ward_a
+    assert lineage["events"][0]["kind"]=="UnassignDoctorFromDepartment"
+    assert roster(center,ward_a,6,6)[1]["doctorCount"]==0
+    assert roster(center,ward_b,6,6)[1]["doctorCount"]==1
+    assert roster(center,ward_a,6,5)[1]["doctorCount"]==1
+    assert call("test:independent-"+suffix)[2]["doctors"]==[]
+    print("PASS: exact one-ward PostgreSQL unassignment, preserved sibling and replay/history, no licence")
+
 if __name__ == "__main__":
     try:
         main()
+        verify_selective_unassignment()
         verify_support()
         verify_split_browser_entrypoints()
         verify_host_and_static_route_integrity()

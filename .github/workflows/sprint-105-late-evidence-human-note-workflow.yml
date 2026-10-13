@@ -1,0 +1,14 @@
+name: Sprint 105 Late Evidence Human Note Full Regression
+on:
+  push:
+    branches: [sprint-105-late-evidence-human-note-workflow]
+  pull_request:
+    branches: [sprint-104-synthetic-identity-correction-reverification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

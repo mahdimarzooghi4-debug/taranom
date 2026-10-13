@@ -1,0 +1,14 @@
+name: Sprint 93 Center Department Roster Full Regression
+on:
+  push:
+    branches: [sprint-93-center-department-roster]
+  pull_request:
+    branches: [sprint-92-full-ci-test-census]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

@@ -1,0 +1,14 @@
+name: Sprint 103 Payer Evidence Operational Workbench Full Regression
+on:
+  push:
+    branches: [sprint-103-payer-evidence-operational-workbench]
+  pull_request:
+    branches: [sprint-102-cost-mvcc-isolated-read]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

@@ -32,10 +32,19 @@ jobs:
           python3 tools/policy_checks/render_epic_progress_console.py --root . --html TestResults/fullci-epic-console.html --csv TestResults/fullci-epic-console.csv
           test -s TestResults/fullci-epic-console.html
           test -s TestResults/fullci-epic-console.csv
+      - name: Inventory SDK, npm, NuGet, actions and container build source declarations
+        run: |
+          python3 -m unittest discover -s tests/policy_checks -p 'test_build_input_inventory.py' -v
+          python3 tools/policy_checks/check_build_input_inventory.py --root . --report-json TestResults/fullci-build-input-inventory.json
+          python3 -c "import json; a=json.load(open('TestResults/fullci-build-input-inventory.json')); assert a['status']=='DECLARED_BUILD_INPUTS_CHECKED_NOT_ATTESTED' and a['npmApplications']==5 and a['sourceFingerprint'] and not a['supplyChainAttested'] and not a['nationalReleaseAllowed']"
       - name: Deny unsafe public GitHub Actions workflow definitions
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_public_ci_workflow_trust.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_shared_full_ci.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_mainline_full_ci.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_full_ci_test_census.py' -v
+          python3 tools/policy_checks/check_full_ci_test_census.py --root . --report-json TestResults/fullci-test-census.json
+          test -s TestResults/fullci-test-census.json
           python3 tools/policy_checks/check_public_ci_workflow_trust.py --root . --report-json TestResults/fullci-workflow-trust.json
           test -s TestResults/fullci-workflow-trust.json
       # Sprint59 tests keep all actual private target files outside GitHub Actions.
@@ -675,6 +684,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+      - name: Mint a fresh ephemeral support journal test password
+        run: |
+          password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          printf 'TARANOM_SUPPORT_RUNTIME_TEST_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
       - name: Build existing event-sourced center journal with isolated ASP.NET demo host
         run: |
           dotnet restore src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj
@@ -736,8 +749,21 @@ jobs:
             exit 1
           fi
           python3 tests/center_demo/test_real_center_demo_http.py
+          python3 tests/center_demo/test_proofing_correction_http.py
+          python3 tests/center_demo/test_late_evidence_work_item_http.py
+          python3 tests/center_demo/test_care_coordination_http.py
           python3 tests/center_demo/test_support_history_http.py
+          # TRN-TECH-109: genuine concurrent writer lock + unlocked read,
+          # same synthetic PostgreSQL source and current loopback host.
+          TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY dotnet run --project tests/Taranom.SupportJournal.MvccProbe/Taranom.SupportJournal.MvccProbe.csproj --configuration Release
           python3 tests/center_demo/test_cost_journal_http.py
+          python3 tests/center_demo/test_cost_support_handoff_http.py
+          python3 tests/center_demo/test_cost_history_http.py
+          python3 tests/center_demo/test_cost_support_followup_http.py
+          python3 tests/center_demo/test_cost_support_timeline_http.py
+          python3 tests/center_demo/test_department_roster_http.py
+          python3 tests/center_demo/test_doctor_affiliation_history_http.py
+          python3 tests/center_demo/test_center_audit_workspace_http.py
           cd apps/center-demo-web
           CI=true npm run test:e2e
           cd ../member-support-demo-web

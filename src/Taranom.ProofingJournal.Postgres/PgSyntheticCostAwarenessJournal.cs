@@ -220,23 +220,35 @@ internal sealed class PgSyntheticCostAwarenessJournal(NpgsqlDataSource source)
         if (previewId == Guid.Empty)
             return null;
         await using var cn = await source.OpenConnectionAsync(ct);
-        await using var tx = await cn.BeginTransactionAsync(ct);
-        var snapshot = await ReadLockedAsync(cn, tx, previewId, ct);
+        // TRN-TECH-111: header, ordered choices and paired audits MUST see
+        // one committed snapshot, with no writer row lock on HTTP GET.
+        await using var tx = await cn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead, ct);
+        await using (var readOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", cn, tx))
+            await readOnly.ExecuteNonQueryAsync(ct);
+        var snapshot = await ReadLockedAsync(cn, tx, previewId, ct,
+            lockPreviewRow: false);
         await tx.CommitAsync(ct);
         return snapshot;
     }
 
     private static async Task<CostAwarenessSnapshot?> ReadLockedAsync(
         NpgsqlConnection cn, NpgsqlTransaction tx, Guid previewId,
-        CancellationToken ct)
+        CancellationToken ct, bool lockPreviewRow = true)
     {
         string member;
         long previewRevision, choiceRevision;
         string fingerprint, json;
-        await using (var head = new NpgsqlCommand("""
+        // Mutating Register/Record callers retain FOR UPDATE and original
+        // CAS. Only ReadAsync opts into a non-locking MVCC header SELECT.
+        await using (var head = new NpgsqlCommand(lockPreviewRow ? """
             SELECT member_ref,preview_revision,preview_fingerprint,
                    preview_json,choice_revision
             FROM internal_test_cost_preview WHERE preview_ref=@preview FOR UPDATE
+            """ : """
+            SELECT member_ref,preview_revision,preview_fingerprint,
+                   preview_json,choice_revision
+            FROM internal_test_cost_preview WHERE preview_ref=@preview
             """, cn, tx))
         {
             head.Parameters.AddWithValue("preview", previewId);

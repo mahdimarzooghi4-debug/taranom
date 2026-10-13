@@ -1,0 +1,21 @@
+# TRN-TECH-101 — Mandatory complete test-source-to-execution census
+
+**Date:** 2026-10-13. **Sprint 92**, based on accepted TRN-BIZ-028/030/040 comprehensive first three-market national scope; parent TRN-TECH-066/080/096 shared secure read-only 14-job CI. Sprint 91 parent PR #102, HEAD `267fac61ce3dd9ec065ab07e25fb40cab67c6742`, Push #38361230773 and Mainline PR #38361279612 both SUCCESS 14/14. No Stage, QA, Release Approval or Production authorization.
+
+## Concrete defect
+
+The canonical GitHub full-CI reusable workflow explicitly lists policy `unittest discover -p 'test_foo.py'` invocations and each real HTTP standalone Python test under the Ops and Center/PostgreSQL hosts. Because the list is maintained by hand, a developer can add a new `test_*.py` security regression and forget to add a runner command. CI can report 14/14 green **without ever executing that new test**. This is a release-engineering integrity gap, not evidence that the new test failed. Inspection also identified that the existing Sprint87 `test_mainline_full_ci.py` was not explicitly enumerated in the canonical internal-contract job (although other workflow tests ran); add that test.
+
+## Exact safety contract
+
+Implement offline, read-only `tools/policy_checks/check_full_ci_test_census.py` (stdlib only), comparing the **actual bounded regular files** matching `test_*.py` in three fixed directories: `tests/policy_checks`, `tests/ops_status`, `tests/center_demo`. Require one real canonical command *per file*, with correct job boundaries: `internal-contract-tests` for policy unittest commands, `real-local-ops-http-react` for Ops HTTP, and `ephemeral-center-workflow-full-stack` for Center/PostgreSQL. The existing `test_local_portal_csp.py` is intentionally executed as a direct path in the Ops build step (not from policy job), and is the **only** narrowly whitelisted exception. The test corpus is checked from source, not from a manually maintained manifest; new `test_*.py` requires no registry update, but does require explicit real CI runner invocation.
+
+Enforce bounded canonical workflow (regular file, no symlink, max 128 KiB), exact known runner jobs once, no omitted or duplicate test invocations, unknown test commands, symlinked test files, or script names included only as echo/comments. Exact full literal command matching rejects `|| true`, test filtering and noncanonical control syntax. Retain exact, unfiltered `CI=true npm run test:e2e` calls in Ops job (1) and Center job (2), rejecting silent Playwright suite filtering. The checker is **lexical source accountability**, not a complete Bash/YAML interpreter or proof of test execution; it never grants release, review, security clearance, or Production.
+
+Place positive and hostile tests in `tests/policy_checks/test_full_ci_test_census.py`, execute them **inside the existing `internal-contract-tests` job** *before* calling the census against the actual repository source. Also explicitly invoke the previously omitted `test_mainline_full_ci.py`. Produce a source-only redacted count report in `TestResults/fullci-test-census.json`; zero sensitive files, credentials or real partner data. Keep all 14 existing GitHub jobs; call exactly the inherited `taranom-full-regression-reusable.yml` from an allowlisted read-only Sprint92 dispatcher (strict source base/branch), with full Push and Mainline PR CI 14/14 on the exact SHA.
+
+## Acceptance and negative cases
+
+All tracked test files (policy+Ops+Center) have exactly one executable canonical invocation; adding unexecuted test files in any of the three paths fails; removing, renaming, duplicating, symlinking tests fails; malformed/suppressed shell commands fail; moving a test into the wrong job fails; weakening real Chromium full-suite invocation fails; mandatory job omission fails. A fully green external CI attests only that source and runs matched for that exact commit, not independent human review or real national/clinical/financial readiness.
+
+Remain `DENIED_BY_DEFAULT`: all 17 national blocker dimensions `BLOCKED_UNVERIFIED`, completion `UNBASELINED`, 13 Epics + three markets + national coverage preserved. Real member session BFF TRN-TECH-012 NOT CODE-AUTHORIZED. All PRs Draft/Open/Unmerged; no Ready/Merge/Stage/QA Gate/Release Approval/Production without explicit owner authorization.

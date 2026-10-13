@@ -1,0 +1,14 @@
+name: Sprint 104 Synthetic Identity Correction Reverification Full Regression
+on:
+  push:
+    branches: [sprint-104-synthetic-identity-correction-reverification]
+  pull_request:
+    branches: [sprint-103-payer-evidence-operational-workbench]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

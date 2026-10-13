@@ -10,7 +10,8 @@ internal enum CenterCommandKind
     DefineDepartment = 1,
     RecordDoctorAffiliation = 2,
     AssignDoctorToDepartment = 3,
-    EndDoctorAffiliation = 4
+    EndDoctorAffiliation = 4,
+    UnassignDoctorFromDepartment = 5
 }
 
 internal enum CenterEvidence
@@ -129,7 +130,8 @@ internal static class ClinicalCenterJournal
             command.Kind is not (CenterCommandKind.DefineDepartment or
                 CenterCommandKind.RecordDoctorAffiliation or
                 CenterCommandKind.AssignDoctorToDepartment or
-                CenterCommandKind.EndDoctorAffiliation) ||
+                CenterCommandKind.EndDoctorAffiliation or
+                CenterCommandKind.UnassignDoctorFromDepartment) ||
             !IsSyntheticRef(command.TargetCenterRef) ||
             !IsSyntheticRef(command.ActingCenterRef) ||
             (command.DepartmentRef is not null && !IsSyntheticRef(command.DepartmentRef)) ||
@@ -171,6 +173,7 @@ internal static class ClinicalCenterJournal
             CenterCommandKind.RecordDoctorAffiliation => RecordDoctor(current, command),
             CenterCommandKind.AssignDoctorToDepartment => AssignDoctor(current, command),
             CenterCommandKind.EndDoctorAffiliation => EndDoctor(current, command),
+            CenterCommandKind.UnassignDoctorFromDepartment => UnassignDoctor(current, command),
             _ => new(CenterOutcome.Invalid, current)
         };
     }
@@ -224,6 +227,26 @@ internal static class ClinicalCenterJournal
             state.Departments, state.Doctors,
             state.DoctorDepartments.SetItem(command.DoctorRef,
                 assigned.Add(command.DepartmentRef))));
+    }
+
+    // Remove only ONE test-only ward link; the unverified center-wide
+    // doctor affiliation and every other existing ward remain unchanged.
+    private static CenterChange UnassignDoctor(CenterSnapshot state, CenterCommand command)
+    {
+        if (command.DoctorRef is null || command.DepartmentRef is null)
+            return new(CenterOutcome.Invalid, state);
+        if (!state.Departments.Contains(command.DepartmentRef) ||
+            !state.Doctors.TryGetValue(command.DoctorRef, out var status) ||
+            status != DoctorAffiliation.PendingIndependentVerification ||
+            !state.DoctorDepartments.TryGetValue(command.DoctorRef, out var existing) ||
+            !existing.Contains(command.DepartmentRef))
+            return new(CenterOutcome.NotApplicable, state);
+        var remaining = existing.Remove(command.DepartmentRef);
+        var assignments = remaining.Count == 0
+            ? state.DoctorDepartments.Remove(command.DoctorRef)
+            : state.DoctorDepartments.SetItem(command.DoctorRef, remaining);
+        return new(CenterOutcome.Applied, state.Append(
+            command, state.Departments, state.Doctors, assignments));
     }
 
     private static CenterChange EndDoctor(CenterSnapshot state, CenterCommand command)

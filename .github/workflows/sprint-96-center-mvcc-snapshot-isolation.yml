@@ -1,0 +1,14 @@
+name: Sprint 96 Center MVCC Snapshot Isolation Full Regression
+on:
+  push:
+    branches: [sprint-96-center-mvcc-snapshot-isolation]
+  pull_request:
+    branches: [sprint-95-center-audit-workspace]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

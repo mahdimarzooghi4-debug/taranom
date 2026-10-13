@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import {DepartmentRoster} from './department-roster';
+import {DoctorAffiliationHistory} from './doctor-affiliation-history';
+import {CenterAuditWorkspace} from './center-audit-workspace';
+import {makeCenterRecoveryReceipt, parseCenterRecoveryReceipt} from './center-command-receipt';
+import type {RecoveryKind, UncertainCenterCommand} from './center-command-receipt';
 
 type Doctor = { doctorRef: string; affiliation: 'PendingIndependentVerification' | 'Ended'; departmentRefs: string[] };
 type Snapshot = {
@@ -11,7 +16,7 @@ type Snapshot = {
 
 type HistoryEvent = {
   version: number;
-  kind: 'DefineDepartment' | 'RecordDoctorAffiliation' | 'AssignDoctorToDepartment' | 'EndDoctorAffiliation';
+  kind: 'DefineDepartment' | 'RecordDoctorAffiliation' | 'AssignDoctorToDepartment' | 'EndDoctorAffiliation' | 'UnassignDoctorFromDepartment';
   departmentRef: string | null;
   doctorRef: string | null;
   hypotheticalOnly: true;
@@ -31,7 +36,8 @@ const eventNames: Record<HistoryEvent['kind'], string> = {
   DefineDepartment: 'تعریف بخش',
   RecordDoctorAffiliation: 'وابستگی پزشک در انتظار بررسی',
   AssignDoctorToDepartment: 'انتساب به بخش',
-  EndDoctorAffiliation: 'پایان وابستگی'
+  EndDoctorAffiliation: 'پایان وابستگی',
+  UnassignDoctorFromDepartment: 'برداشتن انتساب فقط از یک بخش'
 };
 function validHistory(v: unknown, center: string, after: number, expected: number): v is HistoryPage {
   if (!v || typeof v !== 'object') return false;
@@ -63,7 +69,9 @@ function validHistorical(v: unknown, center: string, version: number, current: n
     x.asOfVersion === version && valid(x.snapshot, center) &&
     x.snapshot.currentVersion === version;
 }
-type Kind = 'DEFINE_DEPARTMENT' | 'RECORD_DOCTOR' | 'ASSIGN_DOCTOR' | 'END_DOCTOR';
+type Kind = RecoveryKind;
+// TRN-TECH-106 retains the exact original request bytes for manual replay.
+// TRN-TECH-107 can export those bytes to human custody across browser reloads.
 const validRef = (value: string) => /^test:[A-Za-z0-9_-]{1,123}$/.test(value) && value.length <= 128;
 function valid(value: unknown, center: string): value is Snapshot {
   if (!value || typeof value !== 'object') return false;
@@ -111,7 +119,8 @@ const texts: Record<Kind, string> = {
   DEFINE_DEPARTMENT: 'ثبت بخش آزمایشی',
   RECORD_DOCTOR: 'ثبت وابستگی تأییدنشده پزشک آزمایشی',
   ASSIGN_DOCTOR: 'تخصیص آزمایشی پزشک به بخش',
-  END_DOCTOR: 'پایان وابستگی آزمایشی پزشک'
+  END_DOCTOR: 'پایان وابستگی آزمایشی پزشک',
+  UNASSIGN_DOCTOR: 'حذف انتساب پزشک فقط از بخش انتخابی (آزمایشی)'
 };
 export function CenterDemo() {
   const [center, setCenter] = useState('test:center-demo');
@@ -119,6 +128,10 @@ export function CenterDemo() {
   const [doctor, setDoctor] = useState('test:doctor-demo');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [pending, setPending] = useState(false);
+  const [uncertain, setUncertain] = useState<UncertainCenterCommand | null>(null);
+  const [importText, setImportText] = useState('');
+  const [importFeedback, setImportFeedback] = useState(
+    'ورود رسید فقط به درخواست دستی انجام می‌شود و هیچ دستور شبکه‌ای ارسال نمی‌کند.');
   const [history, setHistory] = useState<HistoryPage | null>(null);
   const [historical, setHistorical] = useState<Historical | null>(null);
   const [historicalVersion, setHistoricalVersion] = useState('0');
@@ -143,50 +156,120 @@ export function CenterDemo() {
       if (!response.ok) throw Error('READ_DENIED');
       const payload: unknown = await response.json();
       if (!valid(payload, center)) throw Error('INVALID_RESPONSE');
-      setSnapshot(payload);
-      setStatus('اطلاعات آزمایشی از PostgreSQL خوانده شد. هیچ مدیر یا پزشک واقعی احراز نشده است.');
+      // Source read alone cannot conclude an earlier uncertain command.
+      // Do not re-expose a current snapshot as actionable while unresolved.
+      setSnapshot(uncertain ? null : payload);
+      setStatus(uncertain
+        ? 'منبع خوانده شد، اما نتیجه دستور قبلی نامعلوم است؛ فقط همان درخواست را دستی بازیابی کنید.'
+        : 'اطلاعات آزمایشی از PostgreSQL خوانده شد. هیچ مدیر یا پزشک واقعی احراز نشده است.');
     } catch {
       setStatus('خواندن پایگاه‌داده آزمایشی امکان‌پذیر نیست؛ وضعیت معتبر فرض نمی‌شود.');
     } finally {
       setPending(false);
     }
   }
-  async function apply(kind: Kind) {
-    if (!snapshot || pending) return;
-    const dep = kind === 'DEFINE_DEPARTMENT' || kind === 'ASSIGN_DOCTOR' ? department : null;
-    const doc = kind === 'DEFINE_DEPARTMENT' ? null : doctor;
-    if (!validRef(center) || dep !== null && !validRef(dep) || doc !== null && !validRef(doc)) {
-      setStatus('شناسه‌های بخش و پزشک باید آزمایشی و با پیشوند test: باشند.');
-      return;
-    }
+  // Manual replay has exactly the same URI, byte-for-byte JSON body,
+  // original requestId and original expectedVersion, even if a later read
+  // sees another center revision. The PostgreSQL journal decides the result.
+  async function sendCommand(receipt: UncertainCenterCommand) {
     setPending(true);
     try {
-      const response = await fetch('/internal/demo/v1/centers/' + encodeURIComponent(center) + '/commands', {
+      const response = await fetch('/internal/demo/v1/centers/' +
+        encodeURIComponent(receipt.center) + '/commands', {
         method: 'POST', credentials: 'omit', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestId: crypto.randomUUID(), expectedVersion: snapshot.currentVersion,
-          kind, departmentRef: dep, doctorRef: doc
-        })
+        headers: { 'Content-Type': 'application/json' }, body: receipt.body
       });
       const payload: unknown = await response.json();
-      if (!valid(payload, center)) throw Error('INVALID_RESULT');
+      if (!valid(payload, receipt.center)) throw Error('UNVERIFIED_COMMAND_RESULT');
+
+      const accepted = response.status === 200 &&
+        ((payload.outcome === 'Applied' &&
+          payload.currentVersion === receipt.expectedVersion + 1) ||
+         (payload.outcome === 'Replayed' &&
+          payload.currentVersion > receipt.expectedVersion));
+      const rejected = response.status === 409 &&
+        (payload.outcome === 'StaleRevision' ||
+         payload.outcome === 'ConflictingReplay' ||
+         payload.outcome === 'NotApplicable') &&
+        payload.currentVersion >= receipt.expectedVersion;
+      if (!accepted && !rejected) throw Error('UNRECOGNIZED_COMMAND_RESULT');
+
+      // Only a verified conclusive database response resolves uncertainty.
+      setUncertain(null);
       setSnapshot(payload);
       setHistory(null);
       setHistorical(null);
-      setHistoryStatus('با تغییر نسخه، تاریخچه قبلی نامعتبر شد؛ دوباره بخوانید.');
-      setStatus(response.ok
-        ? (payload.outcome === 'Applied' ? texts[kind] + ' — فقط در پایگاه آزمایشی ثبت شد.' :
-          'درخواست تکراری؛ هیچ رخداد جدیدی ایجاد نشد.')
-        : 'عملیات اعمال نشد: ' + payload.outcome + '؛ نسخه آزمایشی فعلی نمایش داده شد.');
+      setHistoryStatus('با پاسخ قطعی ژورنال، نماهای تاریخی قبلی پاک شدند؛ دوباره بخوانید.');
+      setStatus(accepted
+        ? (payload.outcome === 'Applied'
+          ? texts[receipt.kind] + ' — فقط در پایگاه آزمایشی ثبت شد.'
+          : 'درخواست تکراری با همان شناسه بازیابی شد؛ هیچ رخداد جدیدی ایجاد نشد.')
+        : 'عملیات اعمال نشد: ' + payload.outcome + '؛ نسخه واقعی آزمایشی نمایش داده شد.');
     } catch {
+      // Dropped HTTP ACK, invalid JSON, non-attested response or 503 cannot
+      // tell the browser whether PostgreSQL committed. No automatic retry.
+      setUncertain(receipt);
       setSnapshot(null);
-      setStatus('عملیات ناموفق بود؛ وضعیت پایگاه‌داده نامعلوم است. ابتدا دوباره بخوانید.');
+      setHistory(null);
+      setHistorical(null);
+      setHistoryStatus('نتیجه نوشتن نامعلوم است؛ اطلاعات تاریخی قبلی نامعتبر شد.');
+      setStatus('نتیجه ثبت نامعلوم است؛ درخواست اصلی فقط در حافظه همین صفحه نگه داشته شد. از ارسال دستور تازه خودداری کنید.');
     } finally {
       setPending(false);
     }
   }
 
+  async function apply(kind: Kind) {
+    if (!snapshot || pending || uncertain) return;
+    const dep = kind === 'DEFINE_DEPARTMENT' || kind === 'ASSIGN_DOCTOR' ||
+      kind === 'UNASSIGN_DOCTOR' ? department : null;
+    const doc = kind === 'DEFINE_DEPARTMENT' ? null : doctor;
+    if (!validRef(center) || dep !== null && !validRef(dep) || doc !== null && !validRef(doc)) {
+      setStatus('شناسه‌های بخش و پزشک باید آزمایشی و با پیشوند test: باشند.');
+      return;
+    }
+    if (!Number.isSafeInteger(snapshot.currentVersion) ||
+        snapshot.currentVersion >= Number.MAX_SAFE_INTEGER) {
+      setStatus('نسخه خوانده‌شده برای ثبت امن نیست؛ هیچ دستور جدیدی ارسال نشد.');
+      return;
+    }
+    const receipt: UncertainCenterCommand = {
+      center, expectedVersion: snapshot.currentVersion, kind,
+      body: JSON.stringify({
+        requestId: crypto.randomUUID(), expectedVersion: snapshot.currentVersion,
+        kind, departmentRef: dep, doctorRef: doc
+      })
+    };
+    await sendCommand(receipt);
+  }
+
+  async function retryUncertain() {
+    if (pending || !uncertain || uncertain.center !== center) return;
+    await sendCommand(uncertain);
+  }
+
+  function importReceipt() {
+    if (pending || uncertain) return;
+    const receipt = parseCenterRecoveryReceipt(importText);
+    if (!receipt) {
+      setImportFeedback('رسید رد شد: ساختار یا شناسه یا دستور آزمایشی معتبر نیست. هیچ درخواست HTTP ارسال نشد.');
+      return;
+    }
+    // Explicit import NEVER calls sendCommand or refresh. Only a later
+    // separate human click can submit the original source-pinned bytes.
+    const original = JSON.parse(receipt.body) as {departmentRef: string | null; doctorRef: string | null};
+    setCenter(receipt.center);
+    if (original.departmentRef !== null) setDepartment(original.departmentRef);
+    if (original.doctorRef !== null) setDoctor(original.doctorRef);
+    setSnapshot(null);
+    setHistory(null);
+    setHistorical(null);
+    setHistoryStatus('رسید وارد شد؛ هیچ وضعیت تاریخی معتبر تلقی نمی‌شود.');
+    setUncertain(receipt);
+    setImportText('');
+    setImportFeedback('رسیدِ بدون امضا وارد شد؛ هیچ POST انجام نشده است. فقط با کلیک جداگانه، درخواست قبلی دوباره ارسال می‌شود.');
+    setStatus('درخواست قبلی از رسید دستی بارگذاری شد؛ نتیجه آن نامعلوم است.');
+  }
 
   async function loadHistory(afterVersion: number) {
     if (!snapshot || pending) return;
@@ -239,7 +322,9 @@ export function CenterDemo() {
     }
   }
 
-  const guidedStep=nextCenterStep(snapshot,center,department,doctor);
+  const guidedStep=uncertain
+    ? {code:'READ_FIRST', action:null, label:'نتیجه دستور پیشین نامعلوم است؛ ثبت مرحله تازه تا بازیابی همان درخواست ممنوع است.'} as NextCenterStep
+    : nextCenterStep(snapshot,center,department,doctor);
   return <>
     <a href="#main" className="skip">پرش به محتوای اصلی</a>
     <header>
@@ -256,22 +341,58 @@ export function CenterDemo() {
         <h2 id="center-workflow">گردش کامل آزمایشی مرکز</h2>
         <div className="fields">
           <label htmlFor="center">شناسه مرکز آزمایشی
-            <input id="center" dir="ltr" value={center} onChange={e => setCenter(e.target.value)} autoComplete="off" />
+            <input id="center" dir="ltr" value={center} disabled={pending || !!uncertain}
+              onChange={e => setCenter(e.target.value)} autoComplete="off" />
           </label>
           <label htmlFor="department">شناسه بخش آزمایشی
-            <input id="department" dir="ltr" value={department} onChange={e => setDepartment(e.target.value)} autoComplete="off" />
+            <input id="department" dir="ltr" value={department} disabled={pending || !!uncertain}
+              onChange={e => setDepartment(e.target.value)} autoComplete="off" />
           </label>
           <label htmlFor="doctor">شناسه پزشک آزمایشی
-            <input id="doctor" dir="ltr" value={doctor} onChange={e => setDoctor(e.target.value)} autoComplete="off" />
+            <input id="doctor" dir="ltr" value={doctor} disabled={pending || !!uncertain}
+              onChange={e => setDoctor(e.target.value)} autoComplete="off" />
           </label>
         </div>
         <div className="actions">
           <button type="button" disabled={pending} onClick={() => void refresh()}>بازخوانی مرکز از PostgreSQL</button>
           {(Object.keys(texts) as Kind[]).map(kind =>
-            <button key={kind} type="button" disabled={!snapshot || pending} onClick={() => void apply(kind)}>
+            <button key={kind} type="button" disabled={!snapshot || pending || !!uncertain} onClick={() => void apply(kind)}>
               {texts[kind]}
             </button>)}
         </div>
+        <p className="muted">حذف انتساب از بخش انتخابی فقط همان رابطه آزمایشی را پایان می‌دهد؛
+          سایر بخش‌های پزشک و وابستگی او به مرکز باقی می‌مانند. «پایان وابستگی»
+          جداگانه همه روابط جاری را پایان می‌دهد؛ هیچ‌کدام مجوز پزشکی نیستند.</p>
+        {uncertain && <section role="alert" className="center-uncertain" aria-label="بازیابی دستور با نتیجه نامعلوم">
+          <h3>وضعیت ثبت دستور نامعلوم است — فقط آزمایشی</h3>
+          <p>پاسخ قطعی PostgreSQL به مرورگر نرسیده است؛ ممکن است رویداد قبلاً ثبت شده باشد.
+            دکمه زیر فقط با همان شناسه درخواست، نسخه قبلی و متن تغییرناکرده دستور دوباره ارسال می‌کند.
+            هیچ تکرار خودکار یا دستور تازه‌ای مجاز نیست.</p>
+          <p>مرکز: <code>{uncertain.center}</code> | نسخه اولیه: {uncertain.expectedVersion}</p>
+          <button type="button" disabled={pending} onClick={() => void retryUncertain()}>
+            تلاش دستی مجدد با همان درخواست
+          </button>
+          <label htmlFor="center-receipt-export">متن رسید آزمایشی برای کپی دستی
+            <textarea id="center-receipt-export" dir="ltr" rows={5} readOnly
+              value={makeCenterRecoveryReceipt(uncertain)} />
+          </label>
+          <p>این JSON بدون امضا و غیرمحرمانه است، صرفاً برای test:. اگر خودتان کپی نکنید،
+            با بستن یا بارگذاری مجدد صفحه از دست می‌رود. کپی آن اثبات ثبت، هویت یا اختیار نیست.</p>
+        </section>}
+        <section className="center-receipt-import" aria-label="ورود دستی رسید پس از بارگذاری مجدد">
+          <h3>بازیابی دستی رسید آزمایشی قبلی</h3>
+          <p>فقط متن JSON قبلاً کپی‌شده را وارد کنید. ورود رسید هیچ فرمانی اجرا نمی‌کند؛
+            درخواست فقط پس از کلیک مستقل روی دکمه تلاش مجدد ارسال می‌شود.</p>
+          <label htmlFor="center-receipt-import">چسباندن رسید آزمایشی پس از بارگذاری مجدد
+            <textarea id="center-receipt-import" dir="ltr" rows={4}
+              maxLength={2400} autoComplete="off" spellCheck={false}
+              disabled={pending || !!uncertain} value={importText}
+              onChange={e => setImportText(e.target.value)} />
+          </label>
+          <button type="button" disabled={pending || !!uncertain || !importText.trim()}
+            onClick={importReceipt}>بارگذاری رسید بدون ارسال</button>
+          <p data-testid="center-receipt-feedback" aria-live="polite">{importFeedback}</p>
+        </section>
         <section className="guided-workflow" aria-label="راهنمای چهارمرحله‌ای رویداد مرکز" data-testid="center-guided-flow">
           <h3>راهنمای عملی ثبت رخدادهای مرکز — فقط داده ساختگی</h3>
           <p>مرحله بعد صرفاً از آخرین نسخه خوانده‌شده PostgreSQL انتخاب می‌شود.
@@ -285,7 +406,7 @@ export function CenterDemo() {
             <li>انتساب آزمایشی پزشک به بخش</li>
             <li>پایان وابستگی آزمایشی پزشک</li>
           </ol>
-          {guidedStep.action && <button type="button" disabled={!snapshot || pending}
+          {guidedStep.action && <button type="button" disabled={!snapshot || pending || !!uncertain}
             onClick={() => void apply(guidedStep.action!)}>
             ثبت مرحله بعد در PostgreSQL
           </button>}
@@ -313,6 +434,14 @@ export function CenterDemo() {
           </div>
         </section>}
       </section>
+      {snapshot && <DepartmentRoster
+        key={center+':'+department+':'+snapshot.currentVersion}
+        center={center} department={department} version={snapshot.currentVersion}/>}
+      {snapshot && validRef(doctor) && <DoctorAffiliationHistory
+        key={center+':'+doctor+':'+snapshot.currentVersion}
+        center={center} doctor={doctor} version={snapshot.currentVersion}/>}
+      {snapshot && <CenterAuditWorkspace key={center+':'+snapshot.currentVersion}
+        center={center} version={snapshot.currentVersion}/>}
       <section className="panel" aria-labelledby="history-heading">
         <h2 id="history-heading">تاریخچه ثبت‌شده و بازسازی نسخه‌های گذشته (صرفاً آزمایشی)</h2>
         <p>رخدادها از ژورنال PostgreSQL همراه با کنترل یکپارچگی مجدد خوانده می‌شوند؛ نمایش آن‌ها مجوز فعالیت بالینی یا تأیید مدیر نیست.</p>

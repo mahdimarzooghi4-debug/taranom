@@ -19,7 +19,7 @@ test('CENTER-DEMO-01: true PostgreSQL write/read, versioned complete center work
   await page.getByRole('button', { name: 'ثبت بخش آزمایشی' }).click();
   await expect(page.getByRole('status').first()).toContainText('فقط در پایگاه آزمایشی ثبت شد');
   await page.getByRole('button', { name: 'ثبت وابستگی تأییدنشده پزشک آزمایشی' }).click();
-  await expect(page.getByText('در انتظار بررسی مستقل')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'وضعیت ذخیره‌شده آزمایشی' })).toContainText('در انتظار بررسی مستقل');
   await page.getByRole('button', { name: 'تخصیص آزمایشی پزشک به بخش' }).click();
   await expect(page.getByRole('region', { name: 'وضعیت ذخیره‌شده آزمایشی' })).toContainText(keys.department);
   await page.getByRole('button', { name: 'پایان وابستگی آزمایشی پزشک' }).click();

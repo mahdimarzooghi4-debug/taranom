@@ -1,0 +1,14 @@
+name: Sprint 87 Mainline CI Integrity Full Regression
+on:
+  push:
+    branches: [sprint-87-mainline-ci-integrity]
+  pull_request:
+    branches: [sprint-86-postgres-cost-choice-workflow]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

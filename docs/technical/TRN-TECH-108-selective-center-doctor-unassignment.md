@@ -1,0 +1,19 @@
+# TRN-TECH-108 — Selective unassignment of an unverified doctor from ONE department
+
+**Sprint:** 99 (2026-10-13) | **Business:** accepted TRN-BIZ-053/054, with licensure/contract gates TRN-BIZ-009/043/044 | **Backlog:** TRN-EP-04/12 | **Inherited:** TRN-TECH-073/074/102/103/104/105/106/107. Parent Draft PR #109 exact `92afb4a3e16a4178e6b5002d4094433d971462a1`, Push #38382850571 and Mainline PR #38382857206 both 14/14 green; reviewer COMMENTED, not independently approved.
+
+## Confirmed gap
+
+A single synthetic center may have multiple wards; a pending-unverified doctor may be assigned to several. Existing END_DOCTOR removes **all** department links and ends center-wide affiliation. Operators need to remove exactly one department link without destroying a sibling ward assignment. This is a test-only technical interpretation of center-managed doctor affiliation, not a real clinical staffing policy.
+
+## Exact transition
+
+Extend canonical CenterCommandKind with immutable new numeric code `UnassignDoctorFromDepartment=5`; old values unchanged. Existing strict five-field HTTP POST uses new kind `UNASSIGN_DOCTOR`, original requestId, expectedVersion and both nonnull `test:` departmentRef and doctorRef. All preexisting syntactic, center-scope, claimed manager/evidence, exact CAS, denial history and original UUID idempotency checks remain. Valid only for a department and a doctor registered **in that center**, doctor PendingIndependentVerification and the exact pair currently assigned. Otherwise fail closed with Invalid/NotApplicable; do not append accepted events. Ended doctor remains ended. On acceptance remove only that pair, retain sibling wards and doctor's unchanged pending affiliation. If last ward removed, doctor is still pending but unassigned. No automatic reaffiliation, qualification or authorization.
+
+Existing PostgreSQL transaction must DELETE only this one center/doctor/ward tuple, require exactly 1 deleted row or roll back, and append exactly one new original command, immutable SHA256 event, paired audit and current-version CAS together. Original rehydration validates the projection against canonical replay. Do not add a new table, API family, credential, legal/clinical authority or payment. Center history/audit and doctor-specific history must expose the new enum with departmentRef; department roster as-of reads derive from the same replay. Existing React manual command appears separately with explicit warning that END_DOCTOR still ends center affiliation. The Sprint98 imported, unauthenticated synthetic receipt must support the new verb with its exact original bytes and strict mandatory pair validation.
+
+## Acceptance
+
+Unit: two wards, remove one, preserve other and unverified status, exact replay, conflicting UUID reuse, stale, duplicate, absent relation, unknown/ended doctor, missing/real refs and cross-center denial; last-ward removal is NOT doctor termination. Genuine ephemeral PostgreSQL xUnit: event/audit exact count, projection one-row deletion, next version, history safe, source divergence fails closed. Real Kestrel/Python/Chromium: create two wards, two links, remove one, read current/historical snapshots, doctor transition and per-ward roster; same original request replays, invalid combination 400, duplicate link removal 409, no claims of any medical or money rights. Full inherited 14 exact-head Push+Mainline PR CI and preliminary Code Review COMMENT only, not independent human signoff.
+
+**Boundaries:** strict `test:` loopback/ephemeral PostgreSQL only. No real manager, physician credential, clinical privileges, member health records, insurer or provider contract, billing, wallet or production API. Real Member BFF TRN-TECH-012 NOT CODE-AUTHORIZED; all 17 national gates BLOCKED_UNVERIFIED, national first release DENIED_BY_DEFAULT, product completion UNBASELINED. Keep all PRs Draft/Open/Unmerged; no Ready/Merge/Stage/QA/Release/Production without explicit owner instruction.

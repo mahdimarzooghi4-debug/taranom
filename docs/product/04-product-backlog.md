@@ -254,3 +254,48 @@ TRN-TECH-089: all 15 existing Member and Center pages on loopback ASP.NET 4318 n
 ## Additional Sprint 84 center guided workflow — actual synthetic PostgreSQL journal
 
 [TRN-TECH-093 (center)](../technical/93-guided-center-postgres-workflow.md) and [parallel Sprint 84](../sprints/92-sprint-84-guided-center-workflow.md) give the tester a four-step manual journal-based sequence for a test department and unverified professional affiliation, assignment and end. Every transition is human-triggered, re-reads PostgreSQL and never asserts a real licensed provider, clinician or authorization; no automatic progression, clinical approval or official release.
+
+
+## Sprint 87 — Mainline exact-SHA full regression admission (2026-10-12)
+
+The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fcbb14a450f695`) has **no GitHub Actions run on `main`** because prior Sprint dispatchers only target Sprint branches. [TRN-TECH-096](../technical/TRN-TECH-096-mainline-continuous-regression.md) / [Sprint87](../sprints/93-sprint-87-mainline-ci-integrity.md) bind exact `main` Push and incoming PR events to the canonical read-only 14-job reusable workflow. The public CI trust checker rejects removal of the mandatory mainline dispatcher or tampering with its event/branch/job boundary. This is a **continuous integration quality gate**, not Production deploy, signed independent review, or automatic release authorization. All 17 national gates remain BLOCKED_UNVERIFIED and comprehensive three-market official launch DENIED_BY_DEFAULT.
+
+
+## Sprint 88 — Independently reattested cost-to-insurance-support test handoff (2026-10-12)
+
+[TRN-TECH-097](../technical/TRN-TECH-097-synthetic-insurance-cost-support-handoff.md) and [Sprint88](../sprints/94-sprint-88-insurance-cost-support-handoff.md) join two pre-existing immutable synthetic-only PostgreSQL journals via explicit member/cost-reference verification. The user manually records an unverified coverage dispute through the original support case reducer, then independently reads both journals through a new GET-only correspondence check. Exact UUID retries after a lost acknowledgement cannot duplicate a support event. No insurer adjudication, real member identity, pricing, payment or legal case is implied; the national first launch remains DENIED_BY_DEFAULT with 17 unverified gates.
+
+
+## Sprint 89 — Frozen-revision audit timeline for unverified cost choice (2026-10-13)
+
+[TRN-TECH-098](../technical/TRN-TECH-098-synthetic-cost-choice-point-in-time-history.md) and [Sprint89](../sprints/95-sprint-89-synthetic-cost-history.md) reuse the canonical append-only PostgreSQL cost choice and audit journal for bounded page-by-page event history and as-of historical versions. An expectedCurrentRevision pins the event cursor to prevent mixed-version pages when a concurrent synthetic writer appends. No legal member choice, payment or insurer adjustment is inferred. Comprehensive first national three-market launch remains DENIED_BY_DEFAULT; all 17 real readiness gates BLOCKED_UNVERIFIED.
+
+
+## Sprint 90 — Manual revision-pinned insurance support follow-up (2026-10-13)
+
+[TRN-TECH-099](../technical/TRN-TECH-099-synthetic-dispute-followup-preflight.md) and [Sprint90](../sprints/96-sprint-90-insurance-followup-journal.md) reuse the existing versioned PostgreSQL insurance support journal: manually cross-verify the member and cost-preview reference, preflight both independent revisions, append a scoped test-only follow-up via the existing support reducer with exact original case lineage, and recover uncertain outcomes by exact UUID replay. No insurer reply, adjustment, legal complaint, payment or clinical authority follows. Nationwide launch remains DENIED_BY_DEFAULT and all 17 requirements BLOCKED_UNVERIFIED.
+
+
+## Sprint 91 — two-source-pinned insurance support activity (2026-10-13)
+
+[TRN-TECH-100](../technical/TRN-TECH-100-cross-journal-insurance-timeline.md) and [Sprint91](../sprints/97-sprint-91-insurance-audit-timeline.md) show a chronological, paginated test-only member dispute and follow-up activity timeline, drawn directly from the original, audit-verified PostgreSQL support journal and pinned to the independent cost-preview revision. Each new page must match both revisions or fail closed. No medical, legal, financial or insurer decision is produced. Official nationwide three-market first launch remains DENIED_BY_DEFAULT and all 17 external readiness gates remain BLOCKED_UNVERIFIED.
+
+
+## Sprint 92 — mandatory source-to-runner test census (2026-10-13)
+
+[TRN-TECH-101](../technical/TRN-TECH-101-mandatory-full-ci-test-census.md) and [Sprint92](../sprints/98-sprint-92-full-ci-test-census.md) address silent omission of `test_*.py` files from the canonical full-CI workflow: a green job cannot attest to a test never invoked. The read-only checker compares all existing policy, Ops HTTP and Center/PostgreSQL Python test scripts with exact executable test commands under their canonical job, rejects omitted, duplicate, noncanonical, renamed, symlinked and mislocated files, and preserves the unfiltered Chromium calls. Sprint 87's previously omitted mainline security test is now explicitly executed. This is a real CI coverage admission guard, not a product completeness percentage, code approval, Stage or national release.
+
+
+## Sprint 93 — Center department doctor-affiliation roster (2026-10-13)
+
+[TRN-TECH-102](../technical/TRN-TECH-102-center-department-doctor-roster.md) and [Sprint93](../sprints/99-sprint-93-center-department-roster.md) introduce a version-pinned, read-only `Center → Department → unverified DoctorAffiliation` roster, derived exclusively from the existing canonical PostgreSQL center event/audit journal. It supports historical observation of the department before an affiliation ends, without keeping ended doctors on the current roster, and rejects stale revision, cross-center, real identifiers and forged legal/clinical/financial permission. No separate network admin, real doctor signup, licence, contract or health-record access is introduced. National launch remains DENIED_BY_DEFAULT and the 17 external gates BLOCKED_UNVERIFIED.
+
+
+## Sprint 94 — Source-attested one-doctor center affiliation history (2026-10-13)
+
+[TRN-TECH-103](../technical/TRN-TECH-103-single-doctor-center-affiliation-history.md) and [Sprint94](../sprints/100-sprint-94-doctor-affiliation-history.md) add a same-center, version-pinned record of each synthetic doctor's unverified affiliation, department assignments and eventual end of affiliation. The bounded read is reconstructed from the unchanged original PostgreSQL event+audit journal, with sparse pagination, historical versions, unrelated-event stale refusal, and no additional schema, clinician identity, licence, contract or medical permission. The national first-release gate remains DENIED_BY_DEFAULT, all 17 dimensions BLOCKED_UNVERIFIED.
+
+
+## Sprint 95 — Atomic-source center audit workspace (2026-10-13)
+
+[TRN-TECH-104](../technical/TRN-TECH-104-center-audit-workspace.md) and [Sprint95](../sprints/101-sprint-95-center-audit-workspace.md) close an observable consistency gap: separate older center timeline and historical-state requests can read different underlying PostgreSQL versions. A new opt-in test-only view returns historical departments/doctor affiliations AND bounded center events from the **same canonical reattested snapshot** at caller-pinned current/as-of versions, rejecting stale changes and refusing to infer clinical, legal or financial rights. The old read endpoints stay intact for established tests; the new integrated workspace is the preferred coherent review view. National release remains DENIED_BY_DEFAULT with 17 external BLOCKED_UNVERIFIED requirements.

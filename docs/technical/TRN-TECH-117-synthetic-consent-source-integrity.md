@@ -1,0 +1,19 @@
+# TRN-TECH-117 — Fail-closed source and audit integrity for synthetic consent streams
+
+**Sprint 108, 2026-10-13.** Parent Draft/Open Sprint107 PR #118 at `59cb61611c31be38406bfe3211615d6955063d58`, Push #38400805133 and Mainline PR #38400814105 SUCCESS 14/14, preliminary COMMENT review only.
+
+## Material security gap
+
+Existing `SyntheticConsentStore` in Sprint01's test-only PostgreSQL source used `ORDER BY version DESC LIMIT 1` to answer a consent read. A malicious/accidental inserted higher-version `synthetic_consent_evidence` row could therefore appear as GRANTED even if its stream header, immutable audit and exact request replay are inconsistent. An old UUID replay could also succeed without revalidating its audited event. **These are test-only data integrity bugs**, not a report of real patient-data exposure or a real Production API. Never treat claims made by tests as authentic identity, medical processing rights or a real consent system.
+
+## Controlled source boundary (no new policy)
+
+Replace latest-row lookup by one MVCC `REPEATABLE READ` + `SET TRANSACTION READ ONLY` versioned consistency check of the entire exact tenant/member/purpose/scope stream, ordered from revision 1. Recheck every accepted step against header version, contiguous `previous_version` chain, stored granted boolean, actor's synthetic scope, exact operation, linked audit's `RECORDED` decision, domain-separated tenant/actor/request audit hashes and matching stored request-replay hash recomputed from the canonical stored fields. A request UUID must match the same version and operation. Require replay count and ordered event count both exactly equal the committed header revision. Any missing/duplicated/orphaned/mismatched record returns a **safe denial** by raising `CONSENT_SOURCE_UNVERIFIABLE`, never GRANTED and never guessed FALSE for a corrupted source. Real consent downstream consumers must explicitly handle unavailable provenance; this test-only store is not authorized as such a consumer.
+
+Apply the **same** full-history verification inside the existing `SELECT FOR UPDATE` writer transaction *before* replay lookup, new version, audit/evidence append and stream update. A corrupted stream cannot be silently repaired, granted or replayed. All changes remain test-only `SyntheticConsentStore`, with no new endpoint, schema, privileged role, member, doctor, clinical read, AI Dataset Builder, money, Production adapter or consent semantics. Ordinary grant/withdrawal, idempotent old request, distinct purpose/tenant isolation and the original access-allow/deny audit must remain valid.
+
+## Limitations and acceptance
+
+Integrity comparison is a **source consistency guard**, not a DB-owner-resistant signature. A fully privileged database administrator could reconstruct a coherent synthetic history; the public test-only PostgreSQL owner and runtime roles are not an authorized Production custody model. Synthetic purpose `SecondaryAiResearchTest` is an independent stream; a toy grant must NEVER trigger actual health/AI data use, licensed clinical permission, lawful member identity, token, training or auto-promotion. No legal revocation/retention semantics are invented.
+
+New true PostgreSQL xUnit mutation tests: stream header increased without event, forged upper evidence/grant reusing old audit, deleted replay, tampered replay digest; legitimate two-version grant→withdraw→exact old replay remains correct. Keep original 14-job Push and Mainline reusable full regression, clinical/policy/security/Chromium and national denial intact. No Step/QA/Release/Production until explicit authorized review. All 17 national release dimensions BLOCKED_UNVERIFIED; first comprehensive three-market national official launch DENIED_BY_DEFAULT; completion UNBASELINED; Code Review COMMENT is preliminary, not independently human approved.

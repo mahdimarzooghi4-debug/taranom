@@ -2,6 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemberSupportDemo } from './member-support-demo';
 import { CostJournalDemo } from './cost-journal-demo';
+import { PayerEvidenceWorkbench } from './payer-evidence-workbench';
+import { ProofingCorrectionDemo } from './proofing-correction-demo';
+import { LateEvidenceWorkItemDemo } from './late-evidence-work-item-demo';
+import { CareCoordinationDemo } from './care-coordination-demo';
 import './style.css';
 
 function MemberSupportSurface() {
@@ -17,6 +21,10 @@ function MemberSupportSurface() {
         <strong>محیط مستقل نمایشی عضو — DENIED_BY_DEFAULT</strong>
         <p>این محیط از صفحه مدیریت مرکز جداست اما هنوز مرز احراز هویت واقعی ندارد. هیچ اطلاعات شخص حقیقی وارد نکنید.</p>
       </div>
+      <p><a href="/member-demo/payer">بازرسی آزمایشی تعهد پرداخت در بازارهای فردی، حمایتی و سازمانی</a></p>
+      <p><a href="/member-demo/proofing">چرخه آزمایشی اصلاح هویت و احراز مجدد، بدون داده واقعی</a></p>
+      <p><a href="/member-demo/late-evidence">گردش آزمایشی مدرک دوره گذشته و یادداشت بررسی مستقل</a></p>
+      <p><a href="/member-demo/coordination">ثبت و پیگیری هماهنگی غیرتشخیصی عضو — محیط آزمایشی</a></p>
       <MemberSupportDemo />
       <footer>TRN-TECH-076 | فقط localhost و test: | بدون دسترسی به پرونده بالینی یا مالی</footer>
     </main>
@@ -27,4 +35,16 @@ if (!el) throw Error('Missing member support root');
 createRoot(el).render(<StrictMode>{window.location.pathname === '/member-demo/costs'
   ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی پشتیبانی</a>
       <CostJournalDemo /></main>
+  : window.location.pathname === '/member-demo/payer'
+  ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی عضو</a>
+      <PayerEvidenceWorkbench /></main>
+  : window.location.pathname === '/member-demo/proofing'
+  ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی عضو</a>
+      <ProofingCorrectionDemo /></main>
+  : window.location.pathname === '/member-demo/late-evidence'
+  ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی عضو</a>
+      <LateEvidenceWorkItemDemo /></main>
+  : window.location.pathname === '/member-demo/coordination'
+  ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی عضو</a>
+      <CareCoordinationDemo /></main>
   : <MemberSupportSurface />}</StrictMode>);

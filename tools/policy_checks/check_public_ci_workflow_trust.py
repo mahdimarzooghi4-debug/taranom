@@ -17,6 +17,7 @@ WORKFLOW_DIR = Path(".github/workflows")
 # envelope; all historical workflows retain their original strict step rules.
 REUSABLE_NAME = "taranom-full-regression-reusable.yml"
 DISPATCHER_NAME = "sprint-71-shared-secure-ci-gates.yml"
+MAINLINE_DISPATCHER_NAME = "taranom-mainline-full-regression.yml"
 DISPATCHER_BRANCHES = {
     DISPATCHER_NAME: (
         "sprint-71-shared-secure-ci-gates",
@@ -90,9 +91,109 @@ DISPATCHER_BRANCHES = {
         "sprint-84-center-guided-event-workflow",
         "sprint-83-manual-uncertain-command-recovery",
     ),
-    "integration-through-sprint-86.yml": (
-        "integration/through-sprint-86",
+    MAINLINE_DISPATCHER_NAME: (
         "main",
+        "main",
+    ),
+    "sprint-87-mainline-ci-integrity.yml": (
+        "sprint-87-mainline-ci-integrity",
+        "sprint-86-postgres-cost-choice-workflow",
+    ),
+    "sprint-88-insurance-cost-support-handoff.yml": (
+        "sprint-88-insurance-cost-support-handoff",
+        "sprint-87-mainline-ci-integrity",
+    ),
+    "sprint-89-synthetic-cost-history.yml": (
+        "sprint-89-synthetic-cost-history",
+        "sprint-88-insurance-cost-support-handoff",
+    ),
+    "sprint-90-insurance-followup-journal.yml": (
+        "sprint-90-insurance-followup-journal",
+        "sprint-89-synthetic-cost-history",
+    ),
+    "sprint-91-insurance-audit-timeline.yml": (
+        "sprint-91-insurance-audit-timeline",
+        "sprint-90-insurance-followup-journal",
+    ),
+    "sprint-92-full-ci-test-census.yml": (
+        "sprint-92-full-ci-test-census",
+        "sprint-91-insurance-audit-timeline",
+    ),
+    "sprint-93-center-department-roster.yml": (
+        "sprint-93-center-department-roster",
+        "sprint-92-full-ci-test-census",
+    ),
+    "sprint-94-doctor-affiliation-history.yml": (
+        "sprint-94-doctor-affiliation-history",
+        "sprint-93-center-department-roster",
+    ),
+    "sprint-95-center-audit-workspace.yml": (
+        "sprint-95-center-audit-workspace",
+        "sprint-94-doctor-affiliation-history",
+    ),
+    "sprint-96-center-mvcc-snapshot-isolation.yml": (
+        "sprint-96-center-mvcc-snapshot-isolation",
+        "sprint-95-center-audit-workspace",
+    ),
+    "sprint-97-center-uncertain-command-recovery.yml": (
+        "sprint-97-center-uncertain-command-recovery",
+        "sprint-96-center-mvcc-snapshot-isolation",
+    ),
+    "sprint-98-center-portable-retry-receipt.yml": (
+        "sprint-98-center-portable-retry-receipt",
+        "sprint-97-center-uncertain-command-recovery",
+    ),
+    "sprint-99-selective-center-doctor-unassignment.yml": (
+        "sprint-99-selective-center-doctor-unassignment",
+        "sprint-98-center-portable-retry-receipt",
+    ),
+    "sprint-100-support-mvcc-isolated-read.yml": (
+        "sprint-100-support-mvcc-isolated-read",
+        "sprint-99-selective-center-doctor-unassignment",
+    ),
+    "sprint-101-support-runtime-least-privilege.yml": (
+        "sprint-101-support-runtime-least-privilege",
+        "sprint-100-support-mvcc-isolated-read",
+    ),
+    "sprint-102-cost-mvcc-isolated-read.yml": (
+        "sprint-102-cost-mvcc-isolated-read",
+        "sprint-101-support-runtime-least-privilege",
+    ),
+    "sprint-103-payer-evidence-operational-workbench.yml": (
+        "sprint-103-payer-evidence-operational-workbench",
+        "sprint-102-cost-mvcc-isolated-read",
+    ),
+    "sprint-104-synthetic-identity-correction-reverification.yml": (
+        "sprint-104-synthetic-identity-correction-reverification",
+        "sprint-103-payer-evidence-operational-workbench",
+    ),
+    "sprint-105-late-evidence-human-note-workflow.yml": (
+        "sprint-105-late-evidence-human-note-workflow",
+        "sprint-104-synthetic-identity-correction-reverification",
+    ),
+    "sprint-106-nonclinical-care-coordination-journal.yml": (
+        "sprint-106-nonclinical-care-coordination-journal",
+        "sprint-105-late-evidence-human-note-workflow",
+    ),
+    "sprint-107-source-backed-epic-progress-ops.yml": (
+        "sprint-107-source-backed-epic-progress-ops",
+        "sprint-106-nonclinical-care-coordination-journal",
+    ),
+    "sprint-108-consent-source-integrity-hardening.yml": (
+        "sprint-108-consent-source-integrity-hardening",
+        "sprint-107-source-backed-epic-progress-ops",
+    ),
+    "sprint-109-clinical-access-transparency-journal.yml": (
+        "sprint-109-clinical-access-transparency-journal",
+        "sprint-108-consent-source-integrity-hardening",
+    ),
+    "sprint-110-provider-quality-oversight-journal.yml": (
+        "sprint-110-provider-quality-oversight-journal",
+        "sprint-109-clinical-access-transparency-journal",
+    ),
+    "sprint-111-build-input-provenance-inventory.yml": (
+        "sprint-111-build-input-provenance-inventory",
+        "sprint-110-provider-quality-oversight-journal",
     ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
@@ -317,6 +418,12 @@ def scan(root: Path) -> dict:
         return report
     try:
         children = sorted(path.iterdir())
+        # After introducing canonical reusable CI, absence of the mainline
+        # dispatcher is a security-critical omission, not a clean scan.
+        names = {entry.name for entry in children}
+        if REUSABLE_NAME in names and MAINLINE_DISPATCHER_NAME not in names:
+            _issue(report["findings"], ".github/workflows/" + MAINLINE_DISPATCHER_NAME,
+                   "MANDATORY_MAINLINE_CI_MISSING")
         if not children:
             _issue(report["findings"], ".github/workflows", "NO_WORKFLOWS")
         for entry in children:

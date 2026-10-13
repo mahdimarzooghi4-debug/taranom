@@ -137,6 +137,11 @@ public sealed class SyntheticConsentStore
             FOR UPDATE
             """, ct, ("tenant", tenant), ("subject", subject), ("purpose", purposeCode), ("scope", scope));
         var current = Convert.ToInt32(versionObj);
+        // Do not replay or write on a stream whose claimed current version
+        // does not agree with the entire evidence, audit and replay lineage.
+        // Header lock serializes ordinary canonical writers for this stream.
+        await ReadVerifiedHistoryAsync(connection, transaction, tenant,
+            subject, purposeCode, scope, current, ct);
 
         await using (var lookup = NewCommand(connection, transaction, """
             SELECT input_hash, resulting_version FROM synthetic_request_replay
@@ -198,15 +203,108 @@ public sealed class SyntheticConsentStore
             !SyntheticAccessPolicy.IsSynthetic(scope) || !Enum.IsDefined(purpose))
             return false;
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var command = NewCommand(connection, null, """
-            SELECT granted FROM synthetic_consent_evidence
+        // A single immutable PostgreSQL snapshot prevents a withdrawal, stream
+        // version or audit update mid-read from being mixed with older rows.
+        await using var transaction = await connection.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead, ct);
+        await ExecuteAsync(connection, transaction,
+            "SET TRANSACTION READ ONLY", ct);
+        var head = await ScalarAsync(connection, transaction, """
+            SELECT version FROM synthetic_consent_stream
             WHERE tenant_ref=@tenant AND subject_ref=@subject AND purpose=@purpose AND scope_ref=@scope
-            ORDER BY version DESC LIMIT 1
-            """, ("tenant", tenant), ("subject", subject), ("purpose", purpose.ToString()), ("scope", scope));
-        var value = await command.ExecuteScalarAsync(ct);
-        return value is bool granted && granted;
+            """, ct, ("tenant", tenant), ("subject", subject),
+            ("purpose", purpose.ToString()), ("scope", scope));
+        var current = head is null ? 0 : Convert.ToInt32(head);
+        var granted = await ReadVerifiedHistoryAsync(connection, transaction,
+            tenant, subject, purpose.ToString(), scope, current, ct);
+        await transaction.CommitAsync(ct);
+        return granted;
     }
 
+
+
+    // TRN-TECH-117: source integrity is mandatory on BOTH reads and writes,
+    // including an idempotent replay. A forged higher-version evidence row
+    // cannot become current consent by merely sorting DESC.
+    // This is test-owner/tamper detection, NOT a cryptographic signature and
+    // NOT proof of Production consent or immunity to a privileged DBA.
+    private static async Task<bool> ReadVerifiedHistoryAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction,
+        string tenant, string subject, string purpose, string scope,
+        int streamVersion, CancellationToken ct)
+    {
+        const string invalid = "CONSENT_SOURCE_UNVERIFIABLE";
+        if (streamVersion < 0) throw new InvalidOperationException(invalid);
+        await using var command = NewCommand(connection, transaction, """
+            SELECT e.version, e.previous_version, e.granted, e.actor_ref,
+                   a.action_code, a.decision_code, a.tenant_ref, a.actor_ref,
+                   a.correlation_ref, r.request_ref, r.input_hash
+            FROM synthetic_consent_evidence e
+            LEFT JOIN synthetic_audit a ON a.audit_ref=e.audit_ref
+            LEFT JOIN synthetic_request_replay r
+              ON r.tenant_ref=e.tenant_ref AND r.subject_ref=e.subject_ref
+             AND r.purpose=e.purpose AND r.scope_ref=e.scope_ref
+             AND r.actor_ref=e.actor_ref AND r.resulting_version=e.version
+             AND r.operation=CASE WHEN e.granted THEN 'GRANT_TEST'
+                                  ELSE 'WITHDRAW_TEST' END
+            WHERE e.tenant_ref=@tenant AND e.subject_ref=@subject
+              AND e.purpose=@purpose AND e.scope_ref=@scope
+            ORDER BY e.version
+            """, ("tenant", tenant), ("subject", subject),
+                 ("purpose", purpose), ("scope", scope));
+        var observed = 0;
+        var latest = false;
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                if (observed == streamVersion || reader.IsDBNull(4) ||
+                    reader.IsDBNull(5) || reader.IsDBNull(6) ||
+                    reader.IsDBNull(7) || reader.IsDBNull(8) ||
+                    reader.IsDBNull(9) || reader.IsDBNull(10))
+                    throw new InvalidOperationException(invalid);
+                var version = reader.GetInt32(0);
+                var previous = reader.GetInt32(1);
+                var granted = reader.GetBoolean(2);
+                var actor = reader.GetString(3);
+                var action = granted ? "GRANT_TEST" : "WITHDRAW_TEST";
+                var request = reader.GetString(9);
+                var serialized = JsonSerializer.Serialize(new
+                {
+                    Actor = actor, subject, tenant, purposeCode = purpose, scope,
+                    expectedVersion = previous, requestRef = request,
+                    operation = action
+                });
+                var digest = Convert.ToHexString(SHA256.HashData(
+                    Encoding.UTF8.GetBytes(serialized)));
+                if (version != observed + 1 || previous != observed ||
+                    !SyntheticAccessPolicy.IsSynthetic(actor) ||
+                    !SyntheticAccessPolicy.IsSynthetic(request) ||
+                    reader.GetString(4) != action ||
+                    reader.GetString(5) != "RECORDED" ||
+                    reader.GetString(6) != AuditRef(tenant) ||
+                    reader.GetString(7) != AuditRef(actor) ||
+                    reader.GetString(8) != AuditRef(request) ||
+                    reader.GetString(10) != digest)
+                    throw new InvalidOperationException(invalid);
+                observed++;
+                latest = granted;
+            }
+        }
+        if (observed != streamVersion)
+            throw new InvalidOperationException(invalid);
+        // Extra/orphaned replay entries cannot be used to forge an old or
+        // fresh command's idempotent success without an exact audited event.
+        var count = await ScalarAsync(connection, transaction, """
+            SELECT count(*) FROM synthetic_request_replay
+            WHERE tenant_ref=@tenant AND subject_ref=@subject
+              AND purpose=@purpose AND scope_ref=@scope
+            """, ct, ("tenant", tenant), ("subject", subject),
+                 ("purpose", purpose), ("scope", scope));
+        if (Convert.ToInt64(count) != streamVersion)
+            throw new InvalidOperationException(invalid);
+        return latest;
+    }
 
     // Synthetic-only, nonpublic projection. Explicit logged permission plus keyset bounds.
     internal async Task<SyntheticAuditPage> ReadOwnAuditAsync(

@@ -1,0 +1,14 @@
+name: Sprint 108 Consent Source Integrity Full Regression
+on:
+  push:
+    branches: [sprint-108-consent-source-integrity-hardening]
+  pull_request:
+    branches: [sprint-107-source-backed-epic-progress-ops]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

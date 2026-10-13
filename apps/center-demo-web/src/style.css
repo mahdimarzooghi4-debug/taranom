@@ -3,3 +3,16 @@
 .guided-workflow { border: 1px solid currentColor; border-radius: 0.65rem; padding: 1rem; margin: 1rem 0; }
 .guided-workflow button { margin-block: 0.5rem; }
 .guided-stages { padding-inline-start: 1.3rem; line-height: 1.85; }
+
+/* TRN-TECH-106: unresolved synthetic command, never an approval badge. */
+.center-uncertain { border: 2px solid #874e24; border-radius: 10px; padding: 1rem;
+  background: #fff8ed; margin-block: 1rem; }
+.center-uncertain h3 { margin-block-start: 0; }
+
+/* TRN-TECH-107: portable receipt is unsigned data, never an access token. */
+.center-receipt-import { border: 1px solid #8a9fad; border-radius: 10px;
+  padding: 1rem; margin-block: 1rem; background: #f4f8fa; }
+.center-receipt-import textarea, .center-uncertain textarea { width: 100%;
+  max-width: 100%; border: 2px solid #456a82; border-radius: 7px;
+  padding: .6rem; font: .9rem ui-monospace, monospace; text-align: left;
+  direction: ltr; resize: vertical; }

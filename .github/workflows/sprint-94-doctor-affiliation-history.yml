@@ -1,9 +1,9 @@
-name: Integrate Taranom through Sprint 86 Full Regression
+name: Sprint 94 Doctor Affiliation History Full Regression
 on:
   push:
-    branches: [integration/through-sprint-86]
+    branches: [sprint-94-doctor-affiliation-history]
   pull_request:
-    branches: [main]
+    branches: [sprint-93-center-department-roster]
   workflow_dispatch:
 
 permissions:

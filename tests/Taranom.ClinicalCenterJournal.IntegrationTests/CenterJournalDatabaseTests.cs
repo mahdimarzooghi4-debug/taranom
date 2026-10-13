@@ -20,8 +20,14 @@ public sealed class CenterJournalDatabaseTests
     {
         var ct = TestContext.Current.CancellationToken;
         await using var admin = NpgsqlDataSource.Create(AdminConnection);
-        await PgClinicalCenterJournal.InitializeIsolatedTestSchemaAsync(admin, ct);
+        // Schema ACL updates in both test classes target public.nspacl.
+        // Serialize test-only bootstrap ACROSS processes, not just xUnit tasks.
         await using var cn = await admin.OpenConnectionAsync(ct);
+        await using var tx = await cn.BeginTransactionAsync(ct);
+        await using (var gate = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(77110042)", cn, tx))
+            await gate.ExecuteNonQueryAsync(ct);
+        await PgClinicalCenterJournal.InitializeIsolatedTestSchemaAsync(admin, ct);
         await using var grants = new NpgsqlCommand("""
             DO $role$
             BEGIN
@@ -47,8 +53,9 @@ public sealed class CenterJournalDatabaseTests
             GRANT SELECT,INSERT ON internal_test_center_event,
                 internal_test_center_audit,internal_test_center_denial
                 TO taranom_sprint06_center_test;
-            """, cn);
+            """, cn, tx);
         await grants.ExecuteNonQueryAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     private static async Task<(NpgsqlDataSource Db, PgClinicalCenterJournal Store)> ConnectAsync()
@@ -394,6 +401,45 @@ public sealed class CenterJournalDatabaseTests
         Assert.Equal(1L, await Count(db, "internal_test_center_denial", center));
     }
 
+
+    [Fact]
+    public async Task SelectiveUnassignmentHasOneAuditAndPreservesAnotherWard()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var center = NewCenter("selective");
+        var doctor = "test:doctor";
+        var a = "test:ward-a"; var b = "test:ward-b";
+        await Apply(store, center, Cmd(center, CenterCommandKind.DefineDepartment, 0, a));
+        await Apply(store, center, Cmd(center, CenterCommandKind.DefineDepartment, 1, b));
+        await Apply(store, center, Cmd(center, CenterCommandKind.RecordDoctorAffiliation, 2, doctor: doctor));
+        await Apply(store, center, Cmd(center, CenterCommandKind.AssignDoctorToDepartment, 3, a, doctor));
+        await Apply(store, center, Cmd(center, CenterCommandKind.AssignDoctorToDepartment, 4, b, doctor));
+        var original = Cmd(center, CenterCommandKind.UnassignDoctorFromDepartment, 5, a, doctor);
+        Assert.Equal(CenterOutcome.Applied, (await Apply(store, center, original)).Outcome);
+        var read = await Read(store, center);
+        Assert.Equal(6L, read.Version);
+        Assert.Equal(new[] { b }, read.DoctorDepartments[doctor]);
+        Assert.Equal(DoctorAffiliation.PendingIndependentVerification, read.Doctors[doctor]);
+        Assert.Equal(1L, await Count(db, "internal_test_center_assignment", center));
+        Assert.Equal(6L, await Count(db, "internal_test_center_event", center));
+        Assert.Equal(6L, await Count(db, "internal_test_center_audit", center));
+        Assert.Equal(CenterOutcome.Replayed, (await Apply(store, center, original)).Outcome);
+        Assert.Equal(CenterOutcome.NotApplicable, (await Apply(store, center, Cmd(center,
+            CenterCommandKind.UnassignDoctorFromDepartment, 6, a, doctor))).Outcome);
+        Assert.Equal(CenterOutcome.StaleRevision, (await Apply(store, center, Cmd(center,
+            CenterCommandKind.UnassignDoctorFromDepartment, 5, b, doctor))).Outcome);
+        Assert.Equal(6L, await Count(db, "internal_test_center_audit", center));
+        Assert.Equal(CenterOutcome.Applied, (await Apply(store, center, Cmd(center,
+            CenterCommandKind.UnassignDoctorFromDepartment, 6, b, doctor))).Outcome);
+        var last = await Read(store, center);
+        Assert.Equal(7L, last.Version);
+        Assert.Empty(last.DoctorDepartments);
+        Assert.Equal(DoctorAffiliation.PendingIndependentVerification, last.Doctors[doctor]);
+        Assert.Equal(0L, await Count(db, "internal_test_center_assignment", center));
+        Assert.Equal(7L, await Count(db, "internal_test_center_audit", center));
+    }
+
     [Fact]
     public async Task IdenticalSyntheticDoctorKeysStayScopedToTheirOwnCenter()
     {
@@ -410,5 +456,101 @@ public sealed class CenterJournalDatabaseTests
         // No one has proven both synthetic strings represent one real person.
         Assert.Equal(DoctorAffiliation.PendingIndependentVerification, (await Read(store, centerA)).Doctors["test:doctor-x"]);
         Assert.Equal(DoctorAffiliation.PendingIndependentVerification, (await Read(store, centerB)).Doctors["test:doctor-x"]);
+    }
+
+    [Fact]
+    public async Task ReadOnlyMvccSeesLastCommittedSnapshotWithoutWaitingForCenterWriterLock()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var center = NewCenter("mvcc");
+        Assert.Equal(CenterOutcome.Applied, (await Apply(store, center,
+            Cmd(center, CenterCommandKind.DefineDepartment, 0, "test:committed"))).Outcome);
+
+        // Hold a genuine PostgreSQL row UPDATE lock and an uncommitted
+        // relational projection change on a separate connection. The read
+        // must neither wait on the writer row lock nor expose the new values.
+        await using var admin = NpgsqlDataSource.Create(AdminConnection);
+        await using var cn = await admin.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using var held = await cn.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await using (var update = new NpgsqlCommand("""
+                UPDATE internal_test_center SET current_version=99 WHERE center_ref=@center
+                """, cn, held))
+            {
+                update.Parameters.AddWithValue("center", center);
+                Assert.Equal(1, await update.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+            }
+            await using (var insert = new NpgsqlCommand("""
+                INSERT INTO internal_test_center_department(center_ref,department_ref)
+                VALUES (@center,'test:uncommitted')
+                """, cn, held))
+            {
+                insert.Parameters.AddWithValue("center", center);
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+                TestContext.Current.CancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(8));
+            var current = await store.ReadAsync(center, deadline.Token);
+            Assert.Equal(1L, current.Version);
+            Assert.Single(current.Departments);
+            Assert.Contains("test:committed", current.Departments);
+            Assert.DoesNotContain("test:uncommitted", current.Departments);
+            Assert.Single(current.Events);
+        }
+        finally
+        {
+            await held.RollbackAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(CenterOutcome.Applied, (await Apply(store, center,
+            Cmd(center, CenterCommandKind.DefineDepartment, 1, "test:after-rollback"))).Outcome);
+        var committed = await Read(store, center);
+        Assert.Equal(2L, committed.Version);
+        Assert.Equal(2, committed.Departments.Count);
+        Assert.Equal(2L, await Count(db, "internal_test_center_audit", center));
+    }
+
+    [Fact]
+    public async Task SimultaneousMvccReadersAndWriterReturnOnlyFullyAttestedVersions()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var center = NewCenter("reader-writer");
+        Assert.Equal(CenterOutcome.Applied, (await Apply(store, center,
+            Cmd(center, CenterCommandKind.DefineDepartment, 0, "test:initial"))).Outcome);
+
+        async Task WriteSeries()
+        {
+            for (var version = 1; version <= 12; version++)
+            {
+                var change = await Apply(store, center, Cmd(center,
+                    CenterCommandKind.DefineDepartment, version, "test:department-" + version));
+                Assert.Equal(CenterOutcome.Applied, change.Outcome);
+                await Task.Yield();
+            }
+        }
+
+        async Task InspectSeries()
+        {
+            for (var sample = 0; sample < 15; sample++)
+            {
+                var snapshot = await Read(store, center);
+                Assert.Equal(snapshot.Version, snapshot.Events.Length);
+                Assert.Equal(snapshot.Version, snapshot.Departments.Count);
+                for (var i = 0; i < snapshot.Events.Length; i++)
+                    Assert.Equal(i + 1L, snapshot.Events[i].Version);
+                await Task.Yield();
+            }
+        }
+
+        await Task.WhenAll(WriteSeries(), InspectSeries(), InspectSeries());
+        var final = await Read(store, center);
+        Assert.Equal(13L, final.Version);
+        Assert.Equal(13, final.Departments.Count);
+        Assert.Equal(13L, await Count(db, "internal_test_center_event", center));
+        Assert.Equal(13L, await Count(db, "internal_test_center_audit", center));
     }
 }

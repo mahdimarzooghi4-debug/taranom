@@ -1,0 +1,22 @@
+# TRN-TECH-098 — Version-pinned, point-in-time cost-awareness event history
+
+**Sprint 89** — accepted Business TRN-BIZ-051/052 and TRN-BIZ-049; source contracts TRN-TECH-095/097 and existing `CostAwarenessRecorder`. Parent PR #99 exact head `00a66c045409df504329338cc9e35d7f5f0d67a3` with both Push and mainline PR 14/14 SUCCESS; main remains owner-merged through Sprint 86.
+
+## Why
+
+The actual test-only PostgreSQL `PgSyntheticCostAwarenessJournal` already writes an immutable preview, revisioned unverified choices, event digests and matching append-only audit records in the same database transaction; its `ReadAsync` fully replays every choice through canonical `CostAwarenessRecorder` and fail-closes corruption. The Member synthetic UI could register, write and show the newest choice, but **could not inspect historical versions or safely page through the event history**. This prevents effective observation of repeated disputed cost choices or understanding what the member *purportedly* saw at a particular point in the test-only workflow. Do not create a parallel event store or guessed receipt/insurance outcome.
+
+## Two bounded GET-only projections
+
+Existing loopback-only test host port 4320, existing isolated test database and both existing opt-ins `TARANOM_CENTER_DEMO_TEST_ONLY=CI_EPHEMERAL_ONLY` and `TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY` remain mandatory. Add:
+
+* `GET /internal/demo/v1/cost-previews/{previewId}/history?afterRevision=<n>&limit=<1..20>&expectedCurrentRevision=<n>` — exactly three keys, no duplicates, ASCII decimal, no leading zero except literal `0`. A canonical lowercase, nonzero preview UUID is mandatory. Source `ReadAsync` is called exactly once to read and reattest one snapshot. The caller must pin the exact current revision from the prior observed preview; any concurrent choice appended returns 409, so future pages cannot mix two current revisions. The result includes ascending sequential observed event revision and one of three *unverified* choice labels only, bounded to max 20 events, hasMore and next cursor.
+* `GET /internal/demo/v1/cost-previews/{previewId}/versions/{revision}?expectedCurrentRevision=<n>` — exact one query key, canonical nonnegative historical revision no leading zero; replayed/validated complete journal is projected as of the selected prefix, including count and last *unverified* choice only. Historical revision 0 is a valid no-choice preview; future revision fails closed 400, current-revision mismatch 409, missing UUID 404, corruption 503. Historical data is not carried forward to new preview IDs.
+
+These are projections of an existing **fully verified PostgreSQL snapshot**, not client-provided history; they do not create rows, legal receipt, clinical consent or insurer change. No individual identity/medical data, amounts, raw claim text, provider evidence or private IDs beyond synthetic UUID are exposed. Headers use existing no-store/CSP/Host+forwarded denial; no CORS or identity claim. Exact caller-bound flags for legal choice/insurer/wallet/clinical/release are always `false`. Tests must prove no silent replay from altered cursor and no automatic POST/read on UI load.
+
+## UI and acceptance
+
+Only the isolated `/member-demo/costs` test workspace gains a read-only history subpanel after a successful verified preview retrieval. Manual action reads page one and optional subsequent pages at the *same pinned revision*, or manually requests a historical prefix. The panel is keyed to preview UUID/revision and clears whenever a new cost choice supersedes the observed revision. No default writes or browser local storage. Genuine Kestrel/PostgreSQL tests cover at least 7 real events, page 5+2, historical 0/1/3/6, concurrent append invalidating original cursor and historical read, unknown UUID, invalid and duplicated query, hostile Host/forwarded, and forbidden authorization flags. Chromium covers manual history and as-of after reload.
+
+Maintain the existing 14 canonical CI jobs in Push Sprint89 and mainline PR-to-main workflows, on identical head SHA. New dispatcher has only its exact development Push branch and historical PR base Sprint88, so no duplicate mainline PR tests. Draft/Open/Unmerged; technical Code Review is COMMENT only; no Stage, QA Gate, Release, Production or Merge. TRN-TECH-012 is still NOT CODE-AUTHORIZED. All 17 national launch gates BLOCKED_UNVERIFIED, comprehensive nationwide first three-market launch DENIED_BY_DEFAULT, completion UNBASELINED.
