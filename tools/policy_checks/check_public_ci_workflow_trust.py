@@ -183,6 +183,10 @@ DISPATCHER_BRANCHES = {
         "sprint-108-consent-source-integrity-hardening",
         "sprint-107-source-backed-epic-progress-ops",
     ),
+    "sprint-109-clinical-access-transparency-journal.yml": (
+        "sprint-109-clinical-access-transparency-journal",
+        "sprint-108-consent-source-integrity-hardening",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
