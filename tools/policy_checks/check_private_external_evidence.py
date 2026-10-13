@@ -46,13 +46,16 @@ def _file_identity(st):
     return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
 
 
-def _read_json(path: Path) -> tuple[dict, bytes]:
+def _read_json(path: Path, *, owner_only: bool = False) -> tuple[dict, bytes]:
     """Read bounded, anchored JSON; do not follow a replaced symlink."""
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         before = os.fstat(fd)
         if not stat.S_ISREG(before.st_mode) or before.st_size > MAX_MANIFEST:
             raise ValueError("INVALID_MANIFEST_FILE")
+        if owner_only and (before.st_nlink != 1 or before.st_uid != os.getuid()
+                or stat.S_IMODE(before.st_mode) & 0o077):
+            raise ValueError("UNSAFE_PRIVATE_MANIFEST_FILE")
         with os.fdopen(os.dup(fd), "rb") as stream:
             raw = stream.read(MAX_MANIFEST + 1)
         after = os.fstat(fd)
@@ -205,7 +208,11 @@ def inspect(public_root: Path, evidence_root: Path, manifest: Path) -> dict:
         # an accepted reference, even when O_NOFOLLOW rejects the alias.
         if manifest.is_symlink() and _inside(manifest, public_root):
             raise ValueError("PRIVATE_MANIFEST_INSIDE_PUBLIC_REPO")
-        data, _ = _read_json(manifest)
+        private = not _inside(manifest, public_root)
+        if private and (manifest.is_symlink()
+                or any(p.is_symlink() for p in manifest.absolute().parents)):
+            raise ValueError("UNSAFE_PRIVATE_MANIFEST_PATH")
+        data, _ = _read_json(manifest, owner_only=private)
         if set(data) != ROOT_FIELDS or type(data.get("schema_version")) is not int or data["schema_version"] != 1:
             raise ValueError("INTAKE_SCHEMA_INVALID")
         if data.get("scope") != SCOPE or not isinstance(data.get("entries"), list):
@@ -278,10 +285,100 @@ def inspect(public_root: Path, evidence_root: Path, manifest: Path) -> dict:
             "ARTIFACT_SHA256_MISMATCH", "MANIFEST_CHANGED_DURING_READ",
             "SECURE_DESCRIPTOR_OPEN_UNAVAILABLE", "ARTIFACT_PATH_CHANGED",
             "ARTIFACT_MUTATED_DURING_READ", "HARDLINKED_ARTIFACT_FORBIDDEN",
+            "UNSAFE_PRIVATE_MANIFEST_FILE", "UNSAFE_PRIVATE_MANIFEST_PATH",
         }
         errors.append(known if known in allowed else "INTAKE_UNVERIFIABLE")
     report["errors"] = sorted(set(errors))
     return report
+
+
+
+def _private_report_location(path: Path, public_root: Path) -> None:
+    """Reject all public/aliased/unsafe private paths BEFORE reading evidence."""
+    path = path.absolute()
+    if (_inside(path, public_root) or path.is_symlink()
+            or any(parent.is_symlink() for parent in path.parents)):
+        raise ValueError("PRIVATE_REPORT_OUTSIDE_PUBLIC_REPO_REQUIRED")
+    try:
+        parent = os.stat(path.parent, follow_symlinks=False)
+    except OSError as error:
+        raise ValueError("PRIVATE_REPORT_DIRECTORY_UNAVAILABLE") from error
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid()
+            or stat.S_IMODE(parent.st_mode) & 0o077):
+        raise ValueError("UNSAFE_PRIVATE_REPORT_DIRECTORY")
+    if path.exists() or path.is_symlink():
+        raise ValueError("PRIVATE_REPORT_ALREADY_EXISTS")
+
+
+def _write_private_report(path: Path, public_root: Path, report: dict) -> None:
+    """Exclusively create one private 0600 report, never overwrite a prior one.
+
+    A pinned directory descriptor and per-inode cleanup prevent a symlink or
+    rename race from redirecting output or deleting someone else's file.
+    This does not protect a trusted operator from a privileged hostile host.
+    """
+    path = path.absolute()
+    _private_report_location(path, public_root)
+    directory_fd = None
+    file_fd = None
+    created = None
+    try:
+        directory_fd = os.open(path.parent,
+                               os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        parent = os.fstat(directory_fd)
+        named_parent = os.stat(path.parent, follow_symlinks=False)
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid()
+                or stat.S_IMODE(parent.st_mode) & 0o077
+                or (parent.st_dev, parent.st_ino)
+                   != (named_parent.st_dev, named_parent.st_ino)):
+            raise ValueError("UNSAFE_PRIVATE_REPORT_DIRECTORY")
+        file_fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                          os.O_NOFOLLOW, 0o600, dir_fd=directory_fd)
+        opened = os.fstat(file_fd)
+        created = (opened.st_dev, opened.st_ino)
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                or stat.S_IMODE(opened.st_mode) & 0o077):
+            raise ValueError("UNSAFE_PRIVATE_REPORT_FILE")
+        data = (json.dumps(report, sort_keys=True, indent=2) + "\n").encode("utf-8")
+        with os.fdopen(os.dup(file_fd), "wb") as stream:
+            stream.write(data)
+            stream.flush()
+        os.fsync(file_fd)
+        named_file = os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+        current_parent = os.stat(path.parent, follow_symlinks=False)
+        if ((named_file.st_dev, named_file.st_ino) != created
+                or (current_parent.st_dev, current_parent.st_ino)
+                   != (parent.st_dev, parent.st_ino)):
+            raise ValueError("PRIVATE_REPORT_PATH_CHANGED")
+        os.fsync(directory_fd)
+        created = None
+    except (OSError, ValueError):
+        if directory_fd is not None and created is not None:
+            try:
+                named = os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+                if (named.st_dev, named.st_ino) == created:
+                    os.unlink(path.name, dir_fd=directory_fd)
+            except OSError:
+                pass
+        raise
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        if directory_fd is not None:
+            os.close(directory_fd)
+
+
+def _write_public_template_report(path: Path, report: dict) -> None:
+    """Non-sensitive, empty-template CI output; still never clobber a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(os.dup(fd), "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(report, sort_keys=True, indent=2) + "\n")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def main() -> int:
@@ -291,16 +388,37 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--report-json", type=Path, required=True)
     args = parser.parse_args()
-    # Real private manifests must not write any report in this public repo,
-    # even when reports currently contain only anonymous counts and enums.
-    if not _inside(args.manifest.absolute(), args.root.resolve()) and _inside(
-            args.report_json.absolute(), args.root.resolve()):
-        print("DENIED: PRIVATE_REPORT_OUTSIDE_PUBLIC_REPO_REQUIRED", file=sys.stderr)
+    public_root = args.root.resolve()
+    manifest = args.manifest.absolute()
+    private = not _inside(manifest, public_root)
+    # Fail before reading actual private bytes when the report destination is
+    # public, world-readable, symlinked, already occupied or an unsafe alias.
+    try:
+        if private:
+            _private_report_location(args.report_json, public_root)
+        report = inspect(public_root, args.evidence_root.absolute(), manifest)
+        if private:
+            _write_private_report(args.report_json, public_root, report)
+        else:
+            # Only the existing public EMPTY CI template may write under Git.
+            # A private report is never inferred from a filename or count.
+            if report["status"] != "EMPTY_TEMPLATE_NO_EVIDENCE":
+                raise ValueError("PUBLIC_TEMPLATE_ONLY")
+            _write_public_template_report(args.report_json, report)
+    except (OSError, ValueError) as error:
+        allowed = {
+            "PRIVATE_REPORT_OUTSIDE_PUBLIC_REPO_REQUIRED",
+            "PRIVATE_REPORT_DIRECTORY_UNAVAILABLE",
+            "UNSAFE_PRIVATE_REPORT_DIRECTORY",
+            "PRIVATE_REPORT_ALREADY_EXISTS",
+            "UNSAFE_PRIVATE_REPORT_FILE",
+            "PRIVATE_REPORT_PATH_CHANGED",
+            "PUBLIC_TEMPLATE_ONLY",
+        }
+        label = str(error) if isinstance(error, ValueError) else ""
+        print("DENIED: " + (label if label in allowed else
+              "PRIVATE_REPORT_UNVERIFIABLE"), file=sys.stderr)
         return 1
-    report = inspect(args.root.resolve(), args.evidence_root.absolute(),
-                     args.manifest.absolute())
-    args.report_json.parent.mkdir(parents=True, exist_ok=True)
-    args.report_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("External-evidence custody: " + report["status"] +
           "; checked_files=" + str(report["submitted_files_integrity_checked"]) +
           "; release_allowed=false; independent_review=false.")

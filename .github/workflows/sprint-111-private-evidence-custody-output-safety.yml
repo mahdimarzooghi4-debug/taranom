@@ -1,0 +1,14 @@
+name: Sprint 111 Private Evidence Custody Output Safety Full Regression
+on:
+  push:
+    branches: [sprint-111-private-evidence-custody-output-safety]
+  pull_request:
+    branches: [sprint-110-provider-quality-oversight-journal]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

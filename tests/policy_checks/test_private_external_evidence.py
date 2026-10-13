@@ -48,6 +48,8 @@ class EvidenceCustodyTests(unittest.TestCase):
                "source_inventory_sha256": self.inventory_hash, "entries": entries}
         obj.update(overrides)
         self.manifest.write_text(json.dumps(obj), encoding="utf-8")
+        if not custody._inside(self.manifest, self.repo):
+            self.manifest.chmod(0o600)
 
     def check(self):
         return inspect(self.repo, self.private, self.manifest)
@@ -287,6 +289,86 @@ class EvidenceCustodyTests(unittest.TestCase):
         self.assertNotIn(self.entry["sha256"], contents)
         self.assertNotIn(self.entry["custodian_ref"], contents)
         self.assertFalse(json.loads(contents)["release_allowed"])
+        self.assertEqual(out.stat().st_mode & 0o777, 0o600)
+
+
+    def _cli(self, path):
+        return subprocess.run(
+            [sys.executable,
+             str(ROOT / "tools/policy_checks/check_private_external_evidence.py"),
+             "--root", str(self.repo), "--evidence-root", str(self.private),
+             "--manifest", str(self.manifest), "--report-json", str(path)],
+            capture_output=True, text=True, check=False)
+
+    def test_world_readable_private_manifest_denied_without_review(self):
+        self.manifest.chmod(0o644)
+        self.assert_denied("UNSAFE_PRIVATE_MANIFEST_FILE")
+
+    def test_hardlinked_private_manifest_denied(self):
+        sibling = self.top / "manifest-hardlink.json"
+        os.link(self.manifest, sibling)
+        self.assert_denied("UNSAFE_PRIVATE_MANIFEST_FILE")
+
+    def test_symlinked_manifest_parent_denied_before_read(self):
+        folder = self.top / "hidden-input"
+        folder.mkdir(mode=0o700)
+        target = folder / "source.json"
+        self.manifest.replace(target)
+        linked = self.top / "input-alias"
+        linked.symlink_to(folder, target_is_directory=True)
+        self.manifest = linked / "source.json"
+        self.assert_denied("UNSAFE_PRIVATE_MANIFEST_PATH")
+
+    def test_preexisting_private_report_is_untouched(self):
+        out = self.top / "existing-report.json"
+        out.write_text("ORIGINAL_PRIVATE_REPORT", encoding="utf-8")
+        self.assertNotEqual(self._cli(out).returncode, 0)
+        self.assertEqual(out.read_text(), "ORIGINAL_PRIVATE_REPORT")
+
+    def test_private_report_symlink_is_rejected_without_target_change(self):
+        original = self.top / "sensitive-previous.json"
+        original.write_text("PRIVATE_ORIGINAL", encoding="utf-8")
+        link = self.top / "report-symlink.json"
+        link.symlink_to(original)
+        attempt = self._cli(link)
+        self.assertNotEqual(attempt.returncode, 0)
+        self.assertEqual(original.read_text(), "PRIVATE_ORIGINAL")
+        self.assertNotIn("sensitive-previous.json", attempt.stderr)
+
+    def test_world_readable_report_directory_denied_before_ingress(self):
+        directory = self.top / "group-visible"
+        directory.mkdir(mode=0o755)
+        output = directory / "candidate.json"
+        attempt = self._cli(output)
+        self.assertNotEqual(attempt.returncode, 0)
+        self.assertIn("UNSAFE_PRIVATE_REPORT_DIRECTORY", attempt.stderr)
+        self.assertFalse(output.exists())
+
+    def test_private_destination_cannot_alias_back_into_public_repository(self):
+        alias = self.top / "public-alias"
+        alias.symlink_to(self.repo, target_is_directory=True)
+        target = alias / "leak.json"
+        attempt = self._cli(target)
+        self.assertNotEqual(attempt.returncode, 0)
+        self.assertFalse((self.repo / "leak.json").exists())
+
+    def test_failed_private_report_fsync_cleans_only_its_own_inode(self):
+        out = self.top / "incomplete-private.json"
+        with patch.object(custody.os, "fsync", side_effect=OSError("private failure")):
+            with self.assertRaises(OSError):
+                custody._write_private_report(out, self.repo, {"status":"DENIED"})
+        self.assertFalse(out.exists())
+
+    def test_public_empty_template_still_works_without_real_evidence(self):
+        self.manifest = self.repo / "docs" / "governance" / "empty-template.json"
+        self.write([], source_inventory_sha256=None)
+        out = self.repo / "TestResults" / "empty-evidence.json"
+        self.assertEqual(self._cli(out).returncode, 0)
+        self.assertEqual(json.loads(out.read_text())["status"],
+                         "EMPTY_TEMPLATE_NO_EVIDENCE")
+        self.assertEqual(out.stat().st_mode & 0o777, 0o600)
+        # Even empty/public results may not silently overwrite a prior file.
+        self.assertNotEqual(self._cli(out).returncode, 0)
 
 
 if __name__ == "__main__":
