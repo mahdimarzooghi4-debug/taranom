@@ -177,8 +177,23 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
         var forged=Concern(first) with{
             ClaimedDisclosureScope=first.ClaimedDisclosureScope with{
                 MemberRef="test:other"}};
-        Assert.Equal(SyntheticAccessNoteOutcome.ScopeChanged,
+        // Changing only one member field breaks the disclosure scope's own
+        // member/record-owner/consent-subject equality; the domain must reject
+        // it as Invalid before attempting cross-case lineage comparison.
+        Assert.Equal(SyntheticAccessNoteOutcome.Invalid,
             (await store.ApplyAsync(id,forged,TestContext.Current.CancellationToken)).Outcome);
+        // A structurally coherent but different synthetic clinical scope
+        // gets further and is rejected against the pinned original request.
+        var scopeChanged=Concern(first) with
+        {
+            ClaimedDisclosureScope=first.ClaimedDisclosureScope with
+            {
+                RequestedDataCategoryRef="test:changed-category",
+                ClaimedScopedDataCategoryRef="test:changed-category"
+            }
+        };
+        Assert.Equal(SyntheticAccessNoteOutcome.ScopeChanged,
+            (await store.ApplyAsync(id,scopeChanged,TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(SyntheticAccessNoteOutcome.ScopeChanged,
             (await store.ApplyAsync(id,Concern(first) with{
                 OriginalRequestId=Guid.NewGuid()},TestContext.Current.CancellationToken)).Outcome);
