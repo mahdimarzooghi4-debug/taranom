@@ -4,10 +4,6 @@ export type RecoveryKind = 'DEFINE_DEPARTMENT' | 'RECORD_DOCTOR' | 'ASSIGN_DOCTO
 export type UncertainCenterCommand = {
   center: string; expectedVersion: number; kind: RecoveryKind; body: string;
 };
-type Original = {
-  requestId: string; expectedVersion: number; kind: RecoveryKind;
-  departmentRef: string | null; doctorRef: string | null;
-};
 const ownKeys = (v: Record<string, unknown>, names: string[]) =>
   Object.keys(v).join('|') === names.join('|');
 const object = (v: unknown): v is Record<string, unknown> =>
