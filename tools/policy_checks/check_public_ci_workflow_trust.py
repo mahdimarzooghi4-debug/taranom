@@ -103,6 +103,10 @@ DISPATCHER_BRANCHES = {
         "sprint-88-insurance-cost-support-handoff",
         "sprint-87-mainline-ci-integrity",
     ),
+    "sprint-89-synthetic-cost-history.yml": (
+        "sprint-89-synthetic-cost-history",
+        "sprint-88-insurance-cost-support-handoff",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

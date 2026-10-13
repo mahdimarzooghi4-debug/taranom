@@ -264,3 +264,8 @@ The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fc
 ## Sprint 88 — Independently reattested cost-to-insurance-support test handoff (2026-10-12)
 
 [TRN-TECH-097](../technical/TRN-TECH-097-synthetic-insurance-cost-support-handoff.md) and [Sprint88](../sprints/94-sprint-88-insurance-cost-support-handoff.md) join two pre-existing immutable synthetic-only PostgreSQL journals via explicit member/cost-reference verification. The user manually records an unverified coverage dispute through the original support case reducer, then independently reads both journals through a new GET-only correspondence check. Exact UUID retries after a lost acknowledgement cannot duplicate a support event. No insurer adjudication, real member identity, pricing, payment or legal case is implied; the national first launch remains DENIED_BY_DEFAULT with 17 unverified gates.
+
+
+## Sprint 89 — Frozen-revision audit timeline for unverified cost choice (2026-10-13)
+
+[TRN-TECH-098](../technical/TRN-TECH-098-synthetic-cost-choice-point-in-time-history.md) and [Sprint89](../sprints/95-sprint-89-synthetic-cost-history.md) reuse the canonical append-only PostgreSQL cost choice and audit journal for bounded page-by-page event history and as-of historical versions. An expectedCurrentRevision pins the event cursor to prevent mixed-version pages when a concurrent synthetic writer appends. No legal member choice, payment or insurer adjustment is inferred. Comprehensive first national three-market launch remains DENIED_BY_DEFAULT; all 17 real readiness gates BLOCKED_UNVERIFIED.
