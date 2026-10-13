@@ -115,6 +115,10 @@ DISPATCHER_BRANCHES = {
         "sprint-91-insurance-audit-timeline",
         "sprint-90-insurance-followup-journal",
     ),
+    "sprint-92-full-ci-test-census.yml": (
+        "sprint-92-full-ci-test-census",
+        "sprint-91-insurance-audit-timeline",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

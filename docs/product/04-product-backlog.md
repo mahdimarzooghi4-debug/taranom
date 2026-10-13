@@ -279,3 +279,8 @@ The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fc
 ## Sprint 91 — two-source-pinned insurance support activity (2026-10-13)
 
 [TRN-TECH-100](../technical/TRN-TECH-100-cross-journal-insurance-timeline.md) and [Sprint91](../sprints/97-sprint-91-insurance-audit-timeline.md) show a chronological, paginated test-only member dispute and follow-up activity timeline, drawn directly from the original, audit-verified PostgreSQL support journal and pinned to the independent cost-preview revision. Each new page must match both revisions or fail closed. No medical, legal, financial or insurer decision is produced. Official nationwide three-market first launch remains DENIED_BY_DEFAULT and all 17 external readiness gates remain BLOCKED_UNVERIFIED.
+
+
+## Sprint 92 — mandatory source-to-runner test census (2026-10-13)
+
+[TRN-TECH-101](../technical/TRN-TECH-101-mandatory-full-ci-test-census.md) and [Sprint92](../sprints/98-sprint-92-full-ci-test-census.md) address silent omission of `test_*.py` files from the canonical full-CI workflow: a green job cannot attest to a test never invoked. The read-only checker compares all existing policy, Ops HTTP and Center/PostgreSQL Python test scripts with exact executable test commands under their canonical job, rejects omitted, duplicate, noncanonical, renamed, symlinked and mislocated files, and preserves the unfiltered Chromium calls. Sprint 87's previously omitted mainline security test is now explicitly executed. This is a real CI coverage admission guard, not a product completeness percentage, code approval, Stage or national release.

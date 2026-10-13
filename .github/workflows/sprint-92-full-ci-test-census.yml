@@ -1,0 +1,14 @@
+name: Sprint 92 Mandatory Full CI Test Census
+on:
+  push:
+    branches: [sprint-92-full-ci-test-census]
+  pull_request:
+    branches: [sprint-91-insurance-audit-timeline]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

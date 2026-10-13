@@ -36,6 +36,10 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_public_ci_workflow_trust.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_shared_full_ci.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_mainline_full_ci.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_full_ci_test_census.py' -v
+          python3 tools/policy_checks/check_full_ci_test_census.py --root . --report-json TestResults/fullci-test-census.json
+          test -s TestResults/fullci-test-census.json
           python3 tools/policy_checks/check_public_ci_workflow_trust.py --root . --report-json TestResults/fullci-workflow-trust.json
           test -s TestResults/fullci-workflow-trust.json
       # Sprint59 tests keep all actual private target files outside GitHub Actions.
