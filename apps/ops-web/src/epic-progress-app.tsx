@@ -32,6 +32,8 @@ function valid(value:unknown):value is Snapshot{
  a.epicCount!==13||a.provisionalCapabilities!==39||
  a.externalBlockersUnverified!==17||
  typeof a.sourceFingerprint!=='string'||!/^[a-f0-9]{64}$/.test(a.sourceFingerprint)||
+ typeof a.linkedNonProductionCodeTestPairs!=='number'||
+ typeof a.candidatesWithoutReferences!=='number'||
  !Number.isInteger(a.linkedNonProductionCodeTestPairs)||
  !Number.isInteger(a.candidatesWithoutReferences)||
  a.linkedNonProductionCodeTestPairs!+a.candidatesWithoutReferences!==39||
