@@ -17,6 +17,9 @@ if (connection.Database != "taranom_sprint64_center" ||
 
 await using var dataSource = NpgsqlDataSource.Create(connection.ConnectionString);
 await PgClinicalCenterJournal.InitializeIsolatedTestSchemaAsync(dataSource);
+// TRN-TECH-113: a second isolated, source-verified synthetic journal.
+// No real identity, national ID, licensed IdP or membership is involved.
+await PgProofingCaseJournal.InitializeIsolatedTestSchemaAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
 // TRN-TECH-110: support HTTP must never inherit the schema-owner connection;
 // the support journal gets only bounded DML on its three synthetic tables.
@@ -27,6 +30,8 @@ await using var supportRuntime = await Taranom.CenterWorkflow.Demo.PgSyntheticSu
 if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")
     await PgSyntheticCostAwarenessJournal.InitializeIsolatedTestSchemaAsync(dataSource);
 var store = new PgClinicalCenterJournal(dataSource);
+Taranom.CenterWorkflow.Demo.ProofingDemoHttp.Store =
+    new PgProofingCaseJournal(dataSource);
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(4320));
@@ -131,6 +136,12 @@ app.MapGet("/internal/demo/v1/support/{caseRef}/versions/{revision}",
 // activation, payment, wallet, sponsor access or external API.
 app.MapPost("/internal/demo/v1/payer-evidence/check",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.PayerEvidenceHttp.CheckAsync);
+// Separate request-driven synthetic identity correction + re-verification
+// journal. No actual personal data fields or authorization side effects.
+app.MapGet("/internal/demo/v1/proofing/{caseRef}",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.ProofingDemoHttp.ReadAsync);
+app.MapPost("/internal/demo/v1/proofing/{caseRef}/commands",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.ProofingDemoHttp.WriteAsync);
 
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 // Exact local member entrypoint is required: the generic root fallback must
@@ -143,6 +154,9 @@ app.MapGet("/member-demo/", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
 app.MapGet("/member-demo/payer", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+        "member-demo", "index.html"), "text/html; charset=utf-8"));
+app.MapGet("/member-demo/proofing", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
 if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")

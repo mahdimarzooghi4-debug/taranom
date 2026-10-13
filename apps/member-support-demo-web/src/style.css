@@ -6,3 +6,10 @@ select{display:block;width:100%;padding:.5rem;border:2px solid #456a82;border-ra
 .payer-workbench legend {font-weight:700}
 .payer-result {background:#edf4f8;padding:1rem;border-radius:8px}
 .payer-risk {color:#773e27;font-weight:700}
+
+.proofing-workbench {max-width:920px;margin:auto;padding:1rem}
+.proofing-workbench .denial {background:#fff6ee;border-right:4px solid #9c542e;padding:.8rem}
+.proofing-workbench button {margin:.3rem}
+.proofing-workbench button:disabled {opacity:.45}
+.proofing-workbench .history {background:white;border:1px solid #cbd9e1;border-radius:8px;padding:1rem}
+.proofing-workbench strong {font-weight:750}

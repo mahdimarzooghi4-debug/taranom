@@ -163,6 +163,10 @@ DISPATCHER_BRANCHES = {
         "sprint-103-payer-evidence-operational-workbench",
         "sprint-102-cost-mvcc-isolated-read",
     ),
+    "sprint-104-synthetic-identity-correction-reverification.yml": (
+        "sprint-104-synthetic-identity-correction-reverification",
+        "sprint-103-payer-evidence-operational-workbench",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
