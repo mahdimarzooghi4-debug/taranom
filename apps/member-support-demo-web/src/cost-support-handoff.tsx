@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {CostSupportFollowUp} from './cost-support-followup';
+import {CostSupportTimeline} from './cost-support-timeline';
 
 // TRN-TECH-097: manual nonbinding insurance-dispute intake against two
 // existing test-only PG journals. No claim of legal receipt or coverage.
@@ -150,6 +151,9 @@ export function CostSupportHandoff({source}:{source:Cost}) {
     {review?<CostSupportFollowUp source={source} caseRef={caseRef}
       link={review} onPending={setFollowUpPending}
       onRecorded={(result)=>{setReview(null);setCreated(true);setMessage(result);}}/>:null}
+    {review&&!followUpPending?<CostSupportTimeline
+      key={source.previewId+':'+source.choiceRevision+':'+caseRef+':'+review.supportRevision}
+      source={source} caseRef={caseRef} link={review}/>:null}
     {review?<div data-testid="cost-support-linked-result">
       <p>نتیجه: {review.outcome}</p>
       <p>نسخه انتخاب هزینه: {review.costChoiceRevision} · نسخه اعتراض: {review.supportRevision}</p>

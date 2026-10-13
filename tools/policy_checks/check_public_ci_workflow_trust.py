@@ -111,6 +111,10 @@ DISPATCHER_BRANCHES = {
         "sprint-90-insurance-followup-journal",
         "sprint-89-synthetic-cost-history",
     ),
+    "sprint-91-insurance-audit-timeline.yml": (
+        "sprint-91-insurance-audit-timeline",
+        "sprint-90-insurance-followup-journal",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

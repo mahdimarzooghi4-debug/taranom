@@ -274,3 +274,8 @@ The owner-authorized through-Sprint-86 Merge (#97, `0d8cad694292c7810c9f292598fc
 ## Sprint 90 — Manual revision-pinned insurance support follow-up (2026-10-13)
 
 [TRN-TECH-099](../technical/TRN-TECH-099-synthetic-dispute-followup-preflight.md) and [Sprint90](../sprints/96-sprint-90-insurance-followup-journal.md) reuse the existing versioned PostgreSQL insurance support journal: manually cross-verify the member and cost-preview reference, preflight both independent revisions, append a scoped test-only follow-up via the existing support reducer with exact original case lineage, and recover uncertain outcomes by exact UUID replay. No insurer reply, adjustment, legal complaint, payment or clinical authority follows. Nationwide launch remains DENIED_BY_DEFAULT and all 17 requirements BLOCKED_UNVERIFIED.
+
+
+## Sprint 91 — two-source-pinned insurance support activity (2026-10-13)
+
+[TRN-TECH-100](../technical/TRN-TECH-100-cross-journal-insurance-timeline.md) and [Sprint91](../sprints/97-sprint-91-insurance-audit-timeline.md) show a chronological, paginated test-only member dispute and follow-up activity timeline, drawn directly from the original, audit-verified PostgreSQL support journal and pinned to the independent cost-preview revision. Each new page must match both revisions or fail closed. No medical, legal, financial or insurer decision is produced. Official nationwide three-market first launch remains DENIED_BY_DEFAULT and all 17 external readiness gates remain BLOCKED_UNVERIFIED.

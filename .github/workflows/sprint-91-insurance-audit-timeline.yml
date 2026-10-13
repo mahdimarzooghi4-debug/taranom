@@ -1,0 +1,14 @@
+name: Sprint 91 Insurance Audit Timeline Full Regression
+on:
+  push:
+    branches: [sprint-91-insurance-audit-timeline]
+  pull_request:
+    branches: [sprint-90-insurance-followup-journal]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
