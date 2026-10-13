@@ -394,6 +394,44 @@ public sealed class CenterJournalDatabaseTests
         Assert.Equal(1L, await Count(db, "internal_test_center_denial", center));
     }
 
+
+    [Fact]
+    public async Task SelectiveUnassignmentHasOneAuditAndPreservesAnotherWard()
+    {
+        var (db, store) = await ConnectAsync();
+        await using var _ = db;
+        var center = NewCenter("selective"), doctor = "test:doctor";
+        var a = "test:ward-a"; var b = "test:ward-b";
+        await Apply(store, center, Cmd(center, CenterCommandKind.DefineDepartment, 0, a));
+        await Apply(store, center, Cmd(center, CenterCommandKind.DefineDepartment, 1, b));
+        await Apply(store, center, Cmd(center, CenterCommandKind.RecordDoctorAffiliation, 2, doctor: doctor));
+        await Apply(store, center, Cmd(center, CenterCommandKind.AssignDoctorToDepartment, 3, a, doctor));
+        await Apply(store, center, Cmd(center, CenterCommandKind.AssignDoctorToDepartment, 4, b, doctor));
+        var original = Cmd(center, CenterCommandKind.UnassignDoctorFromDepartment, 5, a, doctor);
+        Assert.Equal(CenterOutcome.Applied, (await Apply(store, center, original)).Outcome);
+        var read = await Read(store, center);
+        Assert.Equal(6L, read.Version);
+        Assert.Equal(new[] { b }, read.DoctorDepartments[doctor]);
+        Assert.Equal(DoctorAffiliation.PendingIndependentVerification, read.Doctors[doctor]);
+        Assert.Equal(1L, await Count(db, "internal_test_center_assignment", center));
+        Assert.Equal(6L, await Count(db, "internal_test_center_event", center));
+        Assert.Equal(6L, await Count(db, "internal_test_center_audit", center));
+        Assert.Equal(CenterOutcome.Replayed, (await Apply(store, center, original)).Outcome);
+        Assert.Equal(CenterOutcome.NotApplicable, (await Apply(store, center, Cmd(center,
+            CenterCommandKind.UnassignDoctorFromDepartment, 6, a, doctor))).Outcome);
+        Assert.Equal(CenterOutcome.StaleRevision, (await Apply(store, center, Cmd(center,
+            CenterCommandKind.UnassignDoctorFromDepartment, 5, b, doctor))).Outcome);
+        Assert.Equal(6L, await Count(db, "internal_test_center_audit", center));
+        Assert.Equal(CenterOutcome.Applied, (await Apply(store, center, Cmd(center,
+            CenterCommandKind.UnassignDoctorFromDepartment, 6, b, doctor))).Outcome);
+        var last = await Read(store, center);
+        Assert.Equal(7L, last.Version);
+        Assert.Empty(last.DoctorDepartments);
+        Assert.Equal(DoctorAffiliation.PendingIndependentVerification, last.Doctors[doctor]);
+        Assert.Equal(0L, await Count(db, "internal_test_center_assignment", center));
+        Assert.Equal(7L, await Count(db, "internal_test_center_audit", center));
+    }
+
     [Fact]
     public async Task IdenticalSyntheticDoctorKeysStayScopedToTheirOwnCenter()
     {

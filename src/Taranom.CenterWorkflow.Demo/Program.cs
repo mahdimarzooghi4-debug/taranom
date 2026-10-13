@@ -259,6 +259,7 @@ internal readonly record struct TestCommand(
                 "RECORD_DOCTOR" => CenterCommandKind.RecordDoctorAffiliation,
                 "ASSIGN_DOCTOR" => CenterCommandKind.AssignDoctorToDepartment,
                 "END_DOCTOR" => CenterCommandKind.EndDoctorAffiliation,
+                "UNASSIGN_DOCTOR" => CenterCommandKind.UnassignDoctorFromDepartment,
                 _ => (CenterCommandKind)0
             };
             if (mapped == 0) return null;
@@ -269,7 +270,9 @@ internal readonly record struct TestCommand(
                 return null;
             if (mapped == CenterCommandKind.DefineDepartment && (dep is null || doc is not null) ||
                 mapped == CenterCommandKind.RecordDoctorAffiliation && (doc is null || dep is not null) ||
-                mapped == CenterCommandKind.AssignDoctorToDepartment && (dep is null || doc is null) ||
+                mapped is (CenterCommandKind.AssignDoctorToDepartment or
+                           CenterCommandKind.UnassignDoctorFromDepartment) &&
+                    (dep is null || doc is null) ||
                 mapped == CenterCommandKind.EndDoctorAffiliation && (doc is null || dep is not null))
                 return null;
             return new TestCommand(uuid, rev, mapped, dep, doc);

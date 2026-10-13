@@ -3,7 +3,8 @@ import {useState} from 'react';
 // TRN-TECH-103: exact-center doctor-specific, read-only PG event history.
 // Historical claims never authenticate a center or verify a physician licence.
 type Transition={
-  version:number;kind:'RecordDoctorAffiliation'|'AssignDoctorToDepartment'|'EndDoctorAffiliation';
+  version:number;kind:'RecordDoctorAffiliation'|'AssignDoctorToDepartment'|'EndDoctorAffiliation'|
+  'UnassignDoctorFromDepartment';
   departmentRef:string|null;hypotheticalOnly:true;licenseVerified:false;
   clinicalPrivilegesGranted:false;
 };
@@ -19,7 +20,8 @@ type Result={
   providerContractVerified:false;billingAllowed:false;nationalReleaseAllowed:false;
 };
 const validRef=(s:string)=>/^test:[A-Za-z0-9_-]{1,123}$/.test(s)&&s.length<=128;
-const kinds=new Set(['RecordDoctorAffiliation','AssignDoctorToDepartment','EndDoctorAffiliation']);
+const kinds=new Set(['RecordDoctorAffiliation','AssignDoctorToDepartment',
+  'UnassignDoctorFromDepartment','EndDoctorAffiliation']);
 function valid(raw:unknown,center:string,doctor:string,current:number,at:number,after:number):raw is Result{
   if(!raw||typeof raw!=='object')return false;
   const r=raw as Partial<Result>;
@@ -44,7 +46,8 @@ function valid(raw:unknown,center:string,doctor:string,current:number,at:number,
     if(!event||!Number.isSafeInteger(event.version)||event.version<=cursor||
       event.version>at||!kinds.has(event.kind)||
       (event.departmentRef!==null&&!validRef(event.departmentRef))||
-      (event.kind==='AssignDoctorToDepartment')!==(event.departmentRef!==null)||
+      (['AssignDoctorToDepartment','UnassignDoctorFromDepartment'].includes(event.kind))!==
+        (event.departmentRef!==null)||
       event.hypotheticalOnly!==true||event.licenseVerified!==false||
       event.clinicalPrivilegesGranted!==false)return false;
     cursor=event.version;

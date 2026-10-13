@@ -65,6 +65,7 @@ internal static class CenterDoctorAffiliationHttp
                 x.Command.DoctorRef == doctor &&
                 x.Command.Kind is (CenterCommandKind.RecordDoctorAffiliation or
                                    CenterCommandKind.AssignDoctorToDepartment or
+                                   CenterCommandKind.UnassignDoctorFromDepartment or
                                    CenterCommandKind.EndDoctorAffiliation))
                 .Take((int)limit + 1).ToArray();
             var more = relevant.Length > limit;
@@ -72,7 +73,8 @@ internal static class CenterDoctorAffiliationHttp
             {
                 version = x.Version,
                 kind = x.Command.Kind.ToString(),
-                departmentRef = x.Command.Kind == CenterCommandKind.AssignDoctorToDepartment
+                departmentRef = x.Command.Kind is (CenterCommandKind.AssignDoctorToDepartment or
+                    CenterCommandKind.UnassignDoctorFromDepartment)
                     ? x.Command.DepartmentRef : null,
                 hypotheticalOnly = true,
                 licenseVerified = false,

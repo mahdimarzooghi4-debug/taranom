@@ -16,7 +16,7 @@ type Snapshot = {
 
 type HistoryEvent = {
   version: number;
-  kind: 'DefineDepartment' | 'RecordDoctorAffiliation' | 'AssignDoctorToDepartment' | 'EndDoctorAffiliation';
+  kind: 'DefineDepartment' | 'RecordDoctorAffiliation' | 'AssignDoctorToDepartment' | 'EndDoctorAffiliation' | 'UnassignDoctorFromDepartment';
   departmentRef: string | null;
   doctorRef: string | null;
   hypotheticalOnly: true;
@@ -36,7 +36,8 @@ const eventNames: Record<HistoryEvent['kind'], string> = {
   DefineDepartment: 'تعریف بخش',
   RecordDoctorAffiliation: 'وابستگی پزشک در انتظار بررسی',
   AssignDoctorToDepartment: 'انتساب به بخش',
-  EndDoctorAffiliation: 'پایان وابستگی'
+  EndDoctorAffiliation: 'پایان وابستگی',
+  UnassignDoctorFromDepartment: 'برداشتن انتساب فقط از یک بخش'
 };
 function validHistory(v: unknown, center: string, after: number, expected: number): v is HistoryPage {
   if (!v || typeof v !== 'object') return false;
@@ -118,7 +119,8 @@ const texts: Record<Kind, string> = {
   DEFINE_DEPARTMENT: 'ثبت بخش آزمایشی',
   RECORD_DOCTOR: 'ثبت وابستگی تأییدنشده پزشک آزمایشی',
   ASSIGN_DOCTOR: 'تخصیص آزمایشی پزشک به بخش',
-  END_DOCTOR: 'پایان وابستگی آزمایشی پزشک'
+  END_DOCTOR: 'پایان وابستگی آزمایشی پزشک',
+  UNASSIGN_DOCTOR: 'حذف انتساب پزشک فقط از بخش انتخابی (آزمایشی)'
 };
 export function CenterDemo() {
   const [center, setCenter] = useState('test:center-demo');
@@ -219,7 +221,8 @@ export function CenterDemo() {
 
   async function apply(kind: Kind) {
     if (!snapshot || pending || uncertain) return;
-    const dep = kind === 'DEFINE_DEPARTMENT' || kind === 'ASSIGN_DOCTOR' ? department : null;
+    const dep = kind === 'DEFINE_DEPARTMENT' || kind === 'ASSIGN_DOCTOR' ||
+      kind === 'UNASSIGN_DOCTOR' ? department : null;
     const doc = kind === 'DEFINE_DEPARTMENT' ? null : doctor;
     if (!validRef(center) || dep !== null && !validRef(dep) || doc !== null && !validRef(doc)) {
       setStatus('شناسه‌های بخش و پزشک باید آزمایشی و با پیشوند test: باشند.');
@@ -357,6 +360,9 @@ export function CenterDemo() {
               {texts[kind]}
             </button>)}
         </div>
+        <p className="muted">حذف انتساب از بخش انتخابی فقط همان رابطه آزمایشی را پایان می‌دهد؛
+          سایر بخش‌های پزشک و وابستگی او به مرکز باقی می‌مانند. «پایان وابستگی»
+          جداگانه همه روابط جاری را پایان می‌دهد؛ هیچ‌کدام مجوز پزشکی نیستند.</p>
         {uncertain && <section role="alert" className="center-uncertain" aria-label="بازیابی دستور با نتیجه نامعلوم">
           <h3>وضعیت ثبت دستور نامعلوم است — فقط آزمایشی</h3>
           <p>پاسخ قطعی PostgreSQL به مرورگر نرسیده است؛ ممکن است رویداد قبلاً ثبت شده باشد.

@@ -296,6 +296,55 @@ public sealed class ClinicalCenterJournalTests
             Assert.Equal(CenterOutcome.Invalid, Do(Empty(), c).Outcome);
     }
 
+
+    [Fact]
+    public void SelectiveUnassignmentKeepsOtherWardAndOriginalDoctorStatus()
+    {
+        var first = WithAssignment();
+        var two = Do(first, Command(CenterCommandKind.DefineDepartment, 3, WardTwo)).Snapshot;
+        var both = Do(two, Command(CenterCommandKind.AssignDoctorToDepartment, 4, WardTwo, Doctor)).Snapshot;
+        var original = Command(CenterCommandKind.UnassignDoctorFromDepartment, 5, WardOne, Doctor);
+        var result = Do(both, original);
+        Assert.Equal(CenterOutcome.Applied, result.Outcome);
+        Assert.Equal(6L, result.Snapshot.Version);
+        Assert.Equal(DoctorAffiliation.PendingIndependentVerification, result.Snapshot.Doctors[Doctor]);
+        Assert.Equal(new[] { WardTwo }, result.Snapshot.DoctorDepartments[Doctor]);
+        Assert.Contains(WardOne, both.DoctorDepartments[Doctor]);
+        Assert.Equal(CenterOutcome.Replayed, Do(result.Snapshot, original).Outcome);
+        Assert.Equal(CenterOutcome.ConflictingReplay, Do(result.Snapshot,
+            original with { DepartmentRef = WardTwo }).Outcome);
+        Assert.Equal(CenterOutcome.StaleRevision, Do(result.Snapshot,
+            Command(CenterCommandKind.UnassignDoctorFromDepartment, 5, WardTwo, Doctor)).Outcome);
+        Assert.Equal(CenterOutcome.NotApplicable, Do(result.Snapshot,
+            Command(CenterCommandKind.UnassignDoctorFromDepartment, 6, WardOne, Doctor)).Outcome);
+    }
+
+    [Fact]
+    public void LastUnassignmentLeavesDoctorPendingAndInvalidRequestsFailClosed()
+    {
+        var state = WithAssignment();
+        var result = Do(state, Command(CenterCommandKind.UnassignDoctorFromDepartment,
+            3, WardOne, Doctor));
+        Assert.Equal(CenterOutcome.Applied, result.Outcome);
+        Assert.False(result.Snapshot.DoctorDepartments.ContainsKey(Doctor));
+        Assert.Equal(DoctorAffiliation.PendingIndependentVerification, result.Snapshot.Doctors[Doctor]);
+        Assert.Equal(CenterOutcome.NotApplicable, Do(result.Snapshot,
+            Command(CenterCommandKind.UnassignDoctorFromDepartment, 4, WardOne, Doctor)).Outcome);
+        Assert.Equal(CenterOutcome.ScopeDenied, Do(result.Snapshot,
+            Command(CenterCommandKind.UnassignDoctorFromDepartment, 4, WardOne, Doctor)
+                with { ActingCenterRef = OtherCenter }).Outcome);
+        foreach (var invalid in new[]
+        {
+            Command(CenterCommandKind.UnassignDoctorFromDepartment, 4, WardOne),
+            Command(CenterCommandKind.UnassignDoctorFromDepartment, 4, doctor: Doctor),
+            Command(CenterCommandKind.UnassignDoctorFromDepartment, 4, "real:ward", Doctor)
+        })
+            Assert.Equal(CenterOutcome.Invalid, Do(result.Snapshot, invalid).Outcome);
+        var ended = Do(result.Snapshot, Command(CenterCommandKind.EndDoctorAffiliation, 4, doctor: Doctor)).Snapshot;
+        Assert.Equal(CenterOutcome.NotApplicable, Do(ended,
+            Command(CenterCommandKind.UnassignDoctorFromDepartment, 5, WardOne, Doctor)).Outcome);
+    }
+
     [Fact]
     public void NoOperationsEverCreateActiveProfessionalGrant()
     {

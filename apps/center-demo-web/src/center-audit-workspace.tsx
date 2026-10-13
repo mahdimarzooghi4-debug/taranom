@@ -11,7 +11,7 @@ type Snapshot={
 };
 type Event={
   version:number;kind:'DefineDepartment'|'RecordDoctorAffiliation'|
-  'AssignDoctorToDepartment'|'EndDoctorAffiliation';
+  'AssignDoctorToDepartment'|'EndDoctorAffiliation'|'UnassignDoctorFromDepartment';
   departmentRef:string|null;doctorRef:string|null;
   hypotheticalOnly:true;professionalQualificationVerified:false;
   clinicalPrivilegesGranted:false
@@ -54,7 +54,8 @@ function valid(raw:unknown,center:string,current:number,asOf:number,after:number
   for(let i=0;i<a.events.length;i++){
     const e=a.events[i];
     if(!e||e.version!==after+i+1||e.version>asOf||
-       !['DefineDepartment','RecordDoctorAffiliation','AssignDoctorToDepartment','EndDoctorAffiliation']
+       !['DefineDepartment','RecordDoctorAffiliation','AssignDoctorToDepartment','EndDoctorAffiliation',
+        'UnassignDoctorFromDepartment']
          .includes(e.kind)||
        (e.departmentRef!==null&&!testRef(e.departmentRef))||
        (e.doctorRef!==null&&!testRef(e.doctorRef))||

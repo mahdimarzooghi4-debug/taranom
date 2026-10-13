@@ -1,0 +1,14 @@
+name: Sprint 99 Selective Center Doctor Unassignment Full Regression
+on:
+  push:
+    branches: [sprint-99-selective-center-doctor-unassignment]
+  pull_request:
+    branches: [sprint-98-center-portable-retry-receipt]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

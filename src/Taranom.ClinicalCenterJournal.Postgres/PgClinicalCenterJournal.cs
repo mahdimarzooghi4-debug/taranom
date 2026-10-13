@@ -161,6 +161,15 @@ internal sealed class PgClinicalCenterJournal(NpgsqlDataSource dataSource)
                     """, ct, ("center", centerRef), ("doctor", command.DoctorRef!),
                     ("department", command.DepartmentRef!));
                 break;
+            case CenterCommandKind.UnassignDoctorFromDepartment:
+                var removed = await RunAsync(connection, tx, """
+                    DELETE FROM internal_test_center_assignment
+                    WHERE center_ref=@center AND doctor_ref=@doctor AND department_ref=@department
+                    """, ct, ("center", centerRef), ("doctor", command.DoctorRef!),
+                    ("department", command.DepartmentRef!));
+                if (removed != 1)
+                    throw new InvalidOperationException("TEST_CENTER_ASSIGNMENT_PROJECTION_CHANGED");
+                break;
             case CenterCommandKind.EndDoctorAffiliation:
                 await RunAsync(connection, tx, """
                     DELETE FROM internal_test_center_assignment

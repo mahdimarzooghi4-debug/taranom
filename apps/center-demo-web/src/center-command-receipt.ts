@@ -1,6 +1,6 @@
 // TRN-TECH-107: human-portable, unsigned, synthetic-only uncertain-write receipt.
 // This is an UNTRUSTED transport of the original exact POST bytes, not authority.
-export type RecoveryKind = 'DEFINE_DEPARTMENT' | 'RECORD_DOCTOR' | 'ASSIGN_DOCTOR' | 'END_DOCTOR';
+export type RecoveryKind = 'DEFINE_DEPARTMENT' | 'RECORD_DOCTOR' | 'ASSIGN_DOCTOR' | 'END_DOCTOR' | 'UNASSIGN_DOCTOR';
 export type UncertainCenterCommand = {
   center: string; expectedVersion: number; kind: RecoveryKind; body: string;
 };
@@ -44,14 +44,16 @@ export function parseCenterRecoveryReceipt(text: string): UncertainCenterCommand
         !Number.isSafeInteger(original.expectedVersion) ||
         (original.expectedVersion as number) < 0 ||
         (original.expectedVersion as number) >= Number.MAX_SAFE_INTEGER ||
-        !['DEFINE_DEPARTMENT','RECORD_DOCTOR','ASSIGN_DOCTOR','END_DOCTOR'].includes(
+        !['DEFINE_DEPARTMENT','RECORD_DOCTOR','ASSIGN_DOCTOR','END_DOCTOR',
+          'UNASSIGN_DOCTOR'].includes(
           String(original.kind))) return null;
     const department = original.departmentRef;
     const doctor = original.doctorRef;
     const correct =
       (original.kind === 'DEFINE_DEPARTMENT' && testRef(department) && doctor === null) ||
       (original.kind === 'RECORD_DOCTOR' && department === null && testRef(doctor)) ||
-      (original.kind === 'ASSIGN_DOCTOR' && testRef(department) && testRef(doctor)) ||
+      ((original.kind === 'ASSIGN_DOCTOR' || original.kind === 'UNASSIGN_DOCTOR') &&
+        testRef(department) && testRef(doctor)) ||
       (original.kind === 'END_DOCTOR' && department === null && testRef(doctor));
     if (!correct) return null;
     return {
