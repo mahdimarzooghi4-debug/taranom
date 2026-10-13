@@ -18,7 +18,7 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
         await using var owner=NpgsqlDataSource.Create(Connection);
         await PgSyntheticClinicalAccessTransparencyJournal
             .InitializeIsolatedTestSchemaAsync(owner,TestContext.Current.CancellationToken);
-        await using var cn=await owner.OpenConnectionAsync();
+        await using var cn=await owner.OpenConnectionAsync(TestContext.Current.CancellationToken);
         await using var cmd=new NpgsqlCommand("""
             DO $block$ BEGIN
              IF NOT EXISTS (SELECT 1 FROM pg_roles
@@ -37,7 +37,7 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
               internal_test_clinical_access_audit
               TO taranom_sprint109_access_test;
             """,cn);
-        await cmd.ExecuteNonQueryAsync();
+        await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
     private static async Task<(NpgsqlDataSource Source,
         PgSyntheticClinicalAccessTransparencyJournal Store)> OpenAsync()
@@ -96,11 +96,11 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
             "internal_test_clinical_access_audit"))
             throw new ArgumentException("Unknown synthetic table");
         await using var owner=NpgsqlDataSource.Create(Connection);
-        await using var cn=await owner.OpenConnectionAsync();
+        await using var cn=await owner.OpenConnectionAsync(TestContext.Current.CancellationToken);
         await using var query=new NpgsqlCommand(
             $"SELECT count(*) FROM {table} WHERE case_ref=@case",cn);
         query.Parameters.AddWithValue("case",caseRef);
-        return (long)(await query.ExecuteScalarAsync())!;
+        return (long)(await query.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
     }
 
     [Fact]
@@ -109,16 +109,16 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
         var (db,store)=await OpenAsync();await using var _=db;
         var id=Case();var initial=Root();
         Assert.Equal(SyntheticAccessNoteOutcome.RecordedUnverified,
-            (await store.ApplyAsync(id,initial)).Outcome);
+            (await store.ApplyAsync(id,initial,TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(SyntheticAccessNoteOutcome.RecordedUnverified,
-            (await store.ApplyAsync(id,Concern(initial))).Outcome);
+            (await store.ApplyAsync(id,Concern(initial),TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(SyntheticAccessNoteOutcome.RecordedUnverified,
-            (await store.ApplyAsync(id,Oversight(initial,2))).Outcome);
-        var source=await store.ReadAsync(id);
+            (await store.ApplyAsync(id,Oversight(initial,2),TestContext.Current.CancellationToken)).Outcome);
+        var source=await store.ReadAsync(id,TestContext.Current.CancellationToken);
         Assert.Equal(3,source.Revision);
         Assert.Equal(3,await CountAsync("internal_test_clinical_access_event",id));
         Assert.Equal(3,await CountAsync("internal_test_clinical_access_audit",id));
-        var member=await store.ProjectForClaimedMemberAsync(id,Viewer);
+        var member=await store.ProjectForClaimedMemberAsync(id,Viewer,TestContext.Current.CancellationToken);
         Assert.Equal(SyntheticAccessTransparencyState.UnverifiedPaperOnly,member.State);
         Assert.Equal(1,member.UnverifiedMemberConcernCount);
         Assert.Equal(1,member.UnverifiedOversightNoteCount);
@@ -132,12 +132,12 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
     {
         var (db,store)=await OpenAsync();await using var _=db;
         var id=Case();var first=Root();
-        await store.ApplyAsync(id,first);
+        await store.ApplyAsync(id,first,TestContext.Current.CancellationToken);
         var sponsor=Viewer with {ActorKind=SelfReadActorKind.Sponsor};
         var wrongMember=Viewer with {ServerResolvedMemberRef="test:other-member"};
         foreach(var viewer in new[]{sponsor,wrongMember})
         {
-            var projected=await store.ProjectForClaimedMemberAsync(id,viewer);
+            var projected=await store.ProjectForClaimedMemberAsync(id,viewer,TestContext.Current.CancellationToken);
             Assert.NotEqual(SyntheticAccessTransparencyState.UnverifiedPaperOnly,
                 projected.State);
             Assert.Equal(0,projected.Revision);
@@ -146,7 +146,7 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
             Assert.False(projected.RecordReadOccurred);
             Assert.False(projected.DisclosureGranted);
         }
-        var unknown=await store.ProjectForClaimedMemberAsync(Case(),Viewer);
+        var unknown=await store.ProjectForClaimedMemberAsync(Case(),Viewer,TestContext.Current.CancellationToken);
         Assert.Equal(SyntheticAccessTransparencyState.Unavailable,unknown.State);
     }
 
@@ -155,16 +155,16 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
     {
         var (db,store)=await OpenAsync();await using var _=db;
         var id=Case();var root=Root();var concern=Concern(root);
-        await store.ApplyAsync(id,root);
+        await store.ApplyAsync(id,root,TestContext.Current.CancellationToken);
         await store.ApplyAsync(id,concern);
-        await store.ApplyAsync(id,Oversight(root,2));
+        await store.ApplyAsync(id,Oversight(root,2),TestContext.Current.CancellationToken);
         Assert.Equal(SyntheticAccessNoteOutcome.Replayed,
-            (await store.ApplyAsync(id,root)).Outcome);
+            (await store.ApplyAsync(id,root,TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(SyntheticAccessNoteOutcome.Replayed,
-            (await store.ApplyAsync(id,concern)).Outcome);
+            (await store.ApplyAsync(id,concern,TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(SyntheticAccessNoteOutcome.ConflictingReplay,
             (await store.ApplyAsync(id,concern with{
-                UnverifiedEvidenceRef="test:changed"})).Outcome);
+                UnverifiedEvidenceRef="test:changed"},TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(3,await CountAsync("internal_test_clinical_access_audit",id));
     }
 
@@ -173,29 +173,29 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
     {
         var (db,store)=await OpenAsync();await using var _=db;
         var id=Case();var first=Root();
-        await store.ApplyAsync(id,first);
+        await store.ApplyAsync(id,first,TestContext.Current.CancellationToken);
         var forged=Concern(first) with{
             ClaimedDisclosureScope=first.ClaimedDisclosureScope with{
                 MemberRef="test:other"}};
         Assert.Equal(SyntheticAccessNoteOutcome.ScopeChanged,
-            (await store.ApplyAsync(id,forged)).Outcome);
+            (await store.ApplyAsync(id,forged,TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(SyntheticAccessNoteOutcome.ScopeChanged,
             (await store.ApplyAsync(id,Concern(first) with{
-                OriginalRequestId=Guid.NewGuid()})).Outcome);
+                OriginalRequestId=Guid.NewGuid()},TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(SyntheticAccessNoteOutcome.RecordedUnverified,
-            (await store.ApplyAsync(id,Concern(first))).Outcome);
+            (await store.ApplyAsync(id,Concern(first),TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(SyntheticAccessNoteOutcome.DuplicateStage,
-            (await store.ApplyAsync(id,Concern(first,2))).Outcome);
-        Assert.Equal(2,(await store.ReadAsync(id)).Revision);
+            (await store.ApplyAsync(id,Concern(first,2),TestContext.Current.CancellationToken)).Outcome);
+        Assert.Equal(2,(await store.ReadAsync(id,TestContext.Current.CancellationToken)).Revision);
     }
 
     [Fact]
     public async Task ConcurrentDifferentClaimedNotesSerializeToOneAcceptedAndOneStale()
     {
         var (db,store)=await OpenAsync();await using var _=db;
-        var id=Case();var first=Root();await store.ApplyAsync(id,first);
+        var id=Case();var first=Root();await store.ApplyAsync(id,first,TestContext.Current.CancellationToken);
         var a=Concern(first);var b=Oversight(first);
-        var results=await Task.WhenAll(store.ApplyAsync(id,a),store.ApplyAsync(id,b));
+        var results=await Task.WhenAll(store.ApplyAsync(id,a,TestContext.Current.CancellationToken),store.ApplyAsync(id,b));
         Assert.Single(results,x=>x.Outcome==SyntheticAccessNoteOutcome.RecordedUnverified);
         Assert.Single(results,x=>x.Outcome==SyntheticAccessNoteOutcome.StaleRevision);
         Assert.Equal(2,await CountAsync("internal_test_clinical_access_audit",id));
@@ -205,22 +205,22 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
     public async Task CorruptedHeaderFailsBeforeReadAndEvenExactReplay()
     {
         var (db,store)=await OpenAsync();await using var _=db;
-        var id=Case();var first=Root();await store.ApplyAsync(id,first);
+        var id=Case();var first=Root();await store.ApplyAsync(id,first,TestContext.Current.CancellationToken);
         await using var owner=NpgsqlDataSource.Create(Connection);
-        await using(var cn=await owner.OpenConnectionAsync())
+        await using(var cn=await owner.OpenConnectionAsync(TestContext.Current.CancellationToken))
         await using(var sql=new NpgsqlCommand("""
             UPDATE internal_test_clinical_access_case SET current_revision=2
             WHERE case_ref=@case
             """,cn))
         {
             sql.Parameters.AddWithValue("case",id);
-            Assert.Equal(1,await sql.ExecuteNonQueryAsync());
+            Assert.Equal(1,await sql.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
         }
         var read=await Assert.ThrowsAsync<InvalidOperationException>(
-            ()=>store.ReadAsync(id));
+            ()=>store.ReadAsync(id,TestContext.Current.CancellationToken));
         Assert.Equal("TEST_CLINICAL_ACCESS_HISTORY_UNVERIFIABLE",read.Message);
         var replay=await Assert.ThrowsAsync<InvalidOperationException>(
-            ()=>store.ApplyAsync(id,first));
+            ()=>store.ApplyAsync(id,first,TestContext.Current.CancellationToken));
         Assert.Equal("TEST_CLINICAL_ACCESS_HISTORY_UNVERIFIABLE",replay.Message);
     }
 
@@ -228,8 +228,8 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
     public async Task RuntimeCannotRewriteAuditOrEventAndCaseIsIndependent()
     {
         var (db,store)=await OpenAsync();await using var _=db;
-        var id=Case();await store.ApplyAsync(id,Root());
-        await using var cn=await db.OpenConnectionAsync();
+        var id=Case();await store.ApplyAsync(id,Root(),TestContext.Current.CancellationToken);
+        await using var cn=await db.OpenConnectionAsync(TestContext.Current.CancellationToken);
         foreach(var sqlText in new[]{
             "UPDATE internal_test_clinical_access_event SET action_code=2 WHERE case_ref=@case",
             "DELETE FROM internal_test_clinical_access_audit WHERE case_ref=@case"})
@@ -237,10 +237,10 @@ public sealed class ClinicalAccessTransparencyDatabaseTests
             await using var cmd=new NpgsqlCommand(sqlText,cn);
             cmd.Parameters.AddWithValue("case",id);
             var failure=await Assert.ThrowsAsync<PostgresException>(
-                async ()=>await cmd.ExecuteNonQueryAsync());
+                async ()=>await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
             Assert.Equal("42501",failure.SqlState);
         }
-        Assert.Equal(0,(await store.ReadAsync(Case())).Revision);
-        Assert.Equal(1,(await store.ReadAsync(id)).Revision);
+        Assert.Equal(0,(await store.ReadAsync(Case(),TestContext.Current.CancellationToken)).Revision);
+        Assert.Equal(1,(await store.ReadAsync(id,TestContext.Current.CancellationToken)).Revision);
     }
 }
