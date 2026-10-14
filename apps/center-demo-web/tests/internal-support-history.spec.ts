@@ -31,7 +31,8 @@ test('SUPPORT-116-03 outage clears last read history',async({page})=>{
  await panel.getByRole('button',{name:'خواندن از پایگاه داده محلی'}).click();
  const history=panel.getByTestId('support-history');
  await history.getByRole('button',{name:'بازخوانی تاریخچه پیگیری'}).click();
- await expect(history.getByTestId('support-history-events')).toBeVisible();
+ await expect(history.getByRole('status')).toContainText('از پایگاه داده بازخوانی شد');
+ await expect(history.getByTestId('support-history-events').locator('li')).toHaveCount(0);
  await page.route('**/internal/demo/v1/support/**/history?*',route=>route.abort());
  await history.getByRole('button',{name:'بازخوانی تاریخچه پیگیری'}).click();
  await expect(history.getByTestId('support-history-events')).toHaveCount(0);
