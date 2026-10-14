@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 
 // Local test-only UI over the EXISTING .NET + PostgreSQL support journal.
 // A readable response is not authentication, complaint submission or approval.
@@ -23,7 +23,7 @@ function valid(value:unknown,ref:string):value is Snapshot{
   !Number.isSafeInteger(x.revision)||x.revision!<0||
   !Number.isSafeInteger(x.followUpCount)||x.followUpCount!<0||
   !Array.isArray(x.followUps)||x.followUps.length!==x.followUpCount||
-  !['MEDICAL_SERVICE_COMPLAINT','INSURANCE_COVERAGE_DISPUTE',null].includes(x.topic??null))
+  !['MedicalServiceComplaint','InsuranceCoverageDispute',null].includes(x.topic??null))
   return false;
  const refs=[x.memberRef,x.evidenceRef,x.claimedSubmitterRef];
  if(refs.some(v=>v!==null&&(typeof v!=='string'||!validRef(v))))return false;
@@ -40,12 +40,12 @@ export function InternalSupportRead(){
  const [ref,setRef]=useState('test:local-support');
  const [phase,setPhase]=useState<'IDLE'|'LOADING'|'DENIED'|'READ'>('IDLE');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
- const [generation,setGeneration]=useState(0);
- useEffect(()=>{setSnapshot(null);setPhase('IDLE');},[ref]);
+ const epoch=useRef(0);
+ useEffect(()=>{epoch.current++;setSnapshot(null);setPhase('IDLE');
+  return ()=>{epoch.current++;};},[ref]);
  async function read(){
   if(!validRef(ref))return;
-  const requestGeneration=generation+1;
-  setGeneration(requestGeneration);
+  const requestGeneration=++epoch.current;
   setSnapshot(null);setPhase('LOADING');
   try{
    const response=await fetch('/internal/demo/v1/support/'+encodeURIComponent(ref),
@@ -53,8 +53,8 @@ export function InternalSupportRead(){
    if(!response.ok)throw Error('UNAVAILABLE');
    const body:unknown=await response.json();
    if(!valid(body,ref))throw Error('UNVERIFIABLE');
-   setSnapshot(body);setPhase('READ');
-  }catch{setSnapshot(null);setPhase('DENIED');}
+   if(epoch.current===requestGeneration){setSnapshot(body);setPhase('READ');}
+  }catch{if(epoch.current===requestGeneration){setSnapshot(null);setPhase('DENIED');}}
  }
  return <section className="panel" data-testid="internal-support-read">
   <h2>خواندن پرونده پیگیری داخلی — محیط آزمایشی</h2>
