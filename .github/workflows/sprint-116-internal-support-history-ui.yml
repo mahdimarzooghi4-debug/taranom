@@ -1,0 +1,14 @@
+name: Sprint 116 Internal Support History Full Regression
+on:
+  push:
+    branches: [sprint-116-internal-support-history-ui]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

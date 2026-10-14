@@ -207,6 +207,10 @@ DISPATCHER_BRANCHES = {
         "sprint-115-internal-support-read-ui",
         "main",
     ),
+    "sprint-116-internal-support-history-ui.yml": (
+        "sprint-116-internal-support-history-ui",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

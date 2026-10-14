@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {InternalSupportHistory} from './internal-support-history';
 
 // Local test-only UI over the EXISTING .NET + PostgreSQL support journal.
 // A readable response is not authentication, complaint submission or approval.
@@ -76,6 +77,8 @@ export function InternalSupportRead(){
    <ul>{snapshot.followUps.map(f=><li key={f.revision}>
     پیگیری {f.revision}: <code>{f.noteRef}</code></li>)}</ul>
    <p>هویت تأییدنشده | ثبت قانونی انجام‌نشده | انتشار ملی ممنوع</p>
+   <InternalSupportHistory key={snapshot.caseRef+':'+snapshot.revision}
+    caseRef={snapshot.caseRef} revision={snapshot.revision}/>
   </div>}
  </section>;
 }
