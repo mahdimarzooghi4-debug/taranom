@@ -271,9 +271,18 @@ def main(argv: list[str] | None = None) -> int:
     else:
         # Public CI still cannot call any external identity service by default.
         result = inspect(args.purpose)
+        # Public CI reports are not private evidence, but must not clobber
+        # source files, existing reports or symlink targets.
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(result, sort_keys=True, indent=2)
-                               + "\n", encoding="utf-8")
+        try:
+            with os.fdopen(os.open(
+                report_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o600,
+            ), "w", encoding="utf-8") as stream:
+                stream.write(json.dumps(result, sort_keys=True, indent=2) + "\n")
+        except OSError:
+            print("DENIED: REPORT_UNWRITABLE_OR_ALREADY_EXISTS", file=sys.stderr)
+            return 1
     print(f"Identity TLS preflight: {result['status']}; "
           "no authentication/proofing/legal approval; release_allowed=false.")
     if result["errors"]:
