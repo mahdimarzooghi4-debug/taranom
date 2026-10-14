@@ -197,7 +197,7 @@ test('CENTER-HISTORY-05: network failure and new write clear stale history/old p
   await expect(page.getByRole('region', { name: 'نمای بازسازی‌شده نسخه گذشته' })).toHaveCount(0);
   await page.route('**/history?*', route => route.abort());
   await page.getByRole('button', { name: 'بازخوانی نخستین صفحه تاریخچه' }).click();
-  await expect(page.getByRole('status').last()).toContainText('یکپارچگی داده تأیید نشد');
+  await expect(page.locator('section[aria-labelledby="history-heading"] .status')).toContainText('یکپارچگی داده تأیید نشد');
   await expect(page.getByRole('region', { name: 'رخدادهای صفحه فعلی' })).toHaveCount(0);
 });
 
