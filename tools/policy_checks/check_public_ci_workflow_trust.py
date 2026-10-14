@@ -215,6 +215,10 @@ DISPATCHER_BRANCHES = {
         "sprint-117-internal-support-write-workflow",
         "main",
     ),
+    "sprint-118-support-uncertain-command-recovery.yml": (
+        "sprint-118-support-uncertain-command-recovery",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
