@@ -212,9 +212,7 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
                 BEFORE UPDATE OR DELETE ON internal_test_support_audit
                 FOR EACH ROW EXECUTE FUNCTION internal_test_support_history_guard();
             """;
-        await using var connection = await data.OpenConnectionAsync();
-        await using var cmd = new NpgsqlCommand(sql, connection);
-        await cmd.ExecuteNonQueryAsync();
+        await SupportSchemaAdmission.EnsureAsync(data, sql);
     }
 
     // TRN-TECH-129: opt-in, anonymous and synthetic-only *local test* worklist.
