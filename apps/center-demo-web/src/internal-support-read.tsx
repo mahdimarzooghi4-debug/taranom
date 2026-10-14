@@ -71,7 +71,7 @@ export function InternalSupportRead(){
   </label>
   <button type="button" disabled={!validRef(ref)||phase==='LOADING'||pendingWrite}
     onClick={()=>void read()}>خواندن از پایگاه داده محلی</button>
-  <p role="status">{phase==='IDLE'?'هنوز خواندن انجام نشده است.':
+  <p role="status" data-testid="support-read-status">{phase==='IDLE'?'هنوز خواندن انجام نشده است.':
    phase==='LOADING'?'در حال خواندن':
    phase==='DENIED'?'پاسخ یا منبع قابل تأیید نیست؛ اطلاعات قبلی پاک شد.':
    'وضعیت آزمایشی از پایگاه داده دریافت شد؛ فاقد اعتبار رسمی است.'}</p>
