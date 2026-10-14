@@ -243,6 +243,10 @@ DISPATCHER_BRANCHES = {
         "sprint-124-org-draft-audit-integrity",
         "main",
     ),
+    "sprint-125-org-draft-activity-journal.yml": (
+        "sprint-125-org-draft-activity-journal",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
