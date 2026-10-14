@@ -79,8 +79,14 @@ export function OrgDraftQa(){
    if(x.res.status!==200||!['Recorded','Replayed'].includes(x.data.outcome)||
      !validDraft(x.data.data,item)||x.data.data.sourceRef!==source)
     throw Error('UNVERIFIED_WRITE');
-   setDraft(x.data.data);setHistory({itemRef:item,currentNo:0,events:[]});
-   setStatus(x.data.outcome==='Recorded'?'پیش‌نویس ثبت شد.':'درخواست اولیه بدون تکرار بازپخش شد.');
+   // Replayed CREATE might already have a nonzero activity revision.
+   // Never assume genesis after any write; re-read verified PostgreSQL chain.
+   const h=await ask(path(item)+'/activity');
+   if(h.res.status!==200||h.data.outcome!=='Read'||!validHistory(h.data.data,item))
+    throw Error('UNVERIFIED_ACTIVITY_AFTER_CREATE');
+   setDraft(x.data.data);setHistory(h.data.data);
+   setStatus(x.data.outcome==='Recorded'?'پیش‌نویس ثبت شد و تاریخچه راستی‌آزمایی شد.':
+    'درخواست اولیه بدون تکرار بازپخش شد؛ نسخه واقعی PostgreSQL خوانده شد.');
   }catch{setDraft(null);setHistory(null);
    setStatus('نتیجه ایجاد نامشخص است؛ ابتدا همان شناسه را از PostgreSQL بخوانید.');}
   finally{setBusy(false);}
