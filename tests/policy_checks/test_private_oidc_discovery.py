@@ -209,6 +209,34 @@ class OidcDiscoveryTests(unittest.TestCase):
             self.assertEqual(rc,1)
             self.assertFalse((pub/"report.json").exists())
 
+    def test_default_ci_does_not_clobber_existing_report(self):
+        with tempfile.TemporaryDirectory() as home:
+            path=Path(home)/"ci.json"
+            path.write_text("existing report")
+            rc=oidc.main(["--report-json",str(path)])
+            self.assertEqual(rc,1)
+            self.assertEqual(path.read_text(),"existing report")
+
+    def test_default_ci_does_not_follow_symlink(self):
+        with tempfile.TemporaryDirectory() as home:
+            target=Path(home)/"protected.json"
+            target.write_text("protected bytes")
+            link=Path(home)/"ci.json"
+            link.symlink_to(target)
+            rc=oidc.main(["--report-json",str(link)])
+            self.assertEqual(rc,1)
+            self.assertEqual(target.read_text(),"protected bytes")
+
+    def test_default_ci_new_report_owner_only(self):
+        with tempfile.TemporaryDirectory() as home:
+            path=Path(home)/"ci.json"
+            rc=oidc.main(["--report-json",str(path)])
+            self.assertEqual(rc,0)
+            self.assertEqual(path.stat().st_mode & 0o777,0o600)
+            data=json.loads(path.read_text())
+            self.assertFalse(data["release_allowed"])
+            self.assertFalse(data["member_authentication_verified"])
+
     def test_default_ci_mode_produces_denied_report(self):
         with tempfile.TemporaryDirectory() as home:
             path=Path(home)/"ci.json"
