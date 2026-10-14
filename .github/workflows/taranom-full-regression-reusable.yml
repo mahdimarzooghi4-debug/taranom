@@ -692,6 +692,12 @@ jobs:
         run: |
           password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
           printf 'TARANOM_SUPPORT_READER_TEST_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
+      - name: Mint two unrelated ephemeral organization login credentials
+        run: |
+          support=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          corporate=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          printf 'TARANOM_ORG_SUPPORT_TEST_PASSWORD=%s\n' "$support" >> "$GITHUB_ENV"
+          printf 'TARANOM_ORG_CORPORATE_TEST_PASSWORD=%s\n' "$corporate" >> "$GITHUB_ENV"
       - name: Build existing event-sourced center journal with isolated ASP.NET demo host
         run: |
           dotnet restore src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj
@@ -760,6 +766,8 @@ jobs:
           python3 tests/center_demo/test_support_worklist_http.py
           # Actual PostgreSQL DDL admission/recovery; refuses changed versions.
           dotnet run --project tests/Taranom.SupportSchemaAdmission.Probe/Taranom.SupportSchemaAdmission.Probe.csproj --configuration Release
+          # Separate bounded context: database-enforced org partition, no user IdP.
+          dotnet run --project tests/Taranom.OrgScope.Probe/Taranom.OrgScope.Probe.csproj --configuration Release
           # TRN-TECH-109: genuine concurrent writer lock + unlocked read,
           # same synthetic PostgreSQL source and current loopback host.
           TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY dotnet run --project tests/Taranom.SupportJournal.MvccProbe/Taranom.SupportJournal.MvccProbe.csproj --configuration Release
