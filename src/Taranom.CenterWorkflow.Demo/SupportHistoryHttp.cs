@@ -21,7 +21,7 @@ internal static class SupportHistoryHttp
             return Denied(400, "INVALID_TEST_HISTORY_CURSOR");
         try
         {
-            var verified = await SupportHttp.Store.ReadAsync(caseRef!);
+            var verified = await SupportHttp.ReadStore.ReadAsync(caseRef!);
             if (cursor > verified.Revision)
                 return Denied(400, "INVALID_TEST_HISTORY_CURSOR");
             var page = verified.History.Where(x => x.Revision > cursor)
@@ -69,7 +69,7 @@ internal static class SupportHistoryHttp
             return Denied(400, "INVALID_TEST_HISTORY_REVISION");
         try
         {
-            var current = await SupportHttp.Store.ReadAsync(caseRef!);
+            var current = await SupportHttp.ReadStore.ReadAsync(caseRef!);
             if (at > current.Revision)
                 return Denied(400, "INVALID_TEST_HISTORY_REVISION");
             var past = SyntheticSupportSnapshot.Empty;

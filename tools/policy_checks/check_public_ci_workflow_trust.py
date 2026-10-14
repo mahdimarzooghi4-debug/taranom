@@ -219,6 +219,10 @@ DISPATCHER_BRANCHES = {
         "sprint-118-support-uncertain-command-recovery",
         "main",
     ),
+    "sprint-119-support-reader-writer-db-isolation.yml": (
+        "sprint-119-support-reader-writer-db-isolation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

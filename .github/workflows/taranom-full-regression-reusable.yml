@@ -688,6 +688,10 @@ jobs:
         run: |
           password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
           printf 'TARANOM_SUPPORT_RUNTIME_TEST_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
+      - name: Mint independent ephemeral support reader test password
+        run: |
+          password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          printf 'TARANOM_SUPPORT_READER_TEST_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
       - name: Build existing event-sourced center journal with isolated ASP.NET demo host
         run: |
           dotnet restore src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj

@@ -1,0 +1,14 @@
+name: Sprint 119 Support Reader Writer Database Isolation Full Regression
+on:
+  push:
+    branches: [sprint-119-support-reader-writer-db-isolation]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

@@ -15,6 +15,89 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
     // Credentials are a TEST-ONLY CI fixture. These do not authorize
     // deployment and must never be connected to real member/support data.
     internal const string RestrictedRuntimeRole = "taranom_sprint101_support_test";
+    // TRN-TECH-128: a different database principal for read-only HTTP.
+    internal const string RestrictedReaderRole = "taranom_sprint119_support_reader_test";
+
+    internal static async Task<NpgsqlDataSource> CreateRestrictedTestReaderAsync(
+        NpgsqlDataSource owner, NpgsqlConnectionStringBuilder admin)
+    {
+        if (Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY") != "CI_EPHEMERAL_ONLY" ||
+            admin.Database != "taranom_sprint64_center" ||
+            admin.Host is not ("127.0.0.1" or "localhost") || admin.Port != 5432)
+            throw new InvalidOperationException("SUPPORT_READER_TEST_ONLY");
+
+        // Separate ephemeral CI credential: the reader never knows the writer
+        // credential, has no membership in the writer role, and cannot SET ROLE.
+        var password = Environment.GetEnvironmentVariable("TARANOM_SUPPORT_READER_TEST_PASSWORD");
+        if (password is not { Length: >= 40 and <= 96 } ||
+            password.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_')))
+            throw new InvalidOperationException("SUPPORT_READER_PASSWORD_UNAVAILABLE");
+
+        const string grant = """
+            DO $role$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles
+                    WHERE rolname='taranom_sprint119_support_reader_test') THEN
+                    CREATE ROLE taranom_sprint119_support_reader_test
+                        LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+                END IF;
+            END;
+            $role$;
+            REVOKE ALL ON TABLE internal_test_support_case,
+                internal_test_support_event, internal_test_support_audit
+                FROM taranom_sprint119_support_reader_test;
+            GRANT USAGE ON SCHEMA public TO taranom_sprint119_support_reader_test;
+            GRANT SELECT ON TABLE internal_test_support_case,
+                internal_test_support_event, internal_test_support_audit
+                TO taranom_sprint119_support_reader_test;
+            """;
+        await using (var conn = await owner.OpenConnectionAsync())
+        {
+            await using (var cmd = new NpgsqlCommand(grant, conn))
+                await cmd.ExecuteNonQueryAsync();
+            await using var setPassword = new NpgsqlCommand(
+                "ALTER ROLE taranom_sprint119_support_reader_test PASSWORD '" + password + "'", conn);
+            await setPassword.ExecuteNonQueryAsync();
+        }
+        var config = new NpgsqlConnectionStringBuilder(admin.ConnectionString)
+        {
+            Username = RestrictedReaderRole, Password = password, Pooling = false
+        };
+        var source = NpgsqlDataSource.Create(config.ConnectionString);
+        try
+        {
+            await using var conn = await source.OpenConnectionAsync();
+            await using var check = new NpgsqlCommand("""
+                SELECT current_user, session_user, rolsuper, rolcreatedb, rolcreaterole,
+                       rolcanlogin, rolinherit,
+                       has_table_privilege(current_user,'internal_test_support_case','SELECT'),
+                       has_table_privilege(current_user,'internal_test_support_event','SELECT'),
+                       has_table_privilege(current_user,'internal_test_support_audit','SELECT'),
+                       has_table_privilege(current_user,'internal_test_support_case','INSERT'),
+                       has_table_privilege(current_user,'internal_test_support_case','UPDATE'),
+                       has_table_privilege(current_user,'internal_test_support_event','INSERT'),
+                       has_table_privilege(current_user,'internal_test_support_audit','INSERT')
+                FROM pg_roles WHERE rolname=current_user
+                """, conn);
+            await using var row = await check.ExecuteReaderAsync();
+            if (!await row.ReadAsync() ||
+                row.GetString(0) != RestrictedReaderRole ||
+                row.GetString(1) != RestrictedReaderRole ||
+                row.GetBoolean(2) || row.GetBoolean(3) || row.GetBoolean(4) ||
+                !row.GetBoolean(5) || row.GetBoolean(6) ||
+                !row.GetBoolean(7) || !row.GetBoolean(8) || !row.GetBoolean(9) ||
+                row.GetBoolean(10) || row.GetBoolean(11) ||
+                row.GetBoolean(12) || row.GetBoolean(13))
+                throw new InvalidOperationException("SUPPORT_READER_PRIVILEGE_MISMATCH");
+            return source;
+        }
+        catch
+        {
+            await source.DisposeAsync();
+            throw;
+        }
+    }
+
     internal static async Task<NpgsqlDataSource> CreateRestrictedTestRuntimeAsync(
         NpgsqlDataSource owner, NpgsqlConnectionStringBuilder admin)
     {

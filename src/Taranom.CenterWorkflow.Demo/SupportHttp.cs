@@ -9,6 +9,7 @@ namespace Taranom.CenterWorkflow.Demo;
 internal static class SupportHttp
 {
     internal static PgSyntheticSupportJournal Store { get; set; } = null!;
+    internal static PgSyntheticSupportJournal ReadStore { get; set; } = null!;
 
     internal static async Task<IResult> ReadAsync(HttpContext context)
     {
@@ -18,7 +19,7 @@ internal static class SupportHttp
             return Denied(400, "INVALID_TEST_CASE");
         try
         {
-            var snapshot = await Store.ReadAsync(caseRef!);
+            var snapshot = await ReadStore.ReadAsync(caseRef!);
             return Results.Json(ToResponse(snapshot, caseRef!, "READ"));
         }
         catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or IOException)
