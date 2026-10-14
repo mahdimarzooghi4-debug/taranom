@@ -235,6 +235,10 @@ DISPATCHER_BRANCHES = {
         "sprint-122-org-scope-postgres-isolation",
         "main",
     ),
+    "sprint-123-org-draft-workspace.yml": (
+        "sprint-123-org-draft-workspace",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

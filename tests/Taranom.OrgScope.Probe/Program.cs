@@ -107,3 +107,96 @@ if(await Count(a,"SELECT count(*) FROM public.internal_test_org_draft_item")!=1|
    await Count(b,"SELECT count(*) FROM public.internal_test_org_draft_item")!=1)
     throw new InvalidOperationException("ORG_SCOPE_MUTATED_AFTER_DENIAL");
 Console.WriteLine("PASS: real per-organization PostgreSQL session_user RLS and 10 denied cross-scope/escalation attempts; no real identity granted");
+
+//
+// TRN-TECH-132: real bounded application flow (no public HTTP/session):
+// Record -> deterministic exact replay -> scoped Read -> cursor List.
+//
+var support = new PgScopedDraftWorkspace(a);
+var company = new PgScopedDraftWorkspace(b);
+var prefix = "test:zz-workspace-" + Guid.NewGuid().ToString("N");
+var first = prefix + "-a";
+var second = prefix + "-b";
+var third = prefix + "-c";
+var original = "test:unverified-draft-source-a";
+var different = "test:unverified-draft-source-conflict";
+var recorded = await support.RecordAsync(first, original);
+if (recorded.Status != DraftWriteStatus.Recorded ||
+    recorded.Draft?.ScopeRef != PgSyntheticOrganizationScope.SupportRef ||
+    recorded.Draft.SourceRef != original)
+    throw new InvalidOperationException("ORG_WORKSPACE_RECORD_FAILED");
+var replay = await support.RecordAsync(first, original);
+if (replay.Status != DraftWriteStatus.Replayed ||
+    replay.Draft != recorded.Draft)
+    throw new InvalidOperationException("ORG_WORKSPACE_REPLAY_FAILED");
+var conflicting = await support.RecordAsync(first, different);
+if (conflicting.Status != DraftWriteStatus.ConflictingReplay ||
+    conflicting.Draft != recorded.Draft)
+    throw new InvalidOperationException("ORG_WORKSPACE_REPLAY_CHANGED_DATA");
+
+// Equal item refs MUST be independent across organizations.
+var otherOrg = await company.RecordAsync(first, different);
+if (otherOrg.Status != DraftWriteStatus.Recorded ||
+    otherOrg.Draft?.ScopeRef != PgSyntheticOrganizationScope.CorporateRef)
+    throw new InvalidOperationException("ORG_WORKSPACE_CROSS_ORG_COLLISION");
+if (await company.ReadAsync(first) != otherOrg.Draft ||
+    await support.ReadAsync(first) != recorded.Draft)
+    throw new InvalidOperationException("ORG_WORKSPACE_CROSS_ORG_READ");
+
+// Technical metadata only; bogus real identifiers are rejected before SQL.
+if ((await support.RecordAsync("national-id:real",original)).Status !=
+        DraftWriteStatus.InvalidRequest ||
+    (await company.RecordAsync(second,"https://provider.example")).Status !=
+        DraftWriteStatus.InvalidRequest)
+    throw new InvalidOperationException("ORG_WORKSPACE_ACCEPTED_LIVE_DATA");
+try
+{
+    await support.ListAsync("untrusted:cursor",2);
+    throw new InvalidOperationException("ORG_WORKSPACE_CURSOR_ACCEPTED");
+}
+catch (ArgumentException) { }
+
+// Multiple independent connections competing for one (scope,item) produce
+// exactly one INSERT and all subsequent attempts replay unchanged.
+var concurrent = await Task.WhenAll(Enumerable.Range(0,8)
+    .Select(_ => support.RecordAsync(second,"test:concurrent-source")));
+if (concurrent.Count(v => v.Status == DraftWriteStatus.Recorded) != 1 ||
+    concurrent.Count(v => v.Status == DraftWriteStatus.Replayed) != 7)
+    throw new InvalidOperationException("ORG_WORKSPACE_DUPLICATE_RACE");
+
+var last = await support.RecordAsync(third,"test:unverified-draft-source-c");
+if (last.Status != DraftWriteStatus.Recorded)
+    throw new InvalidOperationException("ORG_WORKSPACE_THIRD_RECORD");
+var pageOne = await support.ListAsync(prefix,2);
+if (pageOne.Items.Count != 2 ||
+    pageOne.Items[0].ItemRef != first ||
+    pageOne.Items[1].ItemRef != second ||
+    pageOne.NextAfterItemRef != second)
+    throw new InvalidOperationException("ORG_WORKSPACE_PAGE_ONE");
+var pageTwo = await support.ListAsync(pageOne.NextAfterItemRef,2);
+if (pageTwo.Items.Count != 1 ||
+    pageTwo.Items[0].ItemRef != third ||
+    pageTwo.NextAfterItemRef is not null)
+    throw new InvalidOperationException("ORG_WORKSPACE_PAGE_TWO");
+var corporateList = await company.ListAsync(prefix,2);
+if (corporateList.Items.Count != 1 ||
+    corporateList.Items[0] != otherOrg.Draft ||
+    corporateList.NextAfterItemRef is not null)
+    throw new InvalidOperationException("ORG_WORKSPACE_SCOPE_FILTER_FAIL");
+if (await company.ReadAsync(second) is not null ||
+    await company.ReadAsync(third) is not null)
+    throw new InvalidOperationException("ORG_WORKSPACE_EXPOSED_OTHER_SCOPE");
+
+// A database schema owner is NOT an organizational operator. Passing an
+// owner datasource to the application service must fail closed.
+var ownerWorkspace = new PgScopedDraftWorkspace(owner);
+try
+{
+    await ownerWorkspace.ReadAsync(first);
+    throw new InvalidOperationException("ORG_WORKSPACE_OWNER_BYPASS");
+}
+catch (InvalidOperationException e) when (
+    e.Message == "ORG_DRAFT_UNTRUSTED_PRINCIPAL" ||
+    e.Message == "ORG_DRAFT_SCOPE_UNVERIFIABLE") { }
+Console.WriteLine("PASS: PostgreSQL organization draft workspace, two scoped reads, atomic idempotent replay, 8-way concurrency and cursor paging");
+
