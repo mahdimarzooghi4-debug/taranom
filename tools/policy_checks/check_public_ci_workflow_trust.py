@@ -199,6 +199,10 @@ DISPATCHER_BRANCHES = {
         "sprint-111-private-evidence-custody-output-safety",
         "main",
     ),
+    "sprint-114-oidc-preflight-output-integrity.yml": (
+        "sprint-114-oidc-preflight-output-integrity",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
