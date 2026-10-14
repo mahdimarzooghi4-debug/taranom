@@ -106,4 +106,4 @@ await MustDeny(a,"GRANT SELECT ON public.internal_test_org_scope_binding TO publ
 if(await Count(a,"SELECT count(*) FROM public.internal_test_org_draft_item")!=1||
    await Count(b,"SELECT count(*) FROM public.internal_test_org_draft_item")!=1)
     throw new InvalidOperationException("ORG_SCOPE_MUTATED_AFTER_DENIAL");
-Console.WriteLine("PASS: real per-organization PostgreSQL session_user RLS and 9 denied cross-scope/escalation attempts; no real identity granted");
+Console.WriteLine("PASS: real per-organization PostgreSQL session_user RLS and 10 denied cross-scope/escalation attempts; no real identity granted");
