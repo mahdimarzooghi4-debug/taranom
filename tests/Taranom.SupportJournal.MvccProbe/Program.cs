@@ -150,6 +150,86 @@ await using (var read = new NpgsqlCommand("""
         throw new InvalidOperationException("RUNTIME_CANNOT_READ_OWN_SUPPORT_HISTORY");
 }
 
+// TRN-TECH-128: actual database-level separation, not a UI role switch.
+// This distinct reader credential is incapable of INSERT, UPDATE, DELETE,
+// DDL, SET ROLE writer, or reading another bounded context.
+var readerSecret = Environment.GetEnvironmentVariable("TARANOM_SUPPORT_READER_TEST_PASSWORD");
+if (readerSecret is not { Length: >= 40 and <= 96 })
+    throw new InvalidOperationException("SUPPORT_READER_TEST_PASSWORD_UNAVAILABLE");
+var readerConfig = new NpgsqlConnectionStringBuilder(settings.ConnectionString)
+{
+    Username = "taranom_sprint119_support_reader_test",
+    Password = readerSecret,
+    Pooling = false
+};
+await using var readerSource = NpgsqlDataSource.Create(readerConfig.ConnectionString);
+await using (var readerConn = await readerSource.OpenConnectionAsync())
+await using (var rightsCmd = new NpgsqlCommand("""
+    SELECT current_user,session_user,
+           has_table_privilege(current_user,'internal_test_support_case','SELECT'),
+           has_table_privilege(current_user,'internal_test_support_event','SELECT'),
+           has_table_privilege(current_user,'internal_test_support_audit','SELECT'),
+           has_table_privilege(current_user,'internal_test_support_case','INSERT'),
+           has_table_privilege(current_user,'internal_test_support_case','UPDATE'),
+           has_table_privilege(current_user,'internal_test_support_case','DELETE'),
+           has_table_privilege(current_user,'internal_test_support_event','INSERT'),
+           has_table_privilege(current_user,'internal_test_support_event','UPDATE'),
+           has_table_privilege(current_user,'internal_test_support_event','DELETE'),
+           has_table_privilege(current_user,'internal_test_support_audit','INSERT'),
+           has_table_privilege(current_user,'internal_test_support_audit','UPDATE'),
+           has_table_privilege(current_user,'internal_test_support_audit','DELETE')
+    """, readerConn))
+await using (var rights = await rightsCmd.ExecuteReaderAsync())
+{
+    if (!await rights.ReadAsync() ||
+        rights.GetString(0) != "taranom_sprint119_support_reader_test" ||
+        rights.GetString(1) != "taranom_sprint119_support_reader_test" ||
+        Enumerable.Range(2,3).Any(i => !rights.GetBoolean(i)) ||
+        Enumerable.Range(5,9).Any(i => rights.GetBoolean(i)))
+        throw new InvalidOperationException("SUPPORT_READER_INHERITED_WRITE_RIGHTS");
+}
+async Task ReaderMustBeDenied(string sql)
+{
+    await using var conn = await readerSource.OpenConnectionAsync();
+    await using var cmd = new NpgsqlCommand(sql, conn);
+    cmd.Parameters.AddWithValue("case", caseRef);
+    try { await cmd.ExecuteNonQueryAsync(); }
+    catch (PostgresException ex) when (ex.SqlState == "42501") { return; }
+    throw new InvalidOperationException("SUPPORT_READER_CAN_WRITE_OR_CROSS_SCOPE");
+}
+await ReaderMustBeDenied("""
+    INSERT INTO internal_test_support_case(case_ref) VALUES (@case)
+    """);
+await ReaderMustBeDenied("""
+    UPDATE internal_test_support_case SET current_revision=55 WHERE case_ref=@case
+    """);
+await ReaderMustBeDenied("""
+    DELETE FROM internal_test_support_case WHERE case_ref=@case
+    """);
+await ReaderMustBeDenied("""
+    DELETE FROM internal_test_support_event WHERE case_ref=@case
+    """);
+await ReaderMustBeDenied("""
+    INSERT INTO internal_test_support_event(case_ref,revision,request_ref,command_json,event_digest)
+    VALUES (@case,999,gen_random_uuid(),'{}','fake')
+    """);
+await ReaderMustBeDenied("""
+    UPDATE internal_test_support_audit SET event_digest='bad' WHERE case_ref=@case
+    """);
+await ReaderMustBeDenied("ALTER TABLE internal_test_support_case ADD COLUMN privileged_field text");
+await ReaderMustBeDenied("SELECT count(*) FROM internal_test_center");
+await ReaderMustBeDenied("SET ROLE taranom_sprint101_support_test");
+await using (var conn = await readerSource.OpenConnectionAsync())
+await using (var cmd = new NpgsqlCommand("""
+    SELECT count(*) FROM internal_test_support_event WHERE case_ref=@case
+    """, conn))
+{
+    cmd.Parameters.AddWithValue("case", caseRef);
+    if ((long)(await cmd.ExecuteScalarAsync() ?? 0L) != 1)
+        throw new InvalidOperationException("SUPPORT_READER_CANNOT_READ_EXISTING_HISTORY");
+}
+Console.WriteLine("PASS: independent PostgreSQL reader SELECT-only, nine real SQL escalation attempts denied");
+
 await using var pg = NpgsqlDataSource.Create(settings.ConnectionString);
 await using var cn = await pg.OpenConnectionAsync();
 await using var held = await cn.BeginTransactionAsync();
