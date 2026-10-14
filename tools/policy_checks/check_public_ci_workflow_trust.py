@@ -199,6 +199,10 @@ DISPATCHER_BRANCHES = {
         "sprint-111-private-evidence-custody-output-safety",
         "main",
     ),
+    "sprint-119-support-reader-writer-db-isolation.yml": (
+        "sprint-119-support-reader-writer-db-isolation",
+        "main",
+    ),
     "sprint-118-support-uncertain-command-recovery.yml": (
         "sprint-118-support-uncertain-command-recovery",
         "main",
