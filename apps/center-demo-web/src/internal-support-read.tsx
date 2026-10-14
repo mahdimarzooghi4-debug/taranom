@@ -42,6 +42,7 @@ export function InternalSupportRead(){
  const [ref,setRef]=useState('test:local-support');
  const [phase,setPhase]=useState<'IDLE'|'LOADING'|'DENIED'|'READ'>('IDLE');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
+ const [pendingWrite,setPendingWrite]=useState(false);
  const epoch=useRef(0);
  useEffect(()=>{epoch.current++;setSnapshot(null);setPhase('IDLE');
   return ()=>{epoch.current++;};},[ref]);
@@ -63,10 +64,10 @@ export function InternalSupportRead(){
   <p>این نما از همان سرویس .NET و ژورنال PostgreSQL می‌خواند. هیچ هویت،
     شکایت قانونی، پوشش بیمه یا صلاحیت درمانی از این داده‌ها تأیید نمی‌شود.</p>
   <label>شناسه پرونده آزمایشی
-   <input value={ref} onChange={e=>setRef(e.target.value)}
+   <input value={ref} disabled={pendingWrite} onChange={e=>setRef(e.target.value)}
     maxLength={128} autoComplete="off" aria-label="شناسه پرونده پیگیری آزمایشی"/>
   </label>
-  <button type="button" disabled={!validRef(ref)||phase==='LOADING'}
+  <button type="button" disabled={!validRef(ref)||phase==='LOADING'||pendingWrite}
     onClick={()=>void read()}>خواندن از پایگاه داده محلی</button>
   <p role="status">{phase==='IDLE'?'هنوز خواندن انجام نشده است.':
    phase==='LOADING'?'در حال خواندن':
@@ -79,7 +80,8 @@ export function InternalSupportRead(){
     پیگیری {f.revision}: <code>{f.noteRef}</code></li>)}</ul>
    <p>هویت تأییدنشده | ثبت قانونی انجام‌نشده | انتشار ملی ممنوع</p>
    <InternalSupportWrite key={snapshot.caseRef+':'+snapshot.revision}
-    caseRef={snapshot.caseRef} existing={snapshot} onChanged={()=>void read()}/>
+    caseRef={snapshot.caseRef} existing={snapshot} onChanged={()=>void read()}
+    onPendingChange={setPendingWrite}/>
    <InternalSupportHistory key={snapshot.caseRef+':'+snapshot.revision}
     caseRef={snapshot.caseRef} revision={snapshot.revision}/>
   </div>}
