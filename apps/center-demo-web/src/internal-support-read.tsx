@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {InternalSupportHistory} from './internal-support-history';
 import {InternalSupportWrite} from './internal-support-write';
+import {InternalSupportWorklist} from './internal-support-worklist';
 
 // Local test-only UI over the EXISTING .NET + PostgreSQL support journal.
 // A readable response is not authentication, complaint submission or approval.
@@ -63,13 +64,14 @@ export function InternalSupportRead(){
   <h2>خواندن پرونده پیگیری داخلی — محیط آزمایشی</h2>
   <p>این نما از همان سرویس .NET و ژورنال PostgreSQL می‌خواند. هیچ هویت،
     شکایت قانونی، پوشش بیمه یا صلاحیت درمانی از این داده‌ها تأیید نمی‌شود.</p>
+  <InternalSupportWorklist disabled={pendingWrite} onSelect={setRef}/>
   <label>شناسه پرونده آزمایشی
    <input value={ref} disabled={pendingWrite} onChange={e=>setRef(e.target.value)}
     maxLength={128} autoComplete="off" aria-label="شناسه پرونده پیگیری آزمایشی"/>
   </label>
   <button type="button" disabled={!validRef(ref)||phase==='LOADING'||pendingWrite}
     onClick={()=>void read()}>خواندن از پایگاه داده محلی</button>
-  <p role="status">{phase==='IDLE'?'هنوز خواندن انجام نشده است.':
+  <p role="status" data-testid="support-read-status">{phase==='IDLE'?'هنوز خواندن انجام نشده است.':
    phase==='LOADING'?'در حال خواندن':
    phase==='DENIED'?'پاسخ یا منبع قابل تأیید نیست؛ اطلاعات قبلی پاک شد.':
    'وضعیت آزمایشی از پایگاه داده دریافت شد؛ فاقد اعتبار رسمی است.'}</p>

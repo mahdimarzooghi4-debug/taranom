@@ -223,6 +223,10 @@ DISPATCHER_BRANCHES = {
         "sprint-119-support-reader-writer-db-isolation",
         "main",
     ),
+    "sprint-120-internal-support-worklist.yml": (
+        "sprint-120-internal-support-worklist",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

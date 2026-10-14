@@ -136,6 +136,10 @@ Taranom.CenterWorkflow.Demo.SupportHttp.Store =
     new Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal(supportRuntime);
 Taranom.CenterWorkflow.Demo.SupportHttp.ReadStore =
     new Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal(supportReaderRuntime);
+// Read-only, bounded synthetic case metadata list. The same reader-only
+// PostgreSQL principal verifies every event+audit record before inclusion.
+app.MapGet("/internal/demo/v1/support-worklist",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportWorklistHttp.ListAsync);
 app.MapGet("/internal/demo/v1/support/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/support/{caseRef}/commands",
