@@ -55,8 +55,8 @@ function confirmed(raw:unknown,input:PendingSupportWrite):boolean{
  }
  return true;
 }
-export function InternalSupportWrite({caseRef,existing,onChanged}:{
- caseRef:string;existing:Existing;onChanged:()=>void}){
+export function InternalSupportWrite({caseRef,existing,onChanged,onPendingChange}:{
+ caseRef:string;existing:Existing;onChanged:()=>void;onPendingChange:(locked:boolean)=>void}){
  const [member,setMember]=useState('test:member-local');
  const [evidence,setEvidence]=useState('test:unverified-document');
  const [submitter,setSubmitter]=useState('test:claimed-submitter');
@@ -96,7 +96,7 @@ export function InternalSupportWrite({caseRef,existing,onChanged}:{
   if(processing.current)return;
   const command=pending??build();
   if(!command||!sameOrigin(command,existing))return;
-  processing.current=true;setPhase('SUBMITTING');setPending(command);
+  processing.current=true;setPhase('SUBMITTING');setPending(command);onPendingChange(true);
   try{
    const res=await fetch('/internal/demo/v1/support/'+encodeURIComponent(command.caseRef)+'/commands',
     {method:'POST',credentials:'omit',cache:'no-store',
@@ -104,7 +104,7 @@ export function InternalSupportWrite({caseRef,existing,onChanged}:{
    if(!res.ok)throw Error('REJECTED_OR_UNCERTAIN');
    const raw:unknown=await res.json();
    if(!confirmed(raw,command))throw Error('UNVERIFIABLE_REPLY');
-   setPhase('CONFIRMED');setPending(null);
+   setPhase('CONFIRMED');setPending(null);onPendingChange(false);
    onChanged();
   }catch{
    // No new UUID, payload, expectedRevision or fields may be generated here.
@@ -117,7 +117,7 @@ export function InternalSupportWrite({caseRef,existing,onChanged}:{
   if(!original||!sameOrigin(original,existing)){
    setImportError(true);return;
   }
-  setPending(original);setPhase('UNCERTAIN');setImportError(false);setImportText('');
+  setPending(original);onPendingChange(true);setPhase('UNCERTAIN');setImportError(false);setImportText('');
  }
  return <section className="panel" data-testid="internal-support-write">
   <h3>{followUp?'ثبت یادداشت پیگیری آزمایشی':'ثبت اولیه پرونده آزمایشی'}</h3>
