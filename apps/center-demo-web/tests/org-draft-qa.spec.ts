@@ -58,3 +58,35 @@ test('ORG126-03 invalid refs and browser authority hints are rejected',async({pa
  expect(data.organizationAuthenticated).toBe(false);
  expect(data.nationalReleaseAllowed).toBe(false);
 });
+
+
+test('ORG126-04 lost accepted acknowledgement recovers exact request once',async({page,request})=>{
+ const item=ref();
+ await page.goto('/org-drafts-qa');
+ const root=page.getByTestId('org-draft-qa');
+ await root.getByRole('textbox',{name:'شناسه پیش‌نویس آزمایشی'}).fill(item);
+ await root.getByRole('button',{name:'ایجاد پیش‌نویس آزمایشی'}).click();
+ await expect(root.getByTestId('org-draft-source')).toContainText(item);
+ let dropped=false;
+ await page.route('**/internal/demo/v1/org-drafts/*/activity',async route=>{
+  if(route.request().method()==='POST'&&!dropped){
+   dropped=true;
+   const accepted=await route.fetch();
+   expect(accepted.status()).toBe(200);
+   await route.fulfill({status:503,contentType:'application/json',body:'{"contract":"UNTRUSTED_ACK"}'});
+  }else await route.continue();
+ });
+ await root.getByRole('button',{name:'ثبت فعالیت نسخه‌دار'}).click();
+ await expect(root.getByTestId('org-draft-uncertain')).toContainText('نتیجه ثبت نامعلوم است');
+ await expect(root.getByRole('button',{name:'ثبت فعالیت نسخه‌دار'})).toBeDisabled();
+ await root.getByRole('button',{name:'بازپخش دقیق درخواست قبلی'}).click();
+ await expect(root.getByTestId('org-draft-uncertain')).toHaveCount(0);
+ await expect(root.getByRole('status').first()).toContainText('بازپخش شد');
+ await root.getByRole('button',{name:'بازخوانی تاریخچه فعالیت'}).click();
+ await expect(root.getByTestId('org-activity-history')).toContainText('نسخه جاری فعالیت: 1');
+ const response=await request.get(base+'/'+encodeURIComponent(item)+'/activity');
+ expect(response.status()).toBe(200);
+ const data=await response.json();
+ expect(data.data.events).toHaveLength(1);
+ expect(dropped).toBe(true);
+});
