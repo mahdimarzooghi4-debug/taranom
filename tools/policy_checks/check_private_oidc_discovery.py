@@ -218,9 +218,15 @@ def main(argv=None):
             private._write_new(report, result)
         else:
             result = inspect()
+            # Default CI output is offline, but must never clobber another
+            # report or follow a pre-positioned final-component symlink.
             args.report_json.parent.mkdir(parents=True, exist_ok=True)
-            args.report_json.write_text(json.dumps(result, sort_keys=True, indent=2)
-                                        + "\n", encoding="utf-8")
+            with os.fdopen(os.open(
+                args.report_json,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o600,
+            ), "w", encoding="utf-8") as stream:
+                stream.write(json.dumps(result, sort_keys=True, indent=2) + "\n")
     except (DiscoveryError, transport.ProbeError, private.BatchError) as exc:
         # Fixed enum codes only. Never print private hosts or response content.
         print("DENIED: " + str(exc), file=sys.stderr)
