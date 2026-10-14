@@ -217,6 +217,61 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // TRN-TECH-129: opt-in, anonymous and synthetic-only *local test* worklist.
+    // This is NOT an operational member directory or real user authorization.
+    // Reuse the reader's distinct SELECT-only PostgreSQL principal and verify
+    // each listed case using its canonical event + paired audit lineage.
+    internal async Task<(IReadOnlyList<(string CaseRef, long Revision, int FollowUps)> Rows,
+        bool HasMore)> ReadWorklistAsync(string? afterCaseRef, int limit)
+    {
+        if (limit is < 1 or > 10 ||
+            (afterCaseRef is not null && !IsSynthetic(afterCaseRef)))
+            throw new InvalidOperationException("INVALID_TEST_WORKLIST_CURSOR");
+
+        await using var conn = await database.OpenConnectionAsync();
+        await using var tx = await conn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead);
+        await using (var readOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", conn, tx))
+            await readOnly.ExecuteNonQueryAsync();
+
+        var refs = new List<string>();
+        await using (var cmd = new NpgsqlCommand("""
+            SELECT case_ref FROM internal_test_support_case
+            WHERE current_revision > 0
+              AND (CAST(@after AS text) IS NULL OR
+                   case_ref COLLATE "C" > CAST(@after AS text) COLLATE "C")
+            ORDER BY case_ref COLLATE "C"
+            LIMIT @count
+            """, conn, tx))
+        {
+            cmd.Parameters.AddWithValue("after", (object?)afterCaseRef ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("count", limit + 1);
+            await using var rows = await cmd.ExecuteReaderAsync();
+            while (await rows.ReadAsync())
+            {
+                var reference = rows.GetString(0);
+                if (!IsSynthetic(reference))
+                    throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIED_REFERENCE");
+                refs.Add(reference);
+            }
+        }
+
+        var verified = new List<(string CaseRef, long Revision, int FollowUps)>();
+        // Verify the lookahead row too: corrupt data must fail the *whole*
+        // response, rather than skip a damaged item and silently repaginate.
+        foreach (var reference in refs)
+        {
+            var state = await RehydrateAsync(conn, tx, reference, lockCaseRow: false);
+            if (state.Revision <= 0 ||
+                state.History.Length != state.Revision ||
+                state.History.Length - 1 > int.MaxValue)
+                throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIABLE");
+            verified.Add((reference, state.Revision, state.History.Length - 1));
+        }
+        await tx.CommitAsync();
+        return (verified.Take(limit).ToArray(), verified.Count > limit);
+    }
+
     internal async Task<SyntheticSupportSnapshot> ReadAsync(string caseRef)
     {
         EnsureSynthetic(caseRef);
