@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Npgsql;
+using Taranom.OrgScope.Foundation;
 using Taranom.ClinicalCenterGovernance;
 using Taranom.ClinicalCenterJournal.Postgres;
 using Taranom.ProofingJournal.Postgres;
@@ -44,6 +45,28 @@ Taranom.CenterWorkflow.Demo.LateEvidenceHttp.Store =
     new PgLateEvidenceWorkItemJournal(dataSource);
 Taranom.CenterWorkflow.Demo.CareCoordinationHttp.Store =
     new Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal(dataSource);
+
+// TRN-TECH-135: opt-in localhost technical QA only; the HTTP endpoint has
+// precisely ONE support-scoped restricted PostgreSQL login. No browser tenant
+// selection and no real organization authentication.
+var orgQaEnabled = Environment.GetEnvironmentVariable("TARANOM_ORG_DRAFT_QA") ==
+    "CI_EPHEMERAL_ONLY";
+NpgsqlDataSource? orgQaDatabase = null;
+if (orgQaEnabled)
+{
+    var supportSecret = Environment.GetEnvironmentVariable(
+        "TARANOM_ORG_SUPPORT_TEST_PASSWORD");
+    var corporateSecret = Environment.GetEnvironmentVariable(
+        "TARANOM_ORG_CORPORATE_TEST_PASSWORD");
+    await PgSyntheticOrganizationScope.InitializeAsync(
+        dataSource, supportSecret, corporateSecret);
+    orgQaDatabase = PgSyntheticOrganizationScope.ScopedSource(connection,
+        PgSyntheticOrganizationScope.SupportRole, supportSecret!);
+    Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Drafts =
+        new PgScopedDraftWorkspace(orgQaDatabase);
+    Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Activity =
+        new PgScopedDraftActivity(orgQaDatabase);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(4320));
@@ -169,6 +192,24 @@ app.MapGet("/internal/demo/v1/care-coordination/{caseRef}",
 app.MapPost("/internal/demo/v1/care-coordination/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareCoordinationHttp.WriteAsync);
 
+// No non-test build is allowed to register these routes or page. This demo
+// binds ONLY to loopback, still makes no trusted operator-authentication claim.
+if (orgQaEnabled)
+{
+    app.MapGet("/internal/demo/v1/org-drafts",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.List);
+    app.MapPost("/internal/demo/v1/org-drafts",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Create);
+    app.MapGet("/internal/demo/v1/org-drafts/{itemRef}",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Read);
+    app.MapGet("/internal/demo/v1/org-drafts/{itemRef}/activity",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.History);
+    app.MapPost("/internal/demo/v1/org-drafts/{itemRef}/activity",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Append);
+    app.MapGet("/org-drafts-qa", () =>
+        Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+            "index.html"),"text/html; charset=utf-8"));
+}
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 // Exact local member entrypoint is required: the generic root fallback must
 // never silently render the CENTER HTML for a MEMBER browser path.
@@ -201,6 +242,7 @@ app.UseStaticFiles();
 // Explicit root default file and explicit member entrypoint remain available.
 app.MapFallback(() => Results.NotFound());
 app.Run();
+if (orgQaDatabase is not null) await orgQaDatabase.DisposeAsync();
 
 // Handler methods deliberately use HttpContext RequestDelegate bindings;
 // this avoids generated analyzer fragility for captured route lambdas.

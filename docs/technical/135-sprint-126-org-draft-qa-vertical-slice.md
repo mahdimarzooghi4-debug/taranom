@@ -1,0 +1,12 @@
+# TRN-TECH-135 — Sprint 126: optional test-only organization draft UI vertical slice
+
+**Scope:** reuse the exact TRN-TECH-131…134 internal PostgreSQL organization scope, audited draft and append-only activity journal. This is a UI/backend integration milestone for TRN-EP-01/02/12/13, **not** an organization onboarding, delegated user identity, real multi-tenant API, clinical workflow or commercial feature approval.
+
+- Runtime must be `TARANOM_CENTER_DEMO_TEST_ONLY=CI_EPHEMERAL_ONLY` plus `TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY`, and localhost:4320 with isolated `taranom_sprint64_center` Postgres. Otherwise NO draft QA HTTP routes or UI entry exist.
+- A single SUPPORT test PostgreSQL principal is hardwired as the application connection. Separate CORPORATE credential is used solely for schema setup and direct PostgreSQL isolation regression. The caller **never** chooses a tenant: query, body, Authorization and cookie cannot determine a scope. The route does not claim human authorization; all responses carry `organizationAuthenticated=false`, `operatorAuthorized=false`, `nationalReleaseAllowed=false`.
+- The server exposes only isolated test-only CRUD subset: list, create, read, read full activity, append technical note ref. There is no Update/Delete, business approval or free-text handling. All request refs are constrained `test:` opaque metadata; one source of record via TRN-TECH-132/134, not an in-memory fake.
+- Same-origin React Persian RTL workbench requires explicit human clicks for each write; prevents sending new commands while acknowledgment is uncertain; keeps exact original idempotency key/payload for manual retry, never auto-retries. It validates synthetic denial flags and original request identity before rendering accepted source.
+- Strict JSON key/type input, bounded byte size, origin/Host/forwarding denial, no Authorization/cookies/tenant hints, stale CAS and altered duplicate denial, fail closed on unavailable PostgreSQL. The localhost-only test route must never be mounted into real authless Production.
+- Real PostgreSQL test verifies request→SQL→UI and tenant denial. Browser tests cover create, read, append, exact retry, malicious/forged response denial and absence of browser-mounted authority. 14-job shared CI and exact-SHA Code Review are obligatory.
+
+**Do not infer any independent identity, legal organization rights, clinical, financial, insurance or privacy authorization. No external API, Stage, formal QA Gate, Release Approval, Production or Merge. National launch stays DENIED_BY_DEFAULT.**
