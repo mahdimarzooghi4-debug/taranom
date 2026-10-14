@@ -238,13 +238,12 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
         await using (var cmd = new NpgsqlCommand("""
             SELECT case_ref FROM internal_test_support_case
             WHERE current_revision > 0
-              AND (CAST(@after AS text) IS NULL OR
-                   case_ref COLLATE "C" > CAST(@after AS text) COLLATE "C")
+              AND (@after = '' OR case_ref COLLATE "C" > @after COLLATE "C")
             ORDER BY case_ref COLLATE "C"
             LIMIT @count
             """, conn, tx))
         {
-            cmd.Parameters.AddWithValue("after", (object?)afterCaseRef ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("after", afterCaseRef ?? string.Empty);
             cmd.Parameters.AddWithValue("count", limit + 1);
             await using var rows = await cmd.ExecuteReaderAsync();
             while (await rows.ReadAsync())
