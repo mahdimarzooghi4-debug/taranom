@@ -7,7 +7,8 @@ test('SUPPORT-116-01 history reads .NET PostgreSQL, stays unverified',async({pag
  await history.getByRole('button',{name:'بازخوانی تاریخچه پیگیری'}).click();
  await expect(history.getByRole('status')).toContainText('از پایگاه داده بازخوانی شد');
  await expect(history).toContainText('بدون احراز هویت، تأیید بیمه');
- await expect(history.getByTestId('support-history-events')).toBeVisible();
+ await expect(history.getByRole('status')).toContainText('از پایگاه داده بازخوانی شد');
+ await expect(history.getByTestId('support-history-events').locator('li')).toHaveCount(0);
 });
 test('SUPPORT-116-02 tampered authority flags deny entire history',async({page})=>{
  await page.route('**/internal/demo/v1/support/**/history?*',route=>route.fulfill({
