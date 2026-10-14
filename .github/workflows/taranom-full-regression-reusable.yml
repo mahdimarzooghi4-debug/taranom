@@ -758,6 +758,8 @@ jobs:
           python3 tests/center_demo/test_care_coordination_http.py
           python3 tests/center_demo/test_support_history_http.py
           python3 tests/center_demo/test_support_worklist_http.py
+          # Actual PostgreSQL DDL admission/recovery; refuses changed versions.
+          dotnet run --project tests/Taranom.SupportSchemaAdmission.Probe/Taranom.SupportSchemaAdmission.Probe.csproj --configuration Release
           # TRN-TECH-109: genuine concurrent writer lock + unlocked read,
           # same synthetic PostgreSQL source and current loopback host.
           TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY dotnet run --project tests/Taranom.SupportJournal.MvccProbe/Taranom.SupportJournal.MvccProbe.csproj --configuration Release
