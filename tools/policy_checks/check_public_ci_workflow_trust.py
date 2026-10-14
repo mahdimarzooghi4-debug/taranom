@@ -199,6 +199,10 @@ DISPATCHER_BRANCHES = {
         "sprint-111-private-evidence-custody-output-safety",
         "main",
     ),
+    "sprint-117-internal-support-write-workflow.yml": (
+        "sprint-117-internal-support-write-workflow",
+        "main",
+    ),
     "sprint-116-internal-support-history-ui.yml": (
         "sprint-116-internal-support-history-ui",
         "main",
