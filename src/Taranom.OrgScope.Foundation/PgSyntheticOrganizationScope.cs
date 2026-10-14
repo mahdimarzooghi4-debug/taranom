@@ -53,7 +53,8 @@ internal static class PgSyntheticOrganizationScope
                   LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
                   NOREPLICATION NOBYPASSRLS;
               END IF;
-            END $role$;
+            END;
+            $role$;
             CREATE TABLE IF NOT EXISTS public.internal_test_org_scope_binding (
               scope_ref text PRIMARY KEY
                  CHECK (scope_ref ~ '^test:[A-Za-z0-9_:-]{1,123}$'),
