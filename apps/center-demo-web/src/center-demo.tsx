@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {DepartmentRoster} from './department-roster';
 import {DoctorAffiliationHistory} from './doctor-affiliation-history';
 import {CenterAuditWorkspace} from './center-audit-workspace';
+import {InternalSupportRead} from './internal-support-read';
 import {makeCenterRecoveryReceipt, parseCenterRecoveryReceipt} from './center-command-receipt';
 import type {RecoveryKind, UncertainCenterCommand} from './center-command-receipt';
 
@@ -488,6 +489,7 @@ export function CenterDemo() {
           <p>تأیید مدیر: خیر | صلاحیت پزشکی: تأییدنشده | مجوز انتشار: خیر</p>
         </section>}
       </section>
+      <InternalSupportRead />
       <footer>TRN-TECH-073/074 | پایگاه‌داده موقت | فقط محیط localhost | بدون احراز هویت یا پذیرش واقعی</footer>
     </main>
   </>;
