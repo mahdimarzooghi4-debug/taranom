@@ -248,6 +248,37 @@ class IdentityTlsPreflightTests(unittest.TestCase):
             self.assertEqual(report["status"], "TARGET_NOT_CONFIGURED")
             self.assertFalse(report["national_release_allowed"])
 
+    def test_default_report_refuses_to_overwrite_existing_evidence(self):
+        with tempfile.TemporaryDirectory() as work:
+            out = pathlib.Path(work) / "report.json"
+            out.write_text("owner evidence", encoding="utf-8")
+            rc = preflight.main(["--purpose", "AUTHENTICATION_IDP",
+                                 "--report-json", str(out)])
+            self.assertEqual(rc, 1)
+            self.assertEqual(out.read_text(), "owner evidence")
+
+    def test_default_report_refuses_symlink_target_overwrite(self):
+        with tempfile.TemporaryDirectory() as work:
+            target = pathlib.Path(work) / "owner-evidence.json"
+            target.write_text("untouched", encoding="utf-8")
+            link = pathlib.Path(work) / "report.json"
+            link.symlink_to(target)
+            rc = preflight.main(["--purpose", "AUTHENTICATION_IDP",
+                                 "--report-json", str(link)])
+            self.assertEqual(rc, 1)
+            self.assertEqual(target.read_text(), "untouched")
+
+    def test_default_report_created_privately_and_never_authorizes_release(self):
+        with tempfile.TemporaryDirectory() as work:
+            out = pathlib.Path(work) / "report.json"
+            rc = preflight.main(["--purpose", "IDENTITY_PROOFING",
+                                 "--report-json", str(out)])
+            self.assertEqual(rc, 0)
+            self.assertEqual(out.stat().st_mode & 0o777, 0o600)
+            report = json.loads(out.read_text())
+            self.assertFalse(report["national_release_allowed"])
+            self.assertFalse(report["identity_proofing_verified"])
+
     def test_no_host_ip_or_secret_can_appear_in_reports(self):
         report = preflight.inspect("AUTHENTICATION_IDP", "user:token@" + PUBLIC)
         self.assertNotIn("token", json.dumps(report))
