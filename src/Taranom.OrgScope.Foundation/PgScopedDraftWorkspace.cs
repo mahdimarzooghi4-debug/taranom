@@ -92,20 +92,14 @@ internal sealed class PgScopedDraftWorkspace(NpgsqlDataSource database)
             inserted = await create.ExecuteScalarAsync(ct) is string;
         }
 
-        string? actualSource;
-        await using (var verify = new NpgsqlCommand("""
-            SELECT source_ref FROM public.internal_test_org_draft_item
-            WHERE scope_ref=@scope AND item_ref=@item
-            """, conn, tx))
-        {
-            verify.Parameters.AddWithValue("scope", scope);
-            verify.Parameters.AddWithValue("item", itemRef!);
-            actualSource = (string?)await verify.ExecuteScalarAsync(ct);
-        }
-        if (!IsTestRef(actualSource))
+        var verified = await OrgDraftAuditVerifier.VerifyAsync(conn,tx,
+            scope,itemRef!,ct) ??
+            throw new InvalidOperationException("ORG_DRAFT_MISSING_COMMITTED_ITEM");
+        if (!IsTestRef(verified.SourceRef))
             throw new InvalidOperationException("ORG_DRAFT_SOURCE_UNVERIFIABLE");
 
-        var draft = new ScopedDraft(scope,itemRef!,actualSource!);
+        var actualSource = verified.SourceRef;
+        var draft = new ScopedDraft(scope,itemRef!,actualSource);
         DraftWriteStatus status = inserted ? DraftWriteStatus.Recorded :
             string.Equals(actualSource,sourceRef,StringComparison.Ordinal)
                 ? DraftWriteStatus.Replayed : DraftWriteStatus.ConflictingReplay;
@@ -121,18 +115,37 @@ internal sealed class PgScopedDraftWorkspace(NpgsqlDataSource database)
             throw new ArgumentException("ORG_DRAFT_INVALID_ITEM_REF",
                 nameof(itemRef));
         await using var conn = await database.OpenConnectionAsync(ct);
-        var scope = await ScopeAsync(conn);
-        await using var cmd = new NpgsqlCommand("""
-            SELECT source_ref FROM public.internal_test_org_draft_item
-            WHERE scope_ref=@scope AND item_ref=@item
-            """,conn);
-        cmd.Parameters.AddWithValue("scope",scope);
-        cmd.Parameters.AddWithValue("item",itemRef!);
-        var actual = (string?)await cmd.ExecuteScalarAsync(ct);
-        if (actual is null) return null;
-        if (!IsTestRef(actual))
-            throw new InvalidOperationException("ORG_DRAFT_SOURCE_UNVERIFIABLE");
-        return new ScopedDraft(scope,itemRef!,actual);
+        await using var tx = await conn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead,ct);
+        await using (var mode = new NpgsqlCommand("SET TRANSACTION READ ONLY",
+            conn,tx))
+            await mode.ExecuteNonQueryAsync(ct);
+        var scope = await ScopeAsync(conn,tx);
+        var audit = await OrgDraftAuditVerifier.VerifyAsync(conn,tx,
+            scope,itemRef!,ct);
+        await tx.CommitAsync(ct);
+        return audit is null ? null :
+            new ScopedDraft(scope,itemRef!,audit.SourceRef);
+    }
+
+    internal async Task<ScopedDraftAudit?> ReadAuditAsync(string? itemRef,
+        CancellationToken ct = default)
+    {
+        RequireEphemeral();
+        if (!IsTestRef(itemRef))
+            throw new ArgumentException("ORG_DRAFT_INVALID_AUDIT_ITEM_REF",
+                nameof(itemRef));
+        await using var conn = await database.OpenConnectionAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead,ct);
+        await using (var mode = new NpgsqlCommand("SET TRANSACTION READ ONLY",
+            conn,tx))
+            await mode.ExecuteNonQueryAsync(ct);
+        var scope = await ScopeAsync(conn,tx);
+        var result = await OrgDraftAuditVerifier.VerifyAsync(conn,tx,
+            scope,itemRef!,ct);
+        await tx.CommitAsync(ct);
+        return result;
     }
 
     internal async Task<DraftPage> ListAsync(string? afterItemRef, int limit,
@@ -172,6 +185,15 @@ internal sealed class PgScopedDraftWorkspace(NpgsqlDataSource database)
                         "ORG_DRAFT_PAGE_UNVERIFIABLE");
                 items.Add(new ScopedDraft(scope,item,source));
             }
+        }
+        // Do not return even one row if any listed draft lacks its paired
+        // immutable audit observation or contains a mismatched hash.
+        foreach (var item in items)
+        {
+            var audit = await OrgDraftAuditVerifier.VerifyAsync(conn,tx,
+                scope,item.ItemRef,ct);
+            if (audit is null || audit.SourceRef != item.SourceRef)
+                throw new InvalidOperationException("ORG_DRAFT_LIST_AUDIT_MISMATCH");
         }
         await tx.CommitAsync(ct);
         bool more = items.Count > limit;

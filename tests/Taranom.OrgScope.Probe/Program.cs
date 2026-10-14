@@ -200,3 +200,110 @@ catch (InvalidOperationException e) when (
     e.Message == "ORG_DRAFT_SCOPE_UNVERIFIABLE") { }
 Console.WriteLine("PASS: PostgreSQL organization draft workspace, two scoped reads, atomic idempotent replay, 8-way concurrency and cursor paging");
 
+//
+// TRN-TECH-133 — real audit integrity, no mocked repository or role.
+// Creating each scoped draft emits exactly one immutable CREATE event in
+// the same PostgreSQL transaction; repeats/conflicts must not append events.
+//
+var aAudit = await support.ReadAuditAsync(first);
+var bAudit = await company.ReadAuditAsync(first);
+if (aAudit is null || bAudit is null ||
+    aAudit.ScopeRef != PgSyntheticOrganizationScope.SupportRef ||
+    bAudit.ScopeRef != PgSyntheticOrganizationScope.CorporateRef ||
+    aAudit.SourceRef != original || bAudit.SourceRef != different ||
+    aAudit.EventNo != 1 || bAudit.EventNo != 1 ||
+    aAudit.EventType != "DRAFT_RECORDED_TEST_ONLY" ||
+    bAudit.EventType != "DRAFT_RECORDED_TEST_ONLY" ||
+    aAudit.EventSha256.Length != 64 ||
+    bAudit.EventSha256.Length != 64 ||
+    aAudit.EventSha256 == bAudit.EventSha256)
+    throw new InvalidOperationException("ORG_AUDIT_SOURCE_BINDING_FAILED");
+if (await company.ReadAuditAsync(second) is not null ||
+    await company.ReadAuditAsync(third) is not null)
+    throw new InvalidOperationException("ORG_AUDIT_CROSS_SCOPE_READ");
+
+if (await Count(a,"SELECT count(*) FROM public.internal_test_org_draft_audit") != 4 ||
+    await Count(b,"SELECT count(*) FROM public.internal_test_org_draft_audit") != 2)
+    throw new InvalidOperationException("ORG_AUDIT_DUPLICATE_ON_REPLAY");
+if (await Count(a,"""
+    SELECT count(*) FROM public.internal_test_org_draft_audit
+    WHERE scope_ref='test:scope-corporate'
+    """) != 0)
+    throw new InvalidOperationException("ORG_AUDIT_ROW_SECURITY_BYPASS");
+
+// Neither org login can forge its own audit history, let alone another's.
+await MustDeny(a,"""
+    INSERT INTO public.internal_test_org_draft_audit
+    (scope_ref,item_ref,event_no,event_type,source_ref,event_sha256)
+    VALUES ('test:scope-support','test:fake',1,
+            'DRAFT_RECORDED_TEST_ONLY','test:fake',repeat('A',64))
+    ""","AUDIT_FORGE");
+await MustDeny(b,"""
+    UPDATE public.internal_test_org_draft_audit SET event_sha256=repeat('B',64)
+    ""","AUDIT_UPDATE");
+await MustDeny(b,"DELETE FROM public.internal_test_org_draft_audit",
+    "AUDIT_DELETE");
+await MustDeny(a,"TRUNCATE public.internal_test_org_draft_audit",
+    "AUDIT_TRUNCATE");
+
+// Database owner may manage CI fixture schema, but SQL row mutation is
+// specifically refused by immutable audit triggers, even for that owner.
+await MustDeny(owner,$"""
+    UPDATE public.internal_test_org_draft_audit
+       SET event_sha256=repeat('C',64)
+     WHERE scope_ref='test:scope-support' AND item_ref='{first}'
+    ""","OWNER_AUDIT_UPDATE");
+await MustDeny(owner,$"""
+    DELETE FROM public.internal_test_org_draft_audit
+     WHERE scope_ref='test:scope-support' AND item_ref='{first}'
+    ""","OWNER_AUDIT_DELETE");
+await MustDeny(owner,
+    "TRUNCATE public.internal_test_org_draft_audit",
+    "OWNER_AUDIT_TRUNCATE");
+
+// Simulated tampering of the *draft* itself by the fixture schema owner
+// must be detected by application reads, list pages and exact replay.
+await Execute(owner,$"""
+    UPDATE public.internal_test_org_draft_item
+       SET source_ref='test:tampered-by-schema-owner'
+     WHERE scope_ref='test:scope-support' AND item_ref='{first}'
+    """);
+try
+{
+    try
+    {
+        await support.ReadAsync(first);
+        throw new InvalidOperationException("ORG_AUDIT_TAMPER_UNDETECTED");
+    }
+    catch (InvalidOperationException e)
+        when (e.Message=="ORG_DRAFT_AUDIT_INTEGRITY_MISMATCH") { }
+    try
+    {
+        await support.ListAsync(prefix,2);
+        throw new InvalidOperationException("ORG_AUDIT_PAGE_TAMPER_UNDETECTED");
+    }
+    catch (InvalidOperationException e)
+        when (e.Message=="ORG_DRAFT_AUDIT_INTEGRITY_MISMATCH") { }
+    try
+    {
+        await support.RecordAsync(first,original);
+        throw new InvalidOperationException("ORG_AUDIT_REPLAY_TAMPER_UNDETECTED");
+    }
+    catch (InvalidOperationException e)
+        when (e.Message=="ORG_DRAFT_AUDIT_INTEGRITY_MISMATCH") { }
+}
+finally
+{
+    await Execute(owner,$"""
+        UPDATE public.internal_test_org_draft_item
+           SET source_ref='{original}'
+         WHERE scope_ref='test:scope-support' AND item_ref='{first}'
+        """);
+}
+if (await support.ReadAsync(first) != recorded.Draft ||
+    await support.ReadAuditAsync(first) != aAudit ||
+    await Count(a,"SELECT count(*) FROM public.internal_test_org_draft_audit")!=4)
+    throw new InvalidOperationException("ORG_AUDIT_RECOVERY_MISMATCH");
+Console.WriteLine("PASS: atomic per-scope immutable draft audit, independent digest verification, replay and owner-tamper denial");
+
+

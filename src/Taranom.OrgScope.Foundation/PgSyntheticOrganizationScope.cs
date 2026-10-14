@@ -147,6 +147,9 @@ internal static class PgSyntheticOrganizationScope
             if ((long)(await cmd.ExecuteScalarAsync() ?? -1L) != 2L)
                 throw new InvalidOperationException("ORG_SCOPE_EXTRA_BINDING");
         }
+        // Same transaction as the two fixed role bindings and grants.
+        // The new draft and its audit row commit atomically on every INSERT.
+        await OrgDraftAuditSchema.EnsureAsync(conn,tx);
         await tx.CommitAsync();
     }
 
