@@ -18,7 +18,7 @@ test('SUPPORT-115-02 corrupted backend reply never renders claimed evidence',asy
  await page.goto('/');
  const panel=page.getByTestId('internal-support-read');
  await panel.getByRole('button',{name:'خواندن از پایگاه داده محلی'}).click();
- await expect(panel.getByRole('status')).toContainText('قابل تأیید نیست');
+ await expect(panel.getByTestId('support-read-status')).toContainText('قابل تأیید نیست');
  await expect(panel.getByTestId('support-read-result')).toHaveCount(0);
 });
 test('SUPPORT-115-03 invalid ref cannot make a request',async({page})=>{
@@ -38,5 +38,5 @@ test('SUPPORT-115-04 source outage clears prior results',async({page})=>{
  await page.route('**/internal/demo/v1/support/**',route=>route.abort());
  await panel.getByRole('button',{name:'خواندن از پایگاه داده محلی'}).click();
  await expect(panel.getByTestId('support-read-result')).toHaveCount(0);
- await expect(panel.getByRole('status')).toContainText('اطلاعات قبلی پاک شد');
+ await expect(panel.getByTestId('support-read-status')).toContainText('اطلاعات قبلی پاک شد');
 });
