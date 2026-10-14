@@ -46,6 +46,21 @@ internal static class SupportSchemaAdmission
                 ('internal_test_support_case', 'internal_test_support_event',
                  'internal_test_support_audit')
             UNION ALL
+            SELECT 'INDEX|' || c.relname || '|' || index_class.relname || '|' ||
+                   pg_get_indexdef(i.indexrelid)
+            FROM pg_index i
+            JOIN pg_class c ON c.oid=i.indrelid
+            JOIN pg_class index_class ON index_class.oid=i.indexrelid
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND c.relname IN
+                ('internal_test_support_case', 'internal_test_support_event',
+                 'internal_test_support_audit')
+            UNION ALL
+            SELECT 'FUNCTION|' || p.proname || '|' || pg_get_functiondef(p.oid)
+            FROM pg_proc p
+            JOIN pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname='public' AND p.proname='internal_test_support_history_guard'
+            UNION ALL
             SELECT 'TRIGGER|' || c.relname || '|' || t.tgname || '|' ||
                    pg_get_triggerdef(t.oid)
             FROM pg_trigger t
