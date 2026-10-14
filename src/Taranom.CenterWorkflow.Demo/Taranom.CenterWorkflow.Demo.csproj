@@ -5,5 +5,6 @@
     <ProjectReference Include="../Taranom.ClinicalCenterGovernance/Taranom.ClinicalCenterGovernance.csproj" />
     <ProjectReference Include="../Taranom.MemberGovernance/Taranom.MemberGovernance.csproj" />
     <ProjectReference Include="../Taranom.ProofingJournal.Postgres/Taranom.ProofingJournal.Postgres.csproj" />
+    <ProjectReference Include="../Taranom.OrgScope.Foundation/Taranom.OrgScope.Foundation.csproj" />
   </ItemGroup>
 </Project>

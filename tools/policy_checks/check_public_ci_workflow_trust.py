@@ -247,6 +247,10 @@ DISPATCHER_BRANCHES = {
         "sprint-125-org-draft-activity-journal",
         "main",
     ),
+    "sprint-126-org-draft-qa-vertical-slice.yml": (
+        "sprint-126-org-draft-qa-vertical-slice",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

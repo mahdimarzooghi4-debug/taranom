@@ -705,7 +705,7 @@ jobs:
           cd apps/center-demo-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
-          npm run build
+          VITE_TARANOM_ORG_DRAFT_QA=1 npm run build
           mkdir -p ../../src/Taranom.CenterWorkflow.Demo/wwwroot
           cp -R dist/. ../../src/Taranom.CenterWorkflow.Demo/wwwroot/
           cd ../member-support-demo-web
@@ -745,7 +745,7 @@ jobs:
       - name: Execute PostgreSQL-backed real HTTP, denied business authority and UI QA
         run: |
           cd src/Taranom.CenterWorkflow.Demo
-          TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
+          TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           cd "$GITHUB_WORKSPACE"
@@ -768,6 +768,7 @@ jobs:
           dotnet run --project tests/Taranom.SupportSchemaAdmission.Probe/Taranom.SupportSchemaAdmission.Probe.csproj --configuration Release
           # Separate bounded context: database-enforced org partition, no user IdP.
           dotnet run --project tests/Taranom.OrgScope.Probe/Taranom.OrgScope.Probe.csproj --configuration Release
+          python3 tests/center_demo/test_org_draft_qa_http.py
           # TRN-TECH-109: genuine concurrent writer lock + unlocked read,
           # same synthetic PostgreSQL source and current loopback host.
           TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY dotnet run --project tests/Taranom.SupportJournal.MvccProbe/Taranom.SupportJournal.MvccProbe.csproj --configuration Release
