@@ -24,20 +24,20 @@ internal sealed record DraftPage(IReadOnlyList<ScopedDraft> Items,
 // scopeRef. Session is revalidated for every operation, including reads.
 internal sealed class PgScopedDraftWorkspace(NpgsqlDataSource database)
 {
-    private static bool IsTestRef(string? value) =>
+    internal static bool IsTestRef(string? value) =>
         value is { Length: > 5 and <= 128 } &&
         value.StartsWith("test:", StringComparison.Ordinal) &&
         value.AsSpan(5).ToArray().All(c =>
             char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or ':');
 
-    private static void RequireEphemeral()
+    internal static void RequireEphemeral()
     {
         if (Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY") !=
             "CI_EPHEMERAL_ONLY")
             throw new InvalidOperationException("ORG_DRAFT_TEST_ONLY");
     }
 
-    private static async Task<string> ScopeAsync(NpgsqlConnection conn,
+    internal static async Task<string> ScopeAsync(NpgsqlConnection conn,
         NpgsqlTransaction? tx = null)
     {
         await using var cmd = new NpgsqlCommand("""

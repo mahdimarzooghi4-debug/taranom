@@ -150,6 +150,7 @@ internal static class PgSyntheticOrganizationScope
         // Same transaction as the two fixed role bindings and grants.
         // The new draft and its audit row commit atomically on every INSERT.
         await OrgDraftAuditSchema.EnsureAsync(conn,tx);
+        await OrgDraftActivitySchema.EnsureAsync(conn,tx);
         await tx.CommitAsync();
     }
 
