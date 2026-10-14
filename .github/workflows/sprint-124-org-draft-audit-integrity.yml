@@ -1,0 +1,14 @@
+name: Sprint 124 Organization Draft Audit Integrity Full Regression
+on:
+  push:
+    branches: [sprint-124-org-draft-audit-integrity]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
