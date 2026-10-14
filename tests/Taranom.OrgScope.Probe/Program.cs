@@ -307,3 +307,150 @@ if (await support.ReadAsync(first) != recorded.Draft ||
 Console.WriteLine("PASS: atomic per-scope immutable draft audit, independent digest verification, replay and owner-tamper denial");
 
 
+// TRN-TECH-134: real PostgreSQL per-organization technical activity,
+// expected-revision CAS, retry isolation and immutable chain verification.
+var supportActivity = new PgScopedDraftActivity(a);
+var corporateActivity = new PgScopedDraftActivity(b);
+var activityRequest = "test:activity-request-" + Guid.NewGuid().ToString("N");
+var supportNote = "test:support-note-a";
+var corporateNote = "test:corporate-note-a";
+var aFirst = await supportActivity.AppendAsync(
+    first,activityRequest,supportNote,0);
+var bFirst = await corporateActivity.AppendAsync(
+    first,activityRequest,corporateNote,0);
+if (aFirst.Status != DraftActivityStatus.Recorded ||
+    bFirst.Status != DraftActivityStatus.Recorded ||
+    aFirst.CurrentNo != 1 || bFirst.CurrentNo != 1)
+    throw new InvalidOperationException("ORG_ACTIVITY_SCOPE_CREATE_FAILED");
+
+// Exact idempotent retry survives subsequent operations; a changed retry
+// never mutates the original activity.
+var same = await supportActivity.AppendAsync(first,activityRequest,supportNote,0);
+var conflict = await supportActivity.AppendAsync(
+    first,activityRequest,"test:different-note",0);
+if (same.Status != DraftActivityStatus.Replayed || same.CurrentNo != 1 ||
+    conflict.Status != DraftActivityStatus.ConflictingReplay ||
+    conflict.CurrentNo != 1)
+    throw new InvalidOperationException("ORG_ACTIVITY_RETRY_INTEGRITY");
+
+var secondRequest = "test:activity-request-two-" + Guid.NewGuid().ToString("N");
+var stale = await supportActivity.AppendAsync(
+    first,secondRequest,"test:note-b",0);
+var next = await supportActivity.AppendAsync(
+    first,secondRequest,"test:note-b",1);
+var lateExact = await supportActivity.AppendAsync(
+    first,activityRequest,supportNote,0);
+if (stale.Status != DraftActivityStatus.StaleRevision || stale.CurrentNo != 1 ||
+    next.Status != DraftActivityStatus.Recorded || next.CurrentNo != 2 ||
+    lateExact.Status != DraftActivityStatus.Replayed || lateExact.CurrentNo != 1)
+    throw new InvalidOperationException("ORG_ACTIVITY_CAS_FAILED");
+
+// Eight independent concurrent connections compete to append the SAME
+// request at revision 2. Exactly one writes and seven replay.
+var thirdRequest = "test:activity-request-three-" + Guid.NewGuid().ToString("N");
+var concurrentActivity = await Task.WhenAll(Enumerable.Range(0,8)
+    .Select(_=>supportActivity.AppendAsync(
+        first,thirdRequest,"test:note-c",2)));
+if (concurrentActivity.Count(x=>x.Status==DraftActivityStatus.Recorded)!=1 ||
+    concurrentActivity.Count(x=>x.Status==DraftActivityStatus.Replayed)!=7 ||
+    concurrentActivity.Any(x=>x.CurrentNo!=3))
+    throw new InvalidOperationException("ORG_ACTIVITY_CONCURRENT_DUPLICATE");
+
+var aHistory = await supportActivity.ReadHistoryAsync(first);
+var bHistory = await corporateActivity.ReadHistoryAsync(first);
+if (aHistory.Count!=3 || bHistory.Count!=1 ||
+    aHistory[0].RequestRef!=activityRequest ||
+    aHistory[1].RequestRef!=secondRequest ||
+    aHistory[2].RequestRef!=thirdRequest ||
+    aHistory[0].PreviousSha256!="GENESIS" ||
+    aHistory[1].PreviousSha256!=aHistory[0].ActivitySha256 ||
+    aHistory[2].PreviousSha256!=aHistory[1].ActivitySha256 ||
+    bHistory[0].NoteRef!=corporateNote ||
+    bHistory[0].ActivitySha256==aHistory[0].ActivitySha256 ||
+    (await corporateActivity.ReadHistoryAsync(second)).Count!=0 ||
+    (await supportActivity.ReadHistoryAsync(third)).Count!=0)
+    throw new InvalidOperationException("ORG_ACTIVITY_HISTORY_CROSS_SCOPE");
+
+if ((await supportActivity.AppendAsync(first,"live:person","test:note",3))
+        .Status!=DraftActivityStatus.InvalidRequest ||
+    (await supportActivity.AppendAsync(first,"test:new","note with raw text",3))
+        .Status!=DraftActivityStatus.InvalidRequest ||
+    (await supportActivity.AppendAsync("test:no-such-item",
+        "test:request","test:note",0)).Status!=DraftActivityStatus.NotFound)
+    throw new InvalidOperationException("ORG_ACTIVITY_ACCEPTED_UNVERIFIED_INPUT");
+
+if(await Count(a,"SELECT count(*) FROM public.internal_test_org_draft_activity")!=3 ||
+   await Count(b,"SELECT count(*) FROM public.internal_test_org_draft_activity")!=1 ||
+   await Count(a,"SELECT count(*) FROM public.internal_test_org_draft_activity WHERE scope_ref='test:scope-corporate'")!=0)
+    throw new InvalidOperationException("ORG_ACTIVITY_RLS_EXPOSURE");
+
+// Test-logins cannot forge even their own activity with direct SQL.
+await MustDeny(a,"""
+    INSERT INTO public.internal_test_org_draft_activity
+      (scope_ref,item_ref,activity_no,request_ref,note_ref,
+       expected_previous_no,previous_sha256,activity_sha256)
+    VALUES ('test:scope-support','test:forged',1,'test:r','test:n',
+            0,'GENESIS',repeat('A',64))
+    ""","ACTIVITY_DIRECT_INSERT");
+await MustDeny(a,"""
+    UPDATE public.internal_test_org_draft_activity SET note_ref='test:tamper'
+    ""","ACTIVITY_UPDATE");
+await MustDeny(b,"DELETE FROM public.internal_test_org_draft_activity",
+    "ACTIVITY_DELETE");
+await MustDeny(b,"TRUNCATE public.internal_test_org_draft_activity",
+    "ACTIVITY_TRUNCATE");
+await MustDeny(owner,$"""
+    UPDATE public.internal_test_org_draft_activity
+       SET note_ref='test:owner-tamper'
+     WHERE scope_ref='test:scope-support' AND item_ref='{first}'
+    ""","ACTIVITY_OWNER_UPDATE");
+await MustDeny(owner,$"""
+    DELETE FROM public.internal_test_org_draft_activity
+     WHERE scope_ref='test:scope-support' AND item_ref='{first}'
+    ""","ACTIVITY_OWNER_DELETE");
+await MustDeny(owner,
+    "TRUNCATE public.internal_test_org_draft_activity",
+    "ACTIVITY_OWNER_TRUNCATE");
+await MustDeny(owner,$"""
+    SELECT * FROM public.internal_test_org_activity_append(
+      '{first}','test:owner-request','test:owner-note',3)
+    ""","ACTIVITY_OWNER_FUNCTION_DENIED");
+
+// Admin modification of a draft source must also stop an activity journal
+// read and append, without destroying immutable history.
+await Execute(owner,$"""
+    UPDATE public.internal_test_org_draft_item
+       SET source_ref='test:tampered-activity-parent'
+     WHERE scope_ref='test:scope-support' AND item_ref='{first}'
+    """);
+try
+{
+    try
+    {
+        await supportActivity.ReadHistoryAsync(first);
+        throw new InvalidOperationException("ORG_ACTIVITY_PARENT_TAMPER_UNDETECTED");
+    }
+    catch (InvalidOperationException e)
+        when (e.Message=="ORG_DRAFT_AUDIT_INTEGRITY_MISMATCH") { }
+    try
+    {
+        await supportActivity.AppendAsync(first,
+            "test:fourth-request","test:fourth-note",3);
+        throw new InvalidOperationException("ORG_ACTIVITY_APPEND_PARENT_TAMPER");
+    }
+    catch (InvalidOperationException e)
+        when (e.Message=="ORG_DRAFT_AUDIT_INTEGRITY_MISMATCH") { }
+}
+finally
+{
+    await Execute(owner,$"""
+        UPDATE public.internal_test_org_draft_item
+           SET source_ref='{original}'
+         WHERE scope_ref='test:scope-support' AND item_ref='{first}'
+        """);
+}
+var afterRestore = await supportActivity.ReadHistoryAsync(first);
+if (!aHistory.SequenceEqual(afterRestore) ||
+    await Count(a,"SELECT count(*) FROM public.internal_test_org_draft_activity")!=3)
+    throw new InvalidOperationException("ORG_ACTIVITY_TAMPER_RECOVERY_FAILED");
+Console.WriteLine("PASS: append-only organization activity, revision CAS, 8-way idempotency, RLS, immutable hash chain and tamper recovery");
