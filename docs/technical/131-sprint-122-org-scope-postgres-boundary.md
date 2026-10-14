@@ -16,7 +16,7 @@ This increment implements **database-level technical isolation** for two **synth
 - This is a *structural* privacy invariant, not proof of lawful access: without an independently approved authentication issuer, verified organization owner, server-side current delegation, revocation, purpose and audit contract, **no production HTTP route or real-member data flow is permissible**.
 
 ## Acceptance
-The standalone `Taranom.OrgScope.Probe` tests two real database logins, proves both can append and see exactly their own test item, confirms cross-scope read is empty in both directions, and verifies nine hostile direct SQL attempts are denied. It runs inside the existing 14-job full regression, alongside the inherited React/.NET/PostgreSQL source-backed tests and Stage-like recovery rehearsal. Passed CI is not QA Gate or release authority.
+The standalone `Taranom.OrgScope.Probe` tests two real database logins, proves both can append and see exactly their own test item, confirms cross-scope read is empty in both directions, and verifies ten hostile direct SQL attempts are denied. It runs inside the existing 14-job full regression, alongside the inherited React/.NET/PostgreSQL source-backed tests and Stage-like recovery rehearsal. Passed CI is not QA Gate or release authority.
 
 ## Explicit exclusions
 No real IdP, no browser-selected tenant context, no actual organization registration or business activation, no provider or financial API, no Production migrations, no Stage/QA/Release/Production, no national release. `DENIED_BY_DEFAULT` remains binding.
