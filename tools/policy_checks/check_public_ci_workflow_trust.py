@@ -227,6 +227,10 @@ DISPATCHER_BRANCHES = {
         "sprint-120-internal-support-worklist",
         "main",
     ),
+    "sprint-121-support-schema-admission.yml": (
+        "sprint-121-support-schema-admission",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
