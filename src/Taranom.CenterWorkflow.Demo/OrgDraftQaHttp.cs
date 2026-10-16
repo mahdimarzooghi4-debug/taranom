@@ -11,6 +11,7 @@ internal static class OrgDraftQaHttp
 {
     internal static PgScopedDraftWorkspace Drafts { get; set; } = null!;
     internal static PgScopedDraftActivity Activity { get; set; } = null!;
+    internal static PgScopedDraftWorkQueue QueueStore { get; set; } = null!;
 
     private static IResult Respond(int code, string outcome, object? content = null) =>
         Results.Json(new
@@ -78,6 +79,41 @@ internal static class OrgDraftQaHttp
             return root.Clone();
         }
         catch (JsonException) { return null; }
+    }
+
+
+    // Queue is one coherent, verified MVCC read, not an independently merged
+    // front-end list+history. Organization is always fixed by DB session_user.
+    internal static async Task<IResult> Queue(HttpContext c)
+    {
+        if (!Safe(c)) return Respond(403,"UNTRUSTED_IDENTITY_HINT");
+        var q=c.Request.Query;
+        if (q.Count!=2||!q.ContainsKey("afterItemRef")||
+            !q.ContainsKey("limit")||q["afterItemRef"].Count!=1||
+            q["limit"].Count!=1)
+            return Respond(400,"INVALID_TEST_CURSOR");
+        string after=q["afterItemRef"].ToString();
+        string raw=q["limit"].ToString();
+        if ((after.Length>0&&!Ref(after))||
+            !int.TryParse(raw,NumberStyles.None,CultureInfo.InvariantCulture,
+                out int limit)||limit is < 1 or > 5||
+            raw!=limit.ToString(CultureInfo.InvariantCulture))
+            return Respond(400,"INVALID_TEST_CURSOR");
+        try
+        {
+            var result=await QueueStore.ReadAsync(
+                after.Length==0?null:after,limit);
+            return Respond(200,"Read",new{
+                afterItemRef=after,limit,
+                nextAfterItemRef=result.NextAfterItemRef,
+                items=result.Items.Select(x=>new {
+                    x.ItemRef,x.SourceRef,x.ActivityCount,
+                    x.LastRequestRef,x.LastNoteRef
+                }).ToArray()
+            });
+        }
+        catch(Exception e) when(e is NpgsqlException or InvalidOperationException)
+        { return Respond(503,"TEST_SOURCE_UNVERIFIABLE"); }
     }
 
     internal static async Task<IResult> List(HttpContext c)
