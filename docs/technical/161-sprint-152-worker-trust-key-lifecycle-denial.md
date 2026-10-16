@@ -1,0 +1,17 @@
+# TRN-TECH-161 — Sprint 152: nonauthorizing key lifecycle and revocation claims
+
+## Business boundary
+Sprint 151 tested whether purported custodian identity, review, trust root and challenge strings can be abused to claim external evidence authority. A key's alleged *later* revocation or replacement can likewise be spoofed; there is no independent custodian, real authorized trust store, signature verification, accepted key lifecycle or revocation feed. Sprint 152 therefore implements only an **offline, synthetic, denial-only test boundary**. It cannot and must not mark key lifecycle, revocation, rotation, independent custody or national deployment ready.
+
+## Technical contract and fixtures
+`docs/governance/ai-worker-trust-key-lifecycle-template.json` has `candidate:null`. The read-only `tools/qa/worker_trust_key_lifecycle_denial.py` first demands an exact denial-only identity context produced after the real synthetic Worker ZIP and no outside receipt. Its small, versioned test-only vocabulary comprises `PRESENTED`, `ROTATION_CLAIMED`, `REVOKED` and `RETIRED`. These are **untrusted claim tokens**, not production workflow states. It compares a bounded chronological sequence of test-prefixed opaque refs and expected test transfer/challenge only. Assertions of rotation can mark an old key as superseded *for negative-test purposes*; assertions of revocation/retirement deny subsequent use or resurrection; malformed ordering, repeated event refs, inconsistent predecessor, missing scope, key reuse or spoofed approval fields fail closed. Even a syntactically coherent successor yields `KEY_LIFECYCLE_CLAIMS_REQUIRE_INDEPENDENT_REVIEW`, never ACTIVE, VERIFIED or approved.
+
+No signature algorithm, key, validity dates, interval/threshold, operational recipient, source of authentic revocation or administrator is invented. Event sequence `1..N` and the small test event limit are parser fixtures, **not a production key versioning or replay policy**. All reports remain redacted and force `custodian_identity_verified=false`, `trust_anchor_verified=false`, `external_receipt_verified=false`, `trust_key_lifecycle_verified=false`, `rotation_approved=false`, `revocation_proven=false`, `human_release_approved=false`, `production_ready=false` and `national_release_allowed=false`.
+
+## Verification
+The required full 14-job CI runs the new comprehensive negative unit suite and invokes this evaluator against the canonical **empty** lifecycle/identity/receipt templates after the *actual* Kestrel SIGTERM/restart, synthetic ZIP export and receipt-denial test. The pre-existing PostgreSQL, Chromium, real .NET→Python signed child bridge, POSIX Linux distinct verifier, HMAC-linked evidence prefix and recovery rehearsal remain unchanged.
+
+## Unresolved external inputs
+Independent custodian/operator, actual ownership and administrative boundaries, authorized trust anchor, verified public key distribution, revocation signatures and effective times, certificate/key rollover semantics, decommissioning/compromise procedure, replay-state custody, retention/privacy/legal review and human release approval are all **OPEN**. A claimed key state or identical string never proves these conditions. No real patient/clinical/finance data, external AI service, training, model activation or Production infrastructure is used.
+
+All PRs remain Draft/Open/Unmerged, without human independent APPROVE, Merge, Stage/QA Gate, Release, Production or national activation. Nationwide `DENIED_BY_DEFAULT`.

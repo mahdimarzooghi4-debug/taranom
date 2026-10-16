@@ -351,6 +351,10 @@ DISPATCHER_BRANCHES = {
         "sprint-151-worker-custodian-identity-trust-boundary",
         "main",
     ),
+    "sprint-152-worker-trust-key-lifecycle-denial.yml": (
+        "sprint-152-worker-trust-key-lifecycle-denial",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
