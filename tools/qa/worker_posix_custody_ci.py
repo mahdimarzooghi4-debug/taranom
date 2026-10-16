@@ -68,7 +68,17 @@ def command(args, expect_success=True):
     result=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                           check=False,timeout=30)
     if (result.returncode==0)!=expect_success:
-        # Deliberately never print stdout/stderr/key or any frame.
+        # Only fixed command phase, never stdout/stderr, key or argv.
+        if "useradd" in args:
+            deny("CREATE_USER")
+        if "chown" in args:
+            deny("SET_OWNER")
+        if "/usr/bin/python3" in args:
+            deny("VERIFIER_EXECUTION")
+        if "install" in args:
+            deny("HANDOFF_INSTALL")
+        if "/usr/bin/test" in args:
+            deny("PERMISSION_ASSERTION")
         deny("ISOLATION_COMMAND")
     return result.returncode
 
@@ -191,6 +201,9 @@ if __name__=="__main__":
     try:
         main()
     except (OSError,ValueError,AssertionError,KeyError,
-            subprocess.TimeoutExpired):
-        print("SYNTHETIC_POSIX_CUSTODY_DENIED",file=sys.stderr)
+            subprocess.TimeoutExpired) as ex:
+        # Names can only be hard-coded classifications defined by deny().
+        label=str(ex) if isinstance(ex,ValueError) and str(ex).startswith(
+            "SYNTHETIC_POSIX_CUSTODY_") else "SYNTHETIC_POSIX_CUSTODY_DENIED"
+        print(label,file=sys.stderr)
         raise SystemExit(17) from None
