@@ -78,11 +78,17 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_national_launch_blockers.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_stage4_test_preflight.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_stage4_git_candidate.py' -v
           mkdir -p TestResults
           python3 tools/policy_checks/check_national_launch_blockers.py --root . --report-json TestResults/fullci-national-blockers.json
           test -s TestResults/fullci-national-blockers.json
           python3 tools/policy_checks/check_stage4_test_preflight.py --root . --report-json TestResults/fullci-stage4-preflight.json
           test -s TestResults/fullci-stage4-preflight.json
+      - name: Attest exact unmerged Git candidate ancestry (push only; never Stage admission)
+        if: github.event_name == 'push'
+        run: |
+          python3 tools/policy_checks/check_stage4_git_candidate.py --root . --report-json TestResults/fullci-stage4-git-candidate.json
+          python3 -c "import json; d=json.load(open('TestResults/fullci-stage4-git-candidate.json')); assert d['status']=='PREMERGE_GIT_ANCESTRY_CONSISTENT' and d['local_git_ancestry_verified'] and d['stage4_test_admission']=='DENIED' and not d['stage_deployment_authorized'] and not d['production_release_allowed']"
       - name: Build bounded member governance contract project
         run: |
           dotnet restore tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj
@@ -111,6 +117,7 @@ jobs:
             TestResults/sprint03-governance.xml
             TestResults/fullci-national-blockers.json
             TestResults/fullci-stage4-preflight.json
+            TestResults/fullci-stage4-git-candidate.json
             TestResults/fullci-public-history-safety.json
             TestResults/fullci-private-evidence-empty.json
             TestResults/fullci-workflow-trust.json

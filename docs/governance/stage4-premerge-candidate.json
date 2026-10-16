@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "contract": "TRN-TECH-140",
+  "candidate_branch": "sprint-131-stage4-premerge-git-candidate",
+  "source_context": "UNMERGED_GITHUB_BRANCH_TIPS_NOT_APPROVED",
+  "base_main_sha": "d78717ddb9533da6d81840f93abff6b6540137ee",
+  "chain": [
+    {
+      "pr": 132,
+      "branch": "sprint-120-internal-support-worklist",
+      "base": "main",
+      "head_sha": "87b483adf57e8f6a9f1e358e33cbb6b02b06571e",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 133,
+      "branch": "sprint-121-support-schema-admission",
+      "base": "sprint-120-internal-support-worklist",
+      "head_sha": "6f5bda62bf0d27846bd916c1bd87a58bd037e5c2",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 134,
+      "branch": "sprint-122-org-scope-postgres-isolation",
+      "base": "sprint-121-support-schema-admission",
+      "head_sha": "f0e1ef061e7f5d6b43ac375833a56f626d4abb40",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 135,
+      "branch": "sprint-123-org-draft-workspace",
+      "base": "sprint-122-org-scope-postgres-isolation",
+      "head_sha": "e0a9f5f6031a9d298cffa9857b3599373d799f68",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 136,
+      "branch": "sprint-124-org-draft-audit-integrity",
+      "base": "sprint-123-org-draft-workspace",
+      "head_sha": "0c078e41e9cf2453302178dcf9c1681bb972c96b",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 137,
+      "branch": "sprint-125-org-draft-activity-journal",
+      "base": "sprint-124-org-draft-audit-integrity",
+      "head_sha": "5d6c760fe77f369b720ec3207e974e760ef231aa",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 138,
+      "branch": "sprint-126-org-draft-qa-vertical-slice",
+      "base": "sprint-125-org-draft-activity-journal",
+      "head_sha": "87d4a6e437040dbb074d0bec2afcccea74aeeee9",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 139,
+      "branch": "sprint-127-org-draft-coherent-workqueue",
+      "base": "sprint-126-org-draft-qa-vertical-slice",
+      "head_sha": "de1790a3f597861fe2f599a9ac58afc2c62d1f39",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 140,
+      "branch": "sprint-128-org-draft-pinned-activity-timeline",
+      "base": "sprint-127-org-draft-coherent-workqueue",
+      "head_sha": "33263303a631d7f70dac4f0223f2038de67f6e4d",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 141,
+      "branch": "sprint-129-stage4-synthetic-test-preflight",
+      "base": "sprint-128-org-draft-pinned-activity-timeline",
+      "head_sha": "43aaeb9d121631d9b25d03734db1a9910071c54a",
+      "merged": false,
+      "independently_approved": false
+    },
+    {
+      "pr": 143,
+      "branch": "sprint-130-stage4-recovery-security-parity",
+      "base": "sprint-129-stage4-synthetic-test-preflight",
+      "head_sha": "41e6535d4908a3affa5570fb5ce8d665bcf2e111",
+      "merged": false,
+      "independently_approved": false
+    }
+  ],
+  "stage4_test_authorized": false,
+  "production_release_allowed": false
+}

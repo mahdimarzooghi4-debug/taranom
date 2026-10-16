@@ -267,6 +267,10 @@ DISPATCHER_BRANCHES = {
         "sprint-130-stage4-recovery-security-parity",
         "main",
     ),
+    "sprint-131-stage4-premerge-git-candidate.yml": (
+        "sprint-131-stage4-premerge-git-candidate",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
