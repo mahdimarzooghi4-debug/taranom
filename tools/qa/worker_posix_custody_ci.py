@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import pwd
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -48,7 +49,8 @@ def folder(name: str,prefix: str) -> Path:
         deny("FOLDER_SCOPE")
     info=target.lstat()
     mode = stat.S_IMODE(info.st_mode)
-    permitted=(0o700,0o755) if prefix=="worker" else (0o700,)
+    permitted=(0o700,0o755) if prefix=="worker" else (
+        (0o700,0o555) if prefix=="custody-tools" else (0o700,))
     if not stat.S_ISDIR(info.st_mode) or mode not in permitted:
         deny("FOLDER_MODE")
     return target
@@ -74,6 +76,14 @@ def command(args, expect_success=True):
         if "chown" in args:
             deny("SET_OWNER")
         if "/usr/bin/python3" in args:
+            # Only static category from the verifier's already-redacted
+            # stderr; never forward path, key or trace contents.
+            if b"SYNTHETIC_ANCHOR_VERIFICATION_DENIED" in result.stderr:
+                deny("ANCHOR_INPUT_REJECTED")
+            if b"SYNTHETIC_HANDOFF_DENIED" in result.stderr:
+                deny("HANDOFF_INPUT_REJECTED")
+            if b"Permission denied" in result.stderr or b"can't open file" in result.stderr:
+                deny("VERIFIER_PATH_UNREADABLE")
             deny("VERIFIER_EXECUTION")
         if "install" in args:
             deny("HANDOFF_INSTALL")
@@ -84,10 +94,16 @@ def command(args, expect_success=True):
 
 
 def custodian(program: str, operation: str, *, handoff: Path|None=None):
-    source=ROOT/"tools"/"qa"/program
-    if source.name not in {"worker_evidence_anchor.py",
-                           "worker_evidence_handoff.py"}:
+    if program not in {"worker_evidence_anchor.py",
+                        "worker_evidence_handoff.py"}:
         deny("PROGRAM")
+    scripts=folder("TARANOM_QA_TOOLS_DIR","custody-tools")
+    if scripts.stat().st_uid!=0 or stat.S_IMODE(scripts.stat().st_mode)!=0o555:
+        deny("VERIFIER_CODE_OWNER")
+    source=scripts/program
+    if (source.is_symlink() or source.stat().st_uid!=0 or
+        stat.S_IMODE(source.stat().st_mode)!=0o444):
+        deny("VERIFIER_CODE_MUTABLE")
     shared=folder("TARANOM_QA_SHARED_DIR","worker")
     anchor=folder("TARANOM_QA_CUSTODY_DIR","anchor")
     env=[
@@ -140,8 +156,23 @@ def publish(source:Path,dest:Path,create:bool):
 def prepare():
     shared=folder("TARANOM_QA_SHARED_DIR","worker")
     anchor=folder("TARANOM_QA_CUSTODY_DIR","anchor")
-    if shared.stat().st_uid != os.geteuid() or anchor.stat().st_uid != os.geteuid():
+    scripts=folder("TARANOM_QA_TOOLS_DIR","custody-tools")
+    if (shared.stat().st_uid != os.geteuid() or
+        anchor.stat().st_uid != os.geteuid() or
+        scripts.stat().st_uid != os.geteuid()):
         deny("UNEXPECTED_INITIAL_OWNER")
+    # Stage ONLY 3 exact verifier scripts into a root-owned directory.
+    # Unlike an ordinary copy into runner-owned space, the non-root
+    # Worker account cannot rewrite code before it is interpreted.
+    for name in ("worker_evidence_anchor.py",
+                 "worker_evidence_handoff.py",
+                 "verify_ai_worker_evidence.py"):
+        copied=scripts/name
+        shutil.copyfile(ROOT/"tools"/"qa"/name,copied)
+        os.chmod(copied,0o444)
+        command(["sudo","-n","chown","root:root",str(copied)])
+    command(["sudo","-n","chown","root:root",str(scripts)])
+    command(["sudo","-n","chmod","0555",str(scripts)])
     # The GitHub runner is sudo-capable; this is still a real Linux
     # DAC check for *unprivileged* caller processes, not root isolation.
     command(["sudo","-n","useradd","--system","--user-group",

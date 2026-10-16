@@ -47,6 +47,17 @@ class PosixCustodyContracts(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"FOLDER_SCOPE"):
                 boundary.folder("TARANOM_QA_CUSTODY_DIR","anchor")
 
+    def test_rejects_mutable_verifier_directory_mode(self):
+        root=Path(tempfile.mkdtemp(prefix="taranom-custody-tools-",dir="/tmp"))
+        self.addCleanup(lambda: shutil.rmtree(root,ignore_errors=True))
+        with patch.dict(os.environ,{"TARANOM_QA_TOOLS_DIR":str(root)}):
+            root.chmod(0o755)
+            with self.assertRaisesRegex(ValueError,"FOLDER_MODE"):
+                boundary.folder("TARANOM_QA_TOOLS_DIR","custody-tools")
+            root.chmod(0o555)
+            self.assertEqual(root,boundary.folder("TARANOM_QA_TOOLS_DIR","custody-tools"))
+            root.chmod(0o700)
+
     def test_source_path_rejects_non_synthetic_and_symlink(self):
         with patch.dict(os.environ,{
             "TARANOM_AI_WORKER_EVIDENCE_FILE":"/etc/shadow"}):

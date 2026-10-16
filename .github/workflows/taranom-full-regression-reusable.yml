@@ -854,8 +854,10 @@ jobs:
           # The CI runner has sudo: this is a DAC rehearsal, not legal custody.
           qa_custody=$(mktemp -d /tmp/taranom-anchor-XXXXXX)
           qa_shared=$(mktemp -d /tmp/taranom-worker-XXXXXX)
+          qa_tools=$(mktemp -d /tmp/taranom-custody-tools-XXXXXX)
           export TARANOM_QA_CUSTODY_DIR="$qa_custody"
           export TARANOM_QA_SHARED_DIR="$qa_shared"
+          export TARANOM_QA_TOOLS_DIR="$qa_tools"
           python3 tools/qa/worker_posix_custody_ci.py prepare
           kill -TERM "$server_pid"
           wait "$server_pid" || true
