@@ -335,6 +335,10 @@ DISPATCHER_BRANCHES = {
         "sprint-147-ai-worker-offline-handoff",
         "main",
     ),
+    "sprint-148-worker-posix-custody-qa.yml": (
+        "sprint-148-worker-posix-custody-qa",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
