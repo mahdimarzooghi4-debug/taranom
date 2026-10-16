@@ -454,3 +454,62 @@ if (!aHistory.SequenceEqual(afterRestore) ||
     await Count(a,"SELECT count(*) FROM public.internal_test_org_draft_activity")!=3)
     throw new InvalidOperationException("ORG_ACTIVITY_TAMPER_RECOVERY_FAILED");
 Console.WriteLine("PASS: append-only organization activity, revision CAS, 8-way idempotency, RLS, immutable hash chain and tamper recovery");
+
+
+// TRN-TECH-136: one MVCC snapshot verifies CREATE audit and the entire
+// hash-chained activity for all returned rows AND the lookahead.
+var sq = new PgScopedDraftWorkQueue(a);
+var cq = new PgScopedDraftWorkQueue(b);
+var q1=await sq.ReadAsync(prefix,2);
+var q2=await sq.ReadAsync(q1.NextAfterItemRef,2);
+var qc=await cq.ReadAsync(prefix,2);
+if(q1.Items.Count!=2||q1.Items[0].ItemRef!=first||
+   q1.Items[0].ActivityCount!=3||
+   q1.Items[0].LastNoteRef!="test:note-c"||
+   q1.Items[1].ItemRef!=second||q1.Items[1].ActivityCount!=0||
+   q1.Items[1].LastRequestRef is not null||
+   q1.NextAfterItemRef!=second||
+   q2.Items.Count!=1||q2.Items[0].ItemRef!=third||
+   q2.NextAfterItemRef is not null||
+   qc.Items.Count!=1||qc.Items[0].ItemRef!=first||
+   qc.Items[0].ActivityCount!=1||
+   qc.Items[0].LastNoteRef!=corporateNote||
+   qc.NextAfterItemRef is not null)
+    throw new InvalidOperationException("ORG_QUEUE_COHERENCE_FAILED");
+
+// An invalid reference cannot become a scope override/cursor.
+try
+{
+    await sq.ReadAsync("person:private",2);
+    throw new InvalidOperationException("ORG_QUEUE_BAD_CURSOR_ACCEPTED");
+}
+catch(ArgumentException){ }
+
+// Owner-tampered original source invalidates entire workqueue, even when
+// the corrupt row is only the lookahead that would not be returned.
+await Execute(owner,$"""
+    UPDATE public.internal_test_org_draft_item
+       SET source_ref='test:corrupted-lookahead'
+     WHERE scope_ref='test:scope-support' AND item_ref='{third}'
+    """);
+try
+{
+    try
+    {
+        await sq.ReadAsync(prefix,2);
+        throw new InvalidOperationException("ORG_QUEUE_LOOKAHEAD_TAMPER_UNDETECTED");
+    }
+    catch(InvalidOperationException e) when(
+        e.Message=="ORG_DRAFT_AUDIT_INTEGRITY_MISMATCH"){}
+}
+finally
+{
+    await Execute(owner,$"""
+        UPDATE public.internal_test_org_draft_item
+           SET source_ref='test:unverified-draft-source-c'
+         WHERE scope_ref='test:scope-support' AND item_ref='{third}'
+        """);
+}
+if((await sq.ReadAsync(prefix,2)).Items[0].ActivityCount!=3)
+    throw new InvalidOperationException("ORG_QUEUE_RESTORE_FAILED");
+Console.WriteLine("PASS: one-snapshot RLS-scoped workqueue, exact last-activity projection, cursor and lookahead audit fail-closed");
