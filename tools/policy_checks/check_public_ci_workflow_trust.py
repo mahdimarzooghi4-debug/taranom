@@ -347,6 +347,10 @@ DISPATCHER_BRANCHES = {
         "sprint-150-worker-external-receipt-denial",
         "main",
     ),
+    "sprint-151-worker-custodian-identity-trust-boundary.yml": (
+        "sprint-151-worker-custodian-identity-trust-boundary",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
