@@ -1,0 +1,14 @@
+name: Sprint 136 Source Provenance and Retirement Full Regression
+on:
+  push:
+    branches: [sprint-136-ai-source-provenance-retirement]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
