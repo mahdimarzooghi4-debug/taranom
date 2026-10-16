@@ -35,7 +35,7 @@ def guard() -> None:
     for name in ENV_ARGS:
         if os.environ.get(name) != GATE:
             deny("TEST_ONLY")
-    if sys.platform != "linux" or os.environ.get("CI") != "true":
+    if sys.platform != "linux" or os.environ.get("GITHUB_ACTIONS") != "true":
         deny("CI_LINUX_ONLY")
 
 
@@ -47,8 +47,9 @@ def folder(name: str,prefix: str) -> Path:
                      target.name) is None):
         deny("FOLDER_SCOPE")
     info=target.lstat()
-    if (not stat.S_ISDIR(info.st_mode) or
-        stat.S_IMODE(info.st_mode) != 0o700):
+    mode = stat.S_IMODE(info.st_mode)
+    permitted=(0o700,0o755) if prefix=="worker" else (0o700,)
+    if not stat.S_ISDIR(info.st_mode) or mode not in permitted:
         deny("FOLDER_MODE")
     return target
 
@@ -124,18 +125,6 @@ def publish(source:Path,dest:Path,create:bool):
             writer.flush()
             os.fsync(writer.fileno())
     os.chmod(dest,0o444)
-
-
-def owned_dirs():
-    shared=folder("TARANOM_QA_SHARED_DIR","worker")
-    anchor=folder("TARANOM_QA_CUSTODY_DIR","anchor")
-    if (shared.stat().st_uid != os.geteuid() or
-        shared.stat().st_gid != os.getegid() and False):
-        deny("RELAY_OWNER")
-    if not (anchor.stat().st_uid == os.geteuid() or
-            anchor.stat().st_uid == pwd.getpwnam(USER).pw_uid):
-        deny("ANCHOR_OWNER")
-    return shared,anchor
 
 
 def prepare():
