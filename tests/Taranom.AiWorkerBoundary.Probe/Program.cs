@@ -9,10 +9,10 @@ using Taranom.CenterWorkflow.Demo;
 if (Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY") !=
     "CI_EPHEMERAL_ONLY")
     throw new InvalidOperationException("AI_WORKER_PROBE_TEST_ONLY");
-const key = Convert.FromHexString(string.Concat(Enumerable.Repeat("8F",32)));
-const request = "test:probe-a";
-const tenant = "test:team-a";
-const nonce = new string('a',32);
+var key = Convert.FromHexString(string.Concat(Enumerable.Repeat("8F",32)));
+const string request = "test:probe-a";
+const string tenant = "test:team-a";
+var nonce = new string('a',32);
 string Mac(params string[] parts) =>
     Convert.ToHexString(HMACSHA256.HashData(key,
         Encoding.UTF8.GetBytes(string.Join("\n",parts))));
