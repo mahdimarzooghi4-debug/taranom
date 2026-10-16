@@ -208,6 +208,8 @@ if (orgQaEnabled)
         (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Read);
     app.MapGet("/internal/demo/v1/org-drafts/{itemRef}/activity",
         (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.History);
+    app.MapGet("/internal/demo/v1/org-drafts/{itemRef}/activity-page",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.ActivityPage);
     app.MapPost("/internal/demo/v1/org-drafts/{itemRef}/activity",
         (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Append);
     app.MapGet("/org-drafts-qa", () =>

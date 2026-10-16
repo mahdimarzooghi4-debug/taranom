@@ -255,6 +255,10 @@ DISPATCHER_BRANCHES = {
         "sprint-127-org-draft-coherent-workqueue",
         "main",
     ),
+    "sprint-128-org-draft-pinned-activity-timeline.yml": (
+        "sprint-128-org-draft-pinned-activity-timeline",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
