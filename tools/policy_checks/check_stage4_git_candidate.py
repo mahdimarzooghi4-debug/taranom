@@ -154,11 +154,23 @@ def main(argv=None):
     try:
         root=a.root.resolve(strict=True)
         doc=read_manifest(root/MANIFEST)
-        resolver,ancestry,tree=probe(root)
-        report=assess(doc,resolver,ancestry,tree,
-                      event=os.environ.get("GITHUB_EVENT_NAME"),
-                      ref_name=os.environ.get("GITHUB_REF_NAME"),
-                      sha=os.environ.get("GITHUB_SHA"))
+        if os.environ.get("GITHUB_EVENT_NAME")!="push":
+            # PR merge refs are not the submitted branch commit. Never
+            # make an assertion about exact PR ancestry from that checkout,
+            # but still produce an explicitly non-authorizing CI artifact.
+            report={"contract":SOURCE,"status":"NOT_ATTESTED_NONPUSH_CONTEXT",
+                    "local_git_ancestry_verified":False,
+                    "github_pr_states_checked_live":False,
+                    "stage4_test_admission":"DENIED",
+                    "stage_deployment_authorized":False,
+                    "production_release_allowed":False,
+                    "findings":[]}
+        else:
+            resolver,ancestry,tree=probe(root)
+            report=assess(doc,resolver,ancestry,tree,
+                          event=os.environ.get("GITHUB_EVENT_NAME"),
+                          ref_name=os.environ.get("GITHUB_REF_NAME"),
+                          sha=os.environ.get("GITHUB_SHA"))
     except (OSError,InvalidCandidate) as e:
         report={"contract":SOURCE,"status":"DENIED_UNVERIFIABLE",
                 "local_git_ancestry_verified":False,"stage4_test_admission":"DENIED",
@@ -176,7 +188,9 @@ def main(argv=None):
     print("Git candidate: "+report["status"]+"; Stage4=DENIED; merge=NOT_PERMITTED")
     for problem in report["findings"]:
         print("DENIED "+problem,file=sys.stderr)
-    return 0 if report["status"]=="PREMERGE_GIT_ANCESTRY_CONSISTENT" else 1
+    return 0 if report["status"] in (
+        "PREMERGE_GIT_ANCESTRY_CONSISTENT",
+        "NOT_ATTESTED_NONPUSH_CONTEXT") else 1
 
 if __name__=="__main__":
     raise SystemExit(main())

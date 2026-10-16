@@ -84,11 +84,10 @@ jobs:
           test -s TestResults/fullci-national-blockers.json
           python3 tools/policy_checks/check_stage4_test_preflight.py --root . --report-json TestResults/fullci-stage4-preflight.json
           test -s TestResults/fullci-stage4-preflight.json
-      - name: Attest exact unmerged Git candidate ancestry (push only; never Stage admission)
-        if: github.event_name == 'push'
+      - name: Report exact unmerged Git candidate ancestry or explicit nonpush nonattestation
         run: |
           python3 tools/policy_checks/check_stage4_git_candidate.py --root . --report-json TestResults/fullci-stage4-git-candidate.json
-          python3 -c "import json; d=json.load(open('TestResults/fullci-stage4-git-candidate.json')); assert d['status']=='PREMERGE_GIT_ANCESTRY_CONSISTENT' and d['local_git_ancestry_verified'] and d['stage4_test_admission']=='DENIED' and not d['stage_deployment_authorized'] and not d['production_release_allowed']"
+          python3 -c "import json,os; d=json.load(open('TestResults/fullci-stage4-git-candidate.json')); assert (d['status']=='PREMERGE_GIT_ANCESTRY_CONSISTENT' and d['local_git_ancestry_verified']) if os.environ.get('GITHUB_EVENT_NAME')=='push' else (d['status']=='NOT_ATTESTED_NONPUSH_CONTEXT' and not d['local_git_ancestry_verified']); assert d['stage4_test_admission']=='DENIED' and not d['stage_deployment_authorized'] and not d['production_release_allowed']"
       - name: Build bounded member governance contract project
         run: |
           dotnet restore tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj

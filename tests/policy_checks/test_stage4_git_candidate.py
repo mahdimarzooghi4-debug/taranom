@@ -122,5 +122,17 @@ class Stage4GitCandidateTests(unittest.TestCase):
         self.assertNotIn("push",source)
         self.assertNotIn("merge --",source)
 
+    def test_nonpush_cli_emits_explicit_unattested_report(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as temp:
+            output=Path(temp)/"candidate.json"
+            with patch.dict(m.os.environ,{"GITHUB_EVENT_NAME":"pull_request"},clear=True):
+                self.assertEqual(0,m.main(["--root",str(ROOT),
+                                           "--report-json",str(output)]))
+            report=json.loads(output.read_text())
+            self.assertEqual("NOT_ATTESTED_NONPUSH_CONTEXT",report["status"])
+            self.assertFalse(report["local_git_ancestry_verified"])
+            self.assertFalse(report["stage_deployment_authorized"])
+
 if __name__=="__main__":
     unittest.main()
