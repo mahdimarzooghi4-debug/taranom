@@ -773,6 +773,12 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Execute PostgreSQL-backed real HTTP, denied business authority and UI QA
         run: |
+          bridge_tmp=$(mktemp -d /tmp/taranom-worker-XXXXXX)
+          export TARANOM_AI_BRIDGE_TEST_DB="$bridge_tmp/registry.sqlite3"
+          export TARANOM_AI_WORKER_BRIDGE_TEST_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+          export TARANOM_AI_WORKER_REPO_ROOT="$GITHUB_WORKSPACE"
+          export TARANOM_AI_WORKER_QA=CI_EPHEMERAL_ONLY
+          TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY python3 -c 'import os; from ai.taranom_internal.registry import OfflineRegistry; OfflineRegistry(os.environ["TARANOM_AI_BRIDGE_TEST_DB"]).initialize()'
           cd src/Taranom.CenterWorkflow.Demo
           TARANOM_AI_ADMIN_QA=CI_EPHEMERAL_ONLY TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
           server_pid=$!
@@ -788,6 +794,7 @@ jobs:
             exit 1
           fi
           python3 tests/center_demo/test_ai_admin_denial_http.py
+          python3 tests/center_demo/test_ai_worker_bridge_http.py
           python3 tests/center_demo/test_real_center_demo_http.py
           python3 tests/center_demo/test_proofing_correction_http.py
           python3 tests/center_demo/test_late_evidence_work_item_http.py

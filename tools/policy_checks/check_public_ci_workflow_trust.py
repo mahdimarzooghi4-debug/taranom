@@ -303,6 +303,10 @@ DISPATCHER_BRANCHES = {
         "sprint-139-ai-audit-restricted-db-roles",
         "main",
     ),
+    "sprint-140-internal-ai-worker-isolated-ipc.yml": (
+        "sprint-140-internal-ai-worker-isolated-ipc",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

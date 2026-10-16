@@ -131,6 +131,15 @@ app.Use(async (context, next) =>
     await next();
 });
 
+if (aiAdminQaEnabled &&
+    Environment.GetEnvironmentVariable("TARANOM_AI_WORKER_QA") ==
+    "CI_EPHEMERAL_ONLY")
+{
+    // TRN-TECH-149: disposable read-only child-process inventory probe.
+    app.MapPost("/internal/demo/v1/ai-worker/inventory",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AiWorkerQaHttp.Read);
+}
+
 if (aiAdminQaEnabled)
 {
     app.MapPost("/internal/demo/v1/ai-admin/denials",
