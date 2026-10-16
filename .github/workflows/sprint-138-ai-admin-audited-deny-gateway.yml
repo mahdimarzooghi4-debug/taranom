@@ -1,0 +1,12 @@
+name: Sprint 138 .NET AI Admin Audited Deny Gateway Full Regression
+on:
+  push:
+    branches: [sprint-138-ai-admin-audited-deny-gateway]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
