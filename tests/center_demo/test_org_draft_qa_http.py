@@ -90,6 +90,43 @@ def main():
     status,missing=send(BASE+"/test:missing-"+uuid4().hex)
     check(status,missing)
     assert status==404
+
+    # TRN-TECH-136: new source+activity workqueue uses one read snapshot
+    # and returns the actual latest activity, never a guessed status.
+    status,queue=send("/internal/demo/v1/org-draft-queue?afterItemRef="+item[:-1]+"&limit=5")
+    check(status,queue)
+    assert status==200 and queue["outcome"]=="Read",(status,queue)
+    rows=[row for row in queue["data"]["items"] if row["itemRef"]==item]
+    assert len(rows)==1 and rows[0]["sourceRef"]==src
+    assert rows[0]["activityCount"]==1
+    assert rows[0]["lastRequestRef"]==request
+    assert rows[0]["lastNoteRef"]==command["noteRef"]
+
+    status,emptyQueue=send("/internal/demo/v1/org-draft-queue?afterItemRef="+item+"&limit=5")
+    check(status,emptyQueue)
+    assert status==200 and not any(
+        x["itemRef"]==item for x in emptyQueue["data"]["items"])
+
+    for uri in (
+        "/internal/demo/v1/org-draft-queue",
+        "/internal/demo/v1/org-draft-queue?afterItemRef=&limit=0",
+        "/internal/demo/v1/org-draft-queue?afterItemRef=&limit=05",
+        "/internal/demo/v1/org-draft-queue?afterItemRef=&limit=5&scopeRef=test:scope-corporate",
+        "/internal/demo/v1/org-draft-queue?afterItemRef=person:real&limit=5",
+    ):
+        status,denied=send(uri)
+        check(status,denied)
+        assert status==400,(uri,status,denied)
+    for header in (
+        {"Authorization":"Bearer fake"},
+        {"Cookie":"pretend=session"},
+        {"X-Organization":"test:scope-corporate"},
+    ):
+        status,denied=send("/internal/demo/v1/org-draft-queue?afterItemRef=&limit=5",
+                           headers=header)
+        check(status,denied)
+        assert status==403,(header,status,denied)
+
     print("PASS: real ASP.NET organization QA via restricted PostgreSQL, exact replay, CAS and denied authority")
 
 if __name__=="__main__":
