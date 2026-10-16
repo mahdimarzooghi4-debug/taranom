@@ -153,4 +153,39 @@ class HttpQaTests(unittest.TestCase):
         self.assertEqual(403,self.request("POST","/internal/ai-test/v1/shadow-benchmarks",
                                          bench(),headers={"Authorization":"Bearer fake"})[0])
 
+
+    def test_real_provenance_http_retirement_blocks_benchmark(self):
+        from tests.ai.test_shadow_training import sample_manifest,train,bench
+        from tests.ai.test_source_provenance import claim,retiring
+        dataset=sample_manifest()
+        for source in dataset["sources"]:
+            status,_,value=self.request("POST","/internal/ai-test/v1/source-claims",claim(source))
+            self.assertEqual(200,status,value)
+            self.assertFalse(value["data"]["rights_verified"])
+        self.assertEqual(200,self.request("POST","/internal/ai-test/v1/datasets",dataset)[0])
+        self.assertEqual(200,self.request("POST","/internal/ai-test/v1/shadow-training",train())[0])
+        status,_,value=self.request("POST","/internal/ai-test/v1/source-retire",retiring("test:s3",request="test:retire-s3"))
+        self.assertEqual(200,status)
+        self.assertTrue(value["data"]["training_blocked"])
+        status,_,value=self.request("POST","/internal/ai-test/v1/shadow-benchmarks",bench())
+        self.assertEqual(400,status);self.assertEqual("REJECTED",value["outcome"])
+        status,_,value=self.request("GET","/internal/ai-test/v1/inventory?tenant=test:team")
+        self.assertEqual(200,status)
+        self.assertEqual(1,value["data"]["source_provenance"]["retired_test_source_count"])
+        self.assertFalse(value["data"]["source_provenance"]["legal_consent_verified"])
+    def test_http_provenance_forged_approval_and_changed_replay_denied(self):
+        from tests.ai.test_shadow_training import sample_manifest
+        from tests.ai.test_source_provenance import claim,retiring
+        row=sample_manifest()["sources"][0]
+        endpoint="/internal/ai-test/v1/source-claims"
+        self.assertEqual(200,self.request("POST",endpoint,claim(row))[0])
+        wrong=claim(row);wrong["source"]["source_sha256"]="B"*64
+        self.assertEqual(409,self.request("POST",endpoint,wrong)[0])
+        self.assertEqual(403,self.request("POST",endpoint,claim(row),
+                                  headers={"Authorization":"Bearer forged"})[0])
+        self.assertEqual(404,self.request("POST","/internal/ai-test/v1/source-approve",
+                                           {"approved":True})[0])
+        bad=retiring();bad["rights_verified"]=True
+        self.assertEqual(400,self.request("POST","/internal/ai-test/v1/source-retire",bad)[0])
+
 if __name__=="__main__":unittest.main()
