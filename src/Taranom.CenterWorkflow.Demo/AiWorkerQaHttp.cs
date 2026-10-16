@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Security;
 
 namespace Taranom.CenterWorkflow.Demo;
 
@@ -12,8 +13,7 @@ internal static class AiWorkerQaHttp
 {
     private const string Contract = "TRN-TECH-149";
     private const string Command = "READ_SYNTHETIC_INVENTORY";
-    private static readonly string[] Fields =
-        ["datasets", "modelVersions", "evaluations", "trainingRuns", "benchmarks"];
+    private static readonly SemaphoreSlim Slots = new(4, 4);
 
     private static bool Ref(string? value) =>
         value is {Length: >= 6 and <= 128} &&
@@ -78,11 +78,22 @@ internal static class AiWorkerQaHttp
                 tenant.ValueKind != JsonValueKind.String ||
                 !Ref(request.GetString()) || !Ref(tenant.GetString()))
                 return Reply(400, "INVALID_TEST_FRAME");
-            var counts = await InvokeAsync(request.GetString()!,
-                tenant.GetString()!);
-            return Reply(200, "SYNTHETIC_INVENTORY_OBSERVED",
-                new {requestRef=request.GetString(), tenantRef=tenant.GetString(),
-                    counts, workerStatus="SYNTHETIC_READ_ONLY"});
+            // Immediate capacity admission; never queue unbounded child
+            // processes behind unauthenticated CI-only requests.
+            if (!Slots.Wait(0))
+                return Reply(503, "WORKER_CAPACITY_EXCEEDED");
+            try
+            {
+                var counts = await InvokeAsync(request.GetString()!,
+                    tenant.GetString()!);
+                return Reply(200, "SYNTHETIC_INVENTORY_OBSERVED",
+                    new {requestRef=request.GetString(), tenantRef=tenant.GetString(),
+                        counts, workerStatus="SYNTHETIC_READ_ONLY"});
+            }
+            finally
+            {
+                Slots.Release();
+            }
         }
         catch (JsonException)
         {
@@ -90,7 +101,8 @@ internal static class AiWorkerQaHttp
         }
         catch (Exception e) when (e is InvalidOperationException or IOException or
                                   Win32Exception or OperationCanceledException or
-                                  UnauthorizedAccessException)
+                                  UnauthorizedAccessException or ArgumentException or
+                                  SecurityException)
         {
             return Reply(503, "INTERNAL_WORKER_UNAVAILABLE");
         }
@@ -124,7 +136,8 @@ internal static class AiWorkerQaHttp
         var info = new ProcessStartInfo("/usr/bin/python3")
         {
             UseShellExecute = false, RedirectStandardInput = true,
-            RedirectStandardOutput = true, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+            CreateNoWindow = true,
             WorkingDirectory = root
         };
         info.ArgumentList.Add("-B");
@@ -141,68 +154,28 @@ internal static class AiWorkerQaHttp
 
         using var process = new Process { StartInfo = info };
         using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        var started = false;
         try
         {
-            if (!process.Start())
+            started = process.Start();
+            if (!started)
                 throw new InvalidOperationException("WORKER_START_FAILED");
+            // Stderr is never inherited into .NET/CI logs. Concurrent bounded
+            // draining prevents worker diagnostics from blocking stdout.
+            var errorTask = ReadCappedAsync(
+                process.StandardError.BaseStream, 1024, limit.Token);
             await process.StandardInput.WriteAsync(payload.AsMemory(), limit.Token);
             process.StandardInput.Close();
-            var buffer = new char[2049];
-            var length = 0;
-            while (length < buffer.Length)
-            {
-                var n = await process.StandardOutput.ReadAsync(
-                    buffer.AsMemory(length), limit.Token);
-                if (n == 0) break;
-                length += n;
-            }
-            if (length is < 2 or > 2048)
-                throw new InvalidOperationException("INVALID_WORKER_LENGTH");
+            var (output,count) = await ReadCappedAsync(
+                process.StandardOutput.BaseStream, 2048, limit.Token);
+            if (count is < 2 or > 2048)
+                throw new InvalidOperationException("WORKER_OUTPUT_LIMIT");
             await process.WaitForExitAsync(limit.Token);
-            if (process.ExitCode != 0)
-                throw new InvalidOperationException("WORKER_REJECTED");
-            using var response = JsonDocument.Parse(
-                new string(buffer, 0, length), new JsonDocumentOptions { MaxDepth = 3 });
-            var body = response.RootElement;
-            if (body.ValueKind != JsonValueKind.Object ||
-                body.EnumerateObject().Count() != 9 ||
-                body.GetProperty("requestRef").GetString() != request ||
-                body.GetProperty("nonce").GetString() != nonce ||
-                body.GetProperty("status").GetString() != "SYNTHETIC_READ_ONLY" ||
-                !body.GetProperty("syntheticOnly").GetBoolean() ||
-                body.GetProperty("adminAuthenticated").GetBoolean() ||
-                body.GetProperty("trainingAllowed").GetBoolean() ||
-                body.GetProperty("productionAllowed").GetBoolean())
-                throw new InvalidOperationException("WORKER_AUTHORITY_MISMATCH");
-            var rawCounts = body.GetProperty("counts");
-            if (rawCounts.ValueKind != JsonValueKind.Object ||
-                rawCounts.EnumerateObject().Count() != Fields.Length ||
-                rawCounts.EnumerateObject().Select(p => p.Name)
-                    .Distinct(StringComparer.Ordinal).Count() != Fields.Length)
-                throw new InvalidOperationException("WORKER_FIELDS_CHANGED");
-            var counts = new Dictionary<string,int>(StringComparer.Ordinal);
-            foreach (var field in Fields)
-            {
-                if (!rawCounts.TryGetProperty(field, out var value) ||
-                    value.ValueKind != JsonValueKind.Number ||
-                    !value.TryGetInt32(out var n) || n < 0 || n > 4096)
-                    throw new InvalidOperationException("WORKER_COUNTS_INVALID");
-                counts.Add(field, n);
-            }
-            var responseMac = body.GetProperty("mac").GetString();
-            if (responseMac is not { Length: 64 } ||
-                !responseMac.All(Uri.IsHexDigit) ||
-                !CryptographicOperations.FixedTimeEquals(
-                    Convert.FromHexString(responseMac),
-                    Convert.FromHexString(Mac(key, request, nonce,
-                        "SYNTHETIC_READ_ONLY",
-                        counts["datasets"].ToString(),
-                        counts["modelVersions"].ToString(),
-                        counts["evaluations"].ToString(),
-                        counts["trainingRuns"].ToString(),
-                        counts["benchmarks"].ToString()))))
-                throw new InvalidOperationException("WORKER_PROOF_INVALID");
-            return counts;
+            var (_,errors) = await errorTask;
+            if (errors != 0 || process.ExitCode != 0)
+                throw new InvalidOperationException("WORKER_FAILED");
+            return AiWorkerReplyVerifier.Verify(
+                output.AsMemory(0,count), key,request,tenant,nonce);
         }
         catch (OperationCanceledException)
         {
@@ -210,8 +183,31 @@ internal static class AiWorkerQaHttp
         }
         finally
         {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
+            if (started)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                        process.Kill(entireProcessTree:true);
+                }
+                // A child may finish precisely between status and kill.
+                catch (InvalidOperationException) { }
+                catch (Win32Exception) { }
+            }
         }
+    }
+
+    private static async Task<(byte[] bytes,int count)> ReadCappedAsync(
+        Stream source,int limit,CancellationToken deadline)
+    {
+        var result = new byte[limit+1];
+        var count = 0;
+        while(count < result.Length)
+        {
+            var n = await source.ReadAsync(result.AsMemory(count),deadline);
+            if (n == 0) break;
+            count += n;
+        }
+        return (result,count);
     }
 }

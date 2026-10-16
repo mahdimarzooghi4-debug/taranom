@@ -68,13 +68,17 @@ def execute(frame, key, db):
     if any(n > 4096 for n in counts.values()):
         raise ValueError("QA_INVENTORY_LIMIT")
     reply = {
+        "contract": CONTRACT, "command": COMMAND, "tenantRef": tenant,
         "requestRef": request, "nonce": nonce, "status": "SYNTHETIC_READ_ONLY",
         "counts": counts, "syntheticOnly": True,
         "adminAuthenticated": False, "trainingAllowed": False,
         "productionAllowed": False,
     }
-    reply["mac"] = signed(key, request, nonce, reply["status"],
-                          *(counts[k] for k in FIELDS))
+    # Authenticate the ENTIRE claimed authority/correlation boundary,
+    # not only a subset of numeric result fields.
+    reply["mac"] = signed(key, CONTRACT, COMMAND, request, tenant,
+                          nonce, reply["status"], "true", "false",
+                          "false", "false", *(counts[k] for k in FIELDS))
     return reply
 
 
