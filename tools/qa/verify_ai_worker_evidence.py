@@ -23,12 +23,9 @@ def unique(pairs):
         result[k]=v
     return result
 
-def verify(path):
-    assert path.name=="worker-evidence.jsonl"
-    assert path.parent.parent==Path("/tmp")
-    assert path.parent.name.startswith("taranom-worker-")
-    assert not path.is_symlink()
-    data=path.read_bytes()
+def verify_bytes(data):
+    """Independently verify the exact bytes, including after offline transfer."""
+    assert type(data) is bytes
     assert 0<len(data)<=524288 and data.endswith(b"\n"),"PARTIAL_EVIDENCE"
     rows=data[:-1].decode("utf-8",errors="strict").split("\n")
     assert 2<len(rows)<=4096
@@ -61,6 +58,13 @@ def verify(path):
         last=epoch
         prev=digest
     return rows,boots,last
+
+def verify(path):
+    assert path.name=="worker-evidence.jsonl"
+    assert path.parent.parent==Path("/tmp")
+    assert path.parent.name.startswith("taranom-worker-")
+    assert not path.is_symlink()
+    return verify_bytes(path.read_bytes())
 
 def main():
     raw=os.environ["TARANOM_AI_WORKER_EVIDENCE_FILE"]

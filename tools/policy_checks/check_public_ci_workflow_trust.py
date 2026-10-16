@@ -331,6 +331,10 @@ DISPATCHER_BRANCHES = {
         "sprint-146-ai-worker-independent-anchor",
         "main",
     ),
+    "sprint-147-ai-worker-offline-handoff.yml": (
+        "sprint-147-ai-worker-offline-handoff",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -1,0 +1,12 @@
+name: Sprint 147 AI Worker Offline Evidence Handoff Full Regression
+on:
+  push:
+    branches: [sprint-147-ai-worker-offline-handoff]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
