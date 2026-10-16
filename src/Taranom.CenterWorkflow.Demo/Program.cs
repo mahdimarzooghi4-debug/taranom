@@ -135,6 +135,8 @@ if (aiAdminQaEnabled &&
     Environment.GetEnvironmentVariable("TARANOM_AI_WORKER_QA") ==
     "CI_EPHEMERAL_ONLY")
 {
+    // TRN-TECH-154: isolated non-authorizing persistence preflight at boot.
+    Taranom.CenterWorkflow.Demo.AiWorkerQaHttp.InitializeEvidence();
     // TRN-TECH-149: disposable read-only child-process inventory probe.
     app.MapPost("/internal/demo/v1/ai-worker/inventory",
         (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AiWorkerQaHttp.Read);

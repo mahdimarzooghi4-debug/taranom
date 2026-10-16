@@ -13,3 +13,6 @@ using System.Runtime.CompilerServices;
 
 // TRN-TECH-152: test-only telemetry invariants, no runtime disclosure.
 [assembly: InternalsVisibleTo("Taranom.AiWorkerTelemetry.Probe")]
+
+// TRN-TECH-154: only the isolated hash-chain adversarial executable probe.
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Taranom.AiWorkerEvidence.Probe")]

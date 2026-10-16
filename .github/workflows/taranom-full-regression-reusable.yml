@@ -734,6 +734,7 @@ jobs:
           dotnet run --project tests/Taranom.AiWorkerBoundary.Probe/Taranom.AiWorkerBoundary.Probe.csproj --configuration Release
           dotnet run --project tests/Taranom.AiWorkerFault.Probe/Taranom.AiWorkerFault.Probe.csproj --configuration Release
           dotnet run --project tests/Taranom.AiWorkerTelemetry.Probe/Taranom.AiWorkerTelemetry.Probe.csproj --configuration Release
+          TARANOM_AI_WORKER_EVIDENCE_TEST_ONLY=CI_EPHEMERAL_ONLY dotnet run --project tests/Taranom.AiWorkerEvidence.Probe/Taranom.AiWorkerEvidence.Probe.csproj --configuration Release
           cd apps/center-demo-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
@@ -782,6 +783,8 @@ jobs:
           export TARANOM_AI_WORKER_REPO_ROOT="$GITHUB_WORKSPACE"
           export TARANOM_AI_WORKER_QA=CI_EPHEMERAL_ONLY
           export TARANOM_AI_RESTART_WITNESS="$bridge_tmp/epoch-witness.json"
+          export TARANOM_AI_WORKER_EVIDENCE_TEST_ONLY=CI_EPHEMERAL_ONLY
+          export TARANOM_AI_WORKER_EVIDENCE_FILE="$bridge_tmp/worker-evidence.jsonl"
           TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY python3 -c 'import os; from ai.taranom_internal.registry import OfflineRegistry; OfflineRegistry(os.environ["TARANOM_AI_BRIDGE_TEST_DB"]).initialize()'
           cd src/Taranom.CenterWorkflow.Demo
           TARANOM_AI_ADMIN_QA=CI_EPHEMERAL_ONLY TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
@@ -865,6 +868,7 @@ jobs:
             exit 1
           fi
           python3 tests/center_demo/test_ai_worker_restart_http.py
+          python3 tools/qa/verify_ai_worker_evidence.py
       - name: Rehearse real isolated PostgreSQL dump and restored journal integrity
         env:
           CI: 'true'
