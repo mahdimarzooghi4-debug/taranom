@@ -64,7 +64,7 @@ export function OrgDraftQa(){
     if(x.res.status!==200||x.data.outcome!=='Read'||!validDraft(x.data.data,selected))
      throw Error('BAD_DRAFT');
     const h=await ask(path(selected)+'/activity');
-    if(h.res.status!==200||h.data.outcome!=='Read'||!validHistory(h.data.data,item))
+    if(h.res.status!==200||h.data.outcome!=='Read'||!validHistory(h.data.data,selected))
      throw Error('BAD_HISTORY');
     setDraft(x.data.data);setHistory(h.data.data);
     setStatus('پیش‌نویس و تاریخچه از PostgreSQL خوانده شدند؛ احراز هویت واقعی وجود ندارد.');
