@@ -213,6 +213,61 @@ internal static class OrgDraftQaHttp
         { return Respond(503,"TEST_SOURCE_UNVERIFIABLE"); }
     }
 
+
+    // Exact-head test-only technical activity timeline, never a legal status.
+    internal static async Task<IResult> ActivityPage(HttpContext c)
+    {
+        if(!Safe(c))return Respond(403,"UNTRUSTED_IDENTITY_HINT");
+        var item=c.Request.RouteValues["itemRef"]?.ToString();
+        if(!Ref(item))return Respond(400,"INVALID_TEST_REF");
+        var q=c.Request.Query;
+        if(q.Count!=4||!q.ContainsKey("afterNo")||
+           !q.ContainsKey("limit")||!q.ContainsKey("expectedCurrentNo")||
+           !q.ContainsKey("asOfNo")||
+           q["afterNo"].Count!=1||q["limit"].Count!=1||
+           q["expectedCurrentNo"].Count!=1||q["asOfNo"].Count!=1)
+            return Respond(400,"INVALID_TIMELINE_CURSOR");
+        static bool Canonical(string raw,out int value)
+        {
+            value=-1;
+            return raw.Length is >=1 and <=10&&
+                (raw=="0" || raw[0]>='1'&&raw[0]<='9')&&
+                raw.All(char.IsAsciiDigit)&&
+                int.TryParse(raw,NumberStyles.None,
+                    CultureInfo.InvariantCulture,out value)&&
+                raw==value.ToString(CultureInfo.InvariantCulture);
+        }
+        if(!Canonical(q["afterNo"].ToString(),out int after)||
+            !Canonical(q["limit"].ToString(),out int limit)||
+            !Canonical(q["expectedCurrentNo"].ToString(),out int pinned)||
+            !Canonical(q["asOfNo"].ToString(),out int asOf)||
+            limit is <1 or >5||asOf>pinned||after>asOf)
+            return Respond(400,"INVALID_TIMELINE_CURSOR");
+        try
+        {
+            var page=await Activity.ReadPageAsync(
+                item,after,limit,pinned,asOf);
+            if(page is null)return Respond(404,"NotFound");
+            if(page.StaleRevision)
+                return Respond(409,"StaleRevision",new{
+                    itemRef=item,currentNo=page.CurrentNo
+                });
+            return Respond(200,"Read",new{
+                itemRef=item,currentNo=page.CurrentNo,
+                expectedCurrentNo=pinned,asOfNo=page.AsOfNo,
+                afterNo=page.AfterNo,limit=page.Limit,
+                hasMore=page.HasMore,nextAfterNo=page.NextAfterNo,
+                events=page.Events.Select(e=>new{
+                    e.ActivityNo,e.RequestRef,e.NoteRef,
+                    e.ExpectedPreviousNo,e.PreviousSha256,
+                    e.ActivitySha256
+                }).ToArray()
+            });
+        }
+        catch(Exception e) when(e is NpgsqlException or InvalidOperationException)
+        { return Respond(503,"TEST_TIMELINE_UNVERIFIABLE"); }
+    }
+
     internal static async Task<IResult> Append(HttpContext c)
     {
         if (!Safe(c,true)) return Respond(403,"UNTRUSTED_IDENTITY_HINT");

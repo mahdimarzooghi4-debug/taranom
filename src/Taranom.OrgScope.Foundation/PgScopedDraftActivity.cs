@@ -13,6 +13,12 @@ internal sealed record DraftActivity(int ActivityNo, string RequestRef,
     string NoteRef, int ExpectedPreviousNo, string PreviousSha256,
     string ActivitySha256);
 
+// TRN-TECH-137: exact current revision pin, optional historical cutoff and
+// bounded cursor over a *fully reattested* PostgreSQL activity chain.
+internal sealed record DraftActivityPage(int CurrentNo,int AsOfNo,int AfterNo,
+    int Limit,bool HasMore,int? NextAfterNo,IReadOnlyList<DraftActivity> Events,
+    bool StaleRevision);
+
 // Only opaque test: references, never raw free text, members or claims.
 // Scope is always resolved from the PostgreSQL connection principal.
 internal sealed class PgScopedDraftActivity(NpgsqlDataSource database)
@@ -53,6 +59,51 @@ internal sealed class PgScopedDraftActivity(NpgsqlDataSource database)
         await row.DisposeAsync();
         await tx.CommitAsync(ct);
         return new(status,currentNo);
+    }
+
+
+    internal async Task<DraftActivityPage?> ReadPageAsync(
+        string? itemRef,int afterNo,int limit,int expectedCurrentNo,int asOfNo,
+        CancellationToken ct=default)
+    {
+        PgScopedDraftWorkspace.RequireEphemeral();
+        if (!PgScopedDraftWorkspace.IsTestRef(itemRef)||
+            afterNo<0||limit is <1 or >5||expectedCurrentNo<0||
+            asOfNo<0||asOfNo>expectedCurrentNo||afterNo>asOfNo)
+            throw new ArgumentException("ORG_ACTIVITY_PAGE_INVALID_INPUT");
+
+        await using var conn=await database.OpenConnectionAsync(ct);
+        await using var tx=await conn.BeginTransactionAsync(
+            IsolationLevel.RepeatableRead,ct);
+        await using(var mode=new NpgsqlCommand(
+            "SET TRANSACTION READ ONLY",conn,tx))
+            await mode.ExecuteNonQueryAsync(ct);
+        var scope=await PgScopedDraftWorkspace.ScopeAsync(conn,tx);
+        var audit=await OrgDraftAuditVerifier.VerifyAsync(
+            conn,tx,scope,itemRef!,ct);
+        if(audit is null)
+        {
+            await tx.CommitAsync(ct);
+            return null;
+        }
+        // A bounded response does not weaken integrity: every event is
+        // checked first, under this exact same MVCC snapshot.
+        var history=await OrgDraftActivityVerifier.VerifyHistoryAsync(
+            conn,tx,scope,itemRef!,ct);
+        var current=history.Count;
+        if(current!=expectedCurrentNo)
+        {
+            await tx.CommitAsync(ct);
+            return new DraftActivityPage(current,asOfNo,afterNo,limit,
+                false,null,[],true);
+        }
+        var events=history.Skip(afterNo).Take(limit)
+            .Where(e=>e.ActivityNo<=asOfNo).ToArray();
+        bool more=asOfNo>afterNo+events.Length;
+        int? next=more?events[^1].ActivityNo:null;
+        await tx.CommitAsync(ct);
+        return new DraftActivityPage(current,asOfNo,afterNo,limit,
+            more,next,events,false);
     }
 
     internal async Task<IReadOnlyList<DraftActivity>> ReadHistoryAsync(
