@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {OrgDraftQueue} from './org-draft-queue';
+import {OrgDraftTimeline} from './org-draft-timeline';
 
 // TRN-TECH-135: localhost-only technical QA; not an actual operator login.
 type Envelope={contract:string;source:string;syntheticOnly:boolean;
@@ -190,6 +191,8 @@ export function OrgDraftQa(){
      <ol>{history.events.map(e=><li key={e.activityNo}>نسخه {e.activityNo} | <code>{e.noteRef}</code></li>)}</ol>
     </div>}
    </section>
+   {history&&<OrgDraftTimeline key={item+':'+history.currentNo}
+    itemRef={item} currentNo={history.currentNo} locked={busy||!!pending}/>}
    <OrgDraftQueue locked={busy||!!pending} onSelect={chosen=>void read(chosen)}/>
    <section className="panel"><h2>فهرست محدود پیش‌نویس‌ها</h2>
     <label>شروع فهرست پس از شناسه<input aria-label="شروع فهرست پس از شناسه"

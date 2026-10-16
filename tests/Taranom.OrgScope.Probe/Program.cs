@@ -513,3 +513,53 @@ finally
 if((await sq.ReadAsync(prefix,2)).Items[0].ActivityCount!=3)
     throw new InvalidOperationException("ORG_QUEUE_RESTORE_FAILED");
 Console.WriteLine("PASS: one-snapshot RLS-scoped workqueue, exact last-activity projection, cursor and lookahead audit fail-closed");
+
+
+// TRN-TECH-137: historical prefix and page cursors are pinned to real
+// PostgreSQL current revision and use fully reattested activity lineage.
+var pageA=await supportActivity.ReadPageAsync(first,0,2,3,3);
+var pageB=await supportActivity.ReadPageAsync(first,2,2,3,3);
+var oldPrefix=await supportActivity.ReadPageAsync(first,0,2,3,2);
+var genesis=await supportActivity.ReadPageAsync(first,0,2,3,0);
+var corp=await corporateActivity.ReadPageAsync(first,0,2,1,1);
+var absent=await corporateActivity.ReadPageAsync(second,0,2,0,0);
+var stalePin=await supportActivity.ReadPageAsync(first,0,2,2,2);
+if(pageA is null||pageB is null||oldPrefix is null||genesis is null||
+   corp is null||pageA.CurrentNo!=3||pageA.Events.Count!=2||
+   pageA.Events[0].NoteRef!=supportNote||
+   pageA.Events[1].NoteRef!="test:note-b"||
+   !pageA.HasMore||pageA.NextAfterNo!=2||
+   pageB.Events.Count!=1||pageB.Events[0].NoteRef!="test:note-c"||
+   pageB.HasMore||pageB.NextAfterNo is not null||
+   oldPrefix.Events.Count!=2||oldPrefix.HasMore||
+   oldPrefix.NextAfterNo is not null||oldPrefix.AsOfNo!=2||
+   genesis.Events.Count!=0||genesis.HasMore||
+   corp.Events.Count!=1||corp.Events[0].NoteRef!=corporateNote||
+   absent is not null||stalePin is null||!stalePin.StaleRevision||
+   stalePin.CurrentNo!=3||stalePin.Events.Count!=0)
+    throw new InvalidOperationException("ORG_TIMELINE_REVISION_PAGE_FAILED");
+try
+{
+    await supportActivity.ReadPageAsync(first,-1,2,3,3);
+    throw new InvalidOperationException("ORG_TIMELINE_BAD_CURSOR_ACCEPTED");
+}
+catch(ArgumentException){}
+try
+{
+    await supportActivity.ReadPageAsync(first,0,2,3,4);
+    throw new InvalidOperationException("ORG_TIMELINE_FUTURE_VERSION_ACCEPTED");
+}
+catch(ArgumentException){}
+
+// Append AFTER a historical read: old pinned pages must be refused.
+var fourthReq="test:timeline-fourth-"+Guid.NewGuid().ToString("N");
+var fourth=await supportActivity.AppendAsync(first,fourthReq,
+    "test:timeline-fourth-note",3);
+if(fourth.Status!=DraftActivityStatus.Recorded ||
+   !(await supportActivity.ReadPageAsync(first,0,2,3,2))!.StaleRevision)
+    throw new InvalidOperationException("ORG_TIMELINE_STALE_AFTER_APPEND");
+var fresh=await supportActivity.ReadPageAsync(first,2,2,4,4);
+if(fresh is null||fresh.Events.Count!=2||
+   fresh.Events[1].NoteRef!="test:timeline-fourth-note")
+    throw new InvalidOperationException("ORG_TIMELINE_NEW_VERSION_MISSING");
+Console.WriteLine("PASS: pinned PostgreSQL activity pagination, as-of history, independent tenant, and stale revision refusal");
