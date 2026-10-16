@@ -66,6 +66,8 @@ def partition(manifest,category):
 def finite(value):
     if not value.is_finite() or abs(value)>Decimal("1e30"):
         raise RegistryRejected("NONFINITE_OR_UNBOUNDED_SHADOW_RESULT")
+    if value == 0:
+        return "0"
     return format(value,"f")
 
 def fit(registry,claim):
