@@ -20,7 +20,8 @@ def main(args=None):
     cmd.add_parser("init")
     listing=cmd.add_parser("inventory")
     listing.add_argument("--tenant",required=True)
-    for name in ("freeze-dataset","register-model","evaluate"):
+    for name in ("freeze-dataset","register-model","evaluate",
+                 "train-shadow","benchmark-shadow"):
         item=cmd.add_parser(name)
         item.add_argument("--input-json",required=True)
     a=p.parse_args(args)
@@ -37,9 +38,12 @@ def main(args=None):
             if f.is_symlink() or not f.is_file() or f.stat().st_size>65536:
                 raise RegistryRejected("UNTRUSTED_JSON_INPUT_FILE")
             raw=json.loads(f.read_text("utf-8"),object_pairs_hook=_unique)
+            from .training import fit, compare
             command={"freeze-dataset":registry.freeze_dataset,
                      "register-model":registry.register_model,
-                     "evaluate":registry.evaluate_synthetic}[a.command]
+                     "evaluate":registry.evaluate_synthetic,
+                     "train-shadow":lambda value:fit(registry,value),
+                     "benchmark-shadow":lambda value:compare(registry,value)}[a.command]
             result=command(raw)
         print(json.dumps(result,sort_keys=True))
         return 0

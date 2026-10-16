@@ -142,9 +142,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.trusted():
             self.reply(403,"UNTRUSTED_REQUEST_AUTHORITY");return
         part=urlsplit(self.path)
+        from .training import fit, compare
         actions={BASE+"/datasets":self.registry.freeze_dataset,
                  BASE+"/models":self.registry.register_model,
-                 BASE+"/evaluations":self.registry.evaluate_synthetic}
+                 BASE+"/evaluations":self.registry.evaluate_synthetic,
+                 BASE+"/shadow-training":lambda data:fit(self.registry,data),
+                 BASE+"/shadow-benchmarks":lambda data:compare(self.registry,data)}
         if part.path not in actions or part.query:
             self.reply(404,"NOT_FOUND");return
         if self.headers.get("Content-Type")!="application/json":
