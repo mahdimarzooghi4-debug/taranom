@@ -874,6 +874,15 @@ jobs:
           python3 tests/center_demo/test_ai_worker_restart_http.py
           python3 tools/qa/verify_ai_worker_evidence.py
           TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" python3 tools/qa/worker_evidence_anchor.py verify
+          # TRN-TECH-156: run a separate verifier-side export, copy ONLY
+          # the public synthetic ZIP to a disposable receiving directory,
+          # then verify it in another process using the independently held
+          # HMAC receipt. The custodian key NEVER accompanies the ZIP.
+          handoff_out=$(mktemp -d /tmp/taranom-handoff-XXXXXX)
+          handoff_in=$(mktemp -d /tmp/taranom-handoff-XXXXXX)
+          TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_out" python3 tools/qa/worker_evidence_handoff.py export
+          cp -- "$handoff_out/worker-evidence.zip" "$handoff_in/worker-evidence.zip"
+          TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_evidence_handoff.py receive
       - name: Rehearse real isolated PostgreSQL dump and restored journal integrity
         env:
           CI: 'true'
