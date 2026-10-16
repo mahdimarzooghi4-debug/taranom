@@ -103,6 +103,56 @@ def main():
     s,r=call("/"+first["requestRef"])
     check(s,r)
     assert s==200 and r["data"]==original
+
+    # Real, independent DB sessions. A browser cannot substitute its own
+    # tenant or assumed role; effective SQL privileges are attested server-side.
+    writer="taranom_ai_denial_writer_test"
+    reader="taranom_ai_denial_reader_test"
+    assert writer != reader
+    def role_sql(role_name, password_key, sql, ok):
+        import os
+        secret=os.environ[password_key]
+        assert len(secret)>=40
+        command=["docker","exec","-e","PGPASSWORD="+secret,ids[0],
+                 "psql","-X","-q","-t","-A","-v","ON_ERROR_STOP=1",
+                 "-h","127.0.0.1","-U",role_name,
+                 "-d","taranom_sprint64_center","-c",sql]
+        test=subprocess.run(command,capture_output=True,text=True,timeout=12)
+        assert (test.returncode==0)==ok, (role_name,ok,test.returncode)
+        return test.stdout.strip()
+    for actor,env_key in (
+        (writer,"TARANOM_AI_AUDIT_WRITER_TEST_PASSWORD"),
+        (reader,"TARANOM_AI_AUDIT_READER_TEST_PASSWORD")
+    ):
+        current=role_sql(actor,env_key,"SELECT current_user || ':' || session_user",True)
+        assert current==actor+":"+actor
+        role_sql(actor,env_key,
+           "SELECT COUNT(*) FROM internal_test_ai_admin_denial",True)
+        # Trigger rejects UPDATE/DELETE even if the role somehow had rights.
+        for sql in (
+          "UPDATE internal_test_ai_admin_denial SET event_sha=event_sha",
+          "DELETE FROM internal_test_ai_admin_denial",
+          "TRUNCATE internal_test_ai_admin_denial",
+          "SELECT * FROM internal_test_support_case",
+          "INSERT INTO internal_test_support_case(case_ref) VALUES ('test:forged')",
+          "CREATE TABLE public.internal_test_attacker(id int)",
+          "SET ROLE postgres"
+        ):
+            role_sql(actor,env_key,sql,False)
+    role_sql(reader,"TARANOM_AI_AUDIT_READER_TEST_PASSWORD",
+        "INSERT INTO internal_test_ai_admin_denial"
+        "(seq,request_ref,operation,target_ref,evidence_status,previous_sha,event_sha)"
+        " VALUES (999,'test:injected','ReadModelInventory','test:bad',"
+        "'IDENTITY_NOT_VERIFIED_ACCESS_DENIED',repeat('0',64),repeat('0',64))",False)
+    # The writer can INSERT only append-only *denial* rows. Application
+    # journal integrity checks reject an unchained forged record at read.
+    # No raw role passwords or DB account details are included in outputs.
+    owner=subprocess.run(["docker","exec",ids[0],"psql","-X","-q","-t","-A",
+        "-v","ON_ERROR_STOP=1","-U","postgres","-d","taranom_sprint64_center",
+        "-c","SELECT COUNT(*) FROM pg_auth_members m JOIN pg_roles r "
+        "ON m.member=r.oid WHERE r.rolname IN ('"+writer+"','"+reader+"');"],
+        capture_output=True,text=True,timeout=12,check=True)
+    assert owner.stdout.strip()=="0"
     print("PASS: 8/8 AI commands denied + audited in real Postgres; strict replay, "
           "linked audit SHA, concurrent writes, DB UPDATE prohibition, no privilege")
 

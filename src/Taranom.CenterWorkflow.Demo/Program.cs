@@ -73,11 +73,18 @@ if (orgQaEnabled)
 // TRN-TECH-147: opt-in ephemeral AI admin DENIAL journal only.
 var aiAdminQaEnabled = Environment.GetEnvironmentVariable("TARANOM_AI_ADMIN_QA") ==
     "CI_EPHEMERAL_ONLY";
+NpgsqlDataSource? aiAuditWriter = null;
+NpgsqlDataSource? aiAuditReader = null;
 if (aiAdminQaEnabled)
 {
     await Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial.InitializeAsync(dataSource);
+    aiAuditWriter = await Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial
+        .RestrictedAsync(dataSource, connection, write: true);
+    aiAuditReader = await Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial
+        .RestrictedAsync(dataSource, connection, write: false);
     Taranom.CenterWorkflow.Demo.AiAdminQaHttp.Journal =
-        new Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial(dataSource);
+        new Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial(
+            aiAuditWriter, aiAuditReader);
 }
 
 var builder = WebApplication.CreateBuilder(args);
@@ -266,6 +273,8 @@ app.UseStaticFiles();
 // Explicit root default file and explicit member entrypoint remain available.
 app.MapFallback(() => Results.NotFound());
 app.Run();
+if (aiAuditWriter is not null) await aiAuditWriter.DisposeAsync();
+if (aiAuditReader is not null) await aiAuditReader.DisposeAsync();
 if (orgQaDatabase is not null) await orgQaDatabase.DisposeAsync();
 
 // Handler methods deliberately use HttpContext RequestDelegate bindings;

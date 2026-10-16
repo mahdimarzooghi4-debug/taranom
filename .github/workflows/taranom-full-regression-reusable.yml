@@ -721,6 +721,12 @@ jobs:
           corporate=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
           printf 'TARANOM_ORG_SUPPORT_TEST_PASSWORD=%s\n' "$support" >> "$GITHUB_ENV"
           printf 'TARANOM_ORG_CORPORATE_TEST_PASSWORD=%s\n' "$corporate" >> "$GITHUB_ENV"
+      - name: Mint independent ephemeral AI denial writer and reader credentials
+        run: |
+          writer=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          reader=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          printf 'TARANOM_AI_AUDIT_WRITER_TEST_PASSWORD=%s\n' "$writer" >> "$GITHUB_ENV"
+          printf 'TARANOM_AI_AUDIT_READER_TEST_PASSWORD=%s\n' "$reader" >> "$GITHUB_ENV"
       - name: Build existing event-sourced center journal with isolated ASP.NET demo host
         run: |
           dotnet restore src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj
