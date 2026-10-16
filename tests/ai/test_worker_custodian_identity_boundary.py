@@ -71,6 +71,11 @@ class CustodianIdentityTests(unittest.TestCase):
         ctx={**self.context,"status":"VERIFIED"}
         self.assertEqual("DENIED_UNTRUSTED_RECEIPT_CONTEXT",
                          self.evaluate(self.claim,ctx)["status"])
+        for invalid in ([],{},True,17,None):
+            ctx={**self.context,"status":invalid}
+            r=self.evaluate(self.claim,ctx)
+            self.assertEqual("DENIED_UNTRUSTED_RECEIPT_CONTEXT",r["status"])
+            self.check_denial(r)
 
     def test_replayed_transfer_or_challenge_fail(self):
         for name,status,altered in (

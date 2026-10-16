@@ -60,6 +60,7 @@ def receipt_context_valid(context: dict) -> bool:
     if (context.get("schema_version") != receipt.SCHEMA or
         type(context.get("schema_version")) is not int or
         context.get("scope") != receipt.SCOPE or
+        type(context.get("status")) is not str or
         context.get("status") not in RECEIPT_STATUSES or
         context.get("internal_archive_shape_checked") is not True):
         return False
