@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {OrgDraftQueue} from './org-draft-queue';
 
 // TRN-TECH-135: localhost-only technical QA; not an actual operator login.
 type Envelope={contract:string;source:string;syntheticOnly:boolean;
@@ -51,18 +52,19 @@ export function OrgDraftQa(){
   return {res,data:raw};
  }
  function select(i:string){if(busy||pending)return;setItem(i);setDraft(null);setHistory(null);}
- async function read(){
-  if(busy||pending||!refOk(item))return;
+ async function read(selected:string=item){
+  if(busy||pending||!refOk(selected))return;
+  setItem(selected);
   setBusy(true);setDraft(null);setHistory(null);
   try{
-   const x=await ask(path(item));
+   const x=await ask(path(selected));
    if(x.res.status===404&&x.data.outcome==='NotFound'){
     setStatus('پیش‌نویس موجود نیست؛ ثبت آزمایشی امکان دارد.');
    }else{
-    if(x.res.status!==200||x.data.outcome!=='Read'||!validDraft(x.data.data,item))
+    if(x.res.status!==200||x.data.outcome!=='Read'||!validDraft(x.data.data,selected))
      throw Error('BAD_DRAFT');
-    const h=await ask(path(item)+'/activity');
-    if(h.res.status!==200||h.data.outcome!=='Read'||!validHistory(h.data.data,item))
+    const h=await ask(path(selected)+'/activity');
+    if(h.res.status!==200||h.data.outcome!=='Read'||!validHistory(h.data.data,selected))
      throw Error('BAD_HISTORY');
     setDraft(x.data.data);setHistory(h.data.data);
     setStatus('پیش‌نویس و تاریخچه از PostgreSQL خوانده شدند؛ احراز هویت واقعی وجود ندارد.');
@@ -188,6 +190,7 @@ export function OrgDraftQa(){
      <ol>{history.events.map(e=><li key={e.activityNo}>نسخه {e.activityNo} | <code>{e.noteRef}</code></li>)}</ol>
     </div>}
    </section>
+   <OrgDraftQueue locked={busy||!!pending} onSelect={chosen=>void read(chosen)}/>
    <section className="panel"><h2>فهرست محدود پیش‌نویس‌ها</h2>
     <label>شروع فهرست پس از شناسه<input aria-label="شروع فهرست پس از شناسه"
      dir="ltr" value={cursor} disabled={busy||!!pending}

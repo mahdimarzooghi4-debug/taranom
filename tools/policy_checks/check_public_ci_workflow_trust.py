@@ -251,6 +251,10 @@ DISPATCHER_BRANCHES = {
         "sprint-126-org-draft-qa-vertical-slice",
         "main",
     ),
+    "sprint-127-org-draft-coherent-workqueue.yml": (
+        "sprint-127-org-draft-coherent-workqueue",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

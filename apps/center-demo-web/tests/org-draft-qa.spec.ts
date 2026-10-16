@@ -90,3 +90,48 @@ test('ORG126-04 lost accepted acknowledgement recovers exact request once',async
  expect(data.data.events).toHaveLength(1);
  expect(dropped).toBe(true);
 });
+
+
+test('ORG127-01 verified workqueue selects genuine PostgreSQL draft and activity',async({page,request})=>{
+ const item=ref(),source='test:queue-source',note='test:queue-note';
+ const created=await request.post(base,{data:{itemRef:item,sourceRef:source}});
+ expect(created.status()).toBe(200);
+ const first=await request.post(base+'/'+encodeURIComponent(item)+'/activity',{
+  data:{requestRef:'test:queue-request',noteRef:note,expectedPreviousNo:0}});
+ expect(first.status()).toBe(200);
+ await page.goto('/org-drafts-qa');
+ const q=page.getByTestId('org-draft-queue');
+ await q.getByRole('textbox',{name:'شروع کارپوشه پس از شناسه'}).fill(item.slice(0,-1));
+ await q.getByRole('button',{name:'خواندن کارپوشه PostgreSQL'}).click();
+ await expect(q.getByRole('status')).toContainText('از یک نمای معتبر PostgreSQL');
+ const row=q.getByTestId('org-queue-rows').locator('li').filter({hasText:item});
+ await expect(row).toContainText('تعداد فعالیت: 1');
+ await expect(row).toContainText(note);
+ await row.getByRole('button',{name:'انتخاب و بازخوانی پیش‌نویس'}).click();
+ const root=page.getByTestId('org-draft-qa');
+ await expect(root.getByTestId('org-draft-source')).toContainText(source);
+ await expect(root.getByTestId('org-activity-history')).toContainText('نسخه جاری فعالیت: 1');
+ await root.getByRole('textbox',{name:'ارجاع یادداشت فنی آزمایشی'}).fill('test:second-queue-note');
+ await root.getByRole('button',{name:'ثبت فعالیت نسخه‌دار'}).click();
+ await expect(root.getByRole('status').first()).toContainText('فعالیت فنی ثبت شد');
+ await q.getByRole('button',{name:'خواندن کارپوشه PostgreSQL'}).click();
+ await expect(q.getByTestId('org-queue-rows').locator('li').filter({hasText:item}))
+  .toContainText('تعداد فعالیت: 2');
+});
+test('ORG127-02 forged workqueue envelope and revision cannot display',async({page})=>{
+ await page.route('**/internal/demo/v1/org-draft-queue?*',route=>route.fulfill({
+  status:200,contentType:'application/json',body:JSON.stringify({
+   contract:'TRN-TECH-135',source:'SUPPORT_SCOPE_EPHEMERAL_POSTGRES_ONLY',
+   syntheticOnly:true,organizationAuthenticated:true,operatorAuthorized:false,
+   businessStatusChanged:false,nationalReleaseAllowed:false,outcome:'Read',
+   data:{afterItemRef:'',limit:5,nextAfterItemRef:null,items:[
+    {itemRef:'test:forged',sourceRef:'test:untrusted',activityCount:99,
+     lastNoteRef:'test:fake',lastRequestRef:'test:fake'}]}
+  })
+ }));
+ await page.goto('/org-drafts-qa');
+ const q=page.getByTestId('org-draft-queue');
+ await q.getByRole('button',{name:'خواندن کارپوشه PostgreSQL'}).click();
+ await expect(q.getByRole('status')).toContainText('معتبر نیست');
+ await expect(q.getByTestId('org-queue-rows')).toHaveCount(0);
+});

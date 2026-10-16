@@ -66,6 +66,8 @@ if (orgQaEnabled)
         new PgScopedDraftWorkspace(orgQaDatabase);
     Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Activity =
         new PgScopedDraftActivity(orgQaDatabase);
+    Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.QueueStore =
+        new PgScopedDraftWorkQueue(orgQaDatabase);
 }
 
 var builder = WebApplication.CreateBuilder(args);
@@ -196,6 +198,8 @@ app.MapPost("/internal/demo/v1/care-coordination/{caseRef}/commands",
 // binds ONLY to loopback, still makes no trusted operator-authentication claim.
 if (orgQaEnabled)
 {
+    app.MapGet("/internal/demo/v1/org-draft-queue",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Queue);
     app.MapGet("/internal/demo/v1/org-drafts",
         (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.List);
     app.MapPost("/internal/demo/v1/org-drafts",
