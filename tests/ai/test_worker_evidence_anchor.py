@@ -136,8 +136,14 @@ class AnchorProofTests(unittest.TestCase):
             anchor.verify_continuation(self.custody)
         manifest.unlink()
         backup.rename(manifest)
+        # A fresh epoch after the anchored prefix is permitted; the
+        # verifier pins the old prefix, not a not-yet-created new epoch.
         self.write(self.before+self.after,[self.old]*3+["c"*32]*2)
-        with self.assertRaisesRegex(ValueError,"PREFIX_OR_RESTART_CHANGED"):
+        self.assertTrue(anchor.verify_continuation(self.custody)["newEpochValidated"])
+        # Reusing the old epoch as a new Boot is rejected by the underlying
+        # canonical full-chain verifier, not by a guessed future identity.
+        self.write(self.before+self.after,[self.old]*5)
+        with self.assertRaises(AssertionError):
             anchor.verify_continuation(self.custody)
 
     def test_disallow_non_ci_or_invalid_anchor_directory(self):
