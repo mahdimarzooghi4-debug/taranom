@@ -291,6 +291,10 @@ DISPATCHER_BRANCHES = {
         "sprint-136-ai-source-provenance-retirement",
         "main",
     ),
+    "sprint-137-ai-admin-cryptographic-identity-gate.yml": (
+        "sprint-137-ai-admin-cryptographic-identity-gate",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
