@@ -271,6 +271,10 @@ DISPATCHER_BRANCHES = {
         "sprint-131-stage4-premerge-git-candidate",
         "main",
     ),
+    "sprint-132-internal-ai-offline-registry-dataset-eval.yml": (
+        "sprint-132-internal-ai-offline-registry-dataset-eval",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
