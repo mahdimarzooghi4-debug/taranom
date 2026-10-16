@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ترنم — میزکار آزمایشی نسخه‌های AI</title>
+</head>
+<body>
+<main>
+<h1>میزکار فنی هوش مصنوعی داخلی ترنم</h1>
+<p>فقط داده ساختگی با پیشوند test: — هویت ادمین احراز نشده است. هیچ مدل فعال یا داده بالینی مجاز نیست.</p>
+<section>
+<h2>فهرست نسخه‌ها</h2>
+<label for="tenant">محدوده تست</label>
+<input id="tenant" value="test:tenant-a" autocomplete="off">
+<button id="read" type="button">خواندن رجیستری</button>
+<pre id="inventory" aria-live="polite">هنوز خوانده نشده است.</pre>
+</section>
+<section>
+<h2>ثبت Manifest داده ساختگی</h2>
+<p>متادیتای نسخه و دو مجموعه مستقل آموزش و ارزیابی، بدون اطلاعات سلامت</p>
+<label for="dataset">درخواست JSON ساخت دیتاست</label>
+<textarea id="dataset" rows="6" cols="80" spellcheck="false"></textarea>
+<button id="freeze" type="button">ثبت نسخه دیتاست</button>
+</section>
+<section>
+<h2>ثبت نسخه مدل</h2>
+<label for="model">متادیتای JSON نسخه مدل</label>
+<textarea id="model" rows="5" cols="80" spellcheck="false"></textarea>
+<button id="register" type="button">ثبت نسخه مدل</button>
+</section>
+<section>
+<h2>ارزیابی مستقل ساختگی</h2>
+<label for="evaluation">مشاهدات عددیِ منبع تستی</label>
+<textarea id="evaluation" rows="5" cols="80" spellcheck="false"></textarea>
+<button id="evaluate" type="button">محاسبه ارزیابی</button>
+</section>
+<pre id="result" role="status" aria-live="polite">هیچ فرمانی ارسال نشده است.</pre>
+<p>این میزکار در Production قابل استفاده نیست: ثبت نسخه، مجوز آموزش یا فعال‌سازی محسوب نمی‌شود.</p>
+</main>
+<script src="/ai-qa/app.js" defer></script>
+</body>
+</html>

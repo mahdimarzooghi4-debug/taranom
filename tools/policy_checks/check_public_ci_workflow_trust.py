@@ -275,6 +275,10 @@ DISPATCHER_BRANCHES = {
         "sprint-132-internal-ai-offline-registry-dataset-eval",
         "main",
     ),
+    "sprint-133-internal-ai-qa-api-workbench.yml": (
+        "sprint-133-internal-ai-qa-api-workbench",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
