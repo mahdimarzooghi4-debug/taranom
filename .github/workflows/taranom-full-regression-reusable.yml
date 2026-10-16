@@ -849,6 +849,16 @@ jobs:
           # Kestrel's process environment, before real SIGTERM.
           anchor_tmp=$(mktemp -d /tmp/taranom-anchor-XXXXXX)
           TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" python3 tools/qa/worker_evidence_anchor.py create
+          # TRN-TECH-157: an actual separate, UNPRIVILEGED Linux uid
+          # keeps a second checkpoint unreadable by the Worker host uid.
+          # The CI runner has sudo: this is a DAC rehearsal, not legal custody.
+          qa_custody=$(mktemp -d /tmp/taranom-anchor-XXXXXX)
+          qa_shared=$(mktemp -d /tmp/taranom-worker-XXXXXX)
+          qa_tools=$(mktemp -d /tmp/taranom-custody-tools-XXXXXX)
+          export TARANOM_QA_CUSTODY_DIR="$qa_custody"
+          export TARANOM_QA_SHARED_DIR="$qa_shared"
+          export TARANOM_QA_TOOLS_DIR="$qa_tools"
+          python3 tools/qa/worker_posix_custody_ci.py prepare
           kill -TERM "$server_pid"
           wait "$server_pid" || true
           stopped=0
@@ -883,6 +893,9 @@ jobs:
           TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_out" python3 tools/qa/worker_evidence_handoff.py export
           cp -- "$handoff_out/worker-evidence.zip" "$handoff_in/worker-evidence.zip"
           TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_evidence_handoff.py receive
+          # Independently verify full chain after real restart under the
+          # verifier-only POSIX account and prove requester DAC denial.
+          python3 tools/qa/worker_posix_custody_ci.py finish
       - name: Rehearse real isolated PostgreSQL dump and restored journal integrity
         env:
           CI: 'true'
