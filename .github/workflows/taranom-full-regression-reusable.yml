@@ -904,7 +904,7 @@ jobs:
           # The test-only Worker archive is structurally verifiable.
           # An *absent* outside custodian receipt must remain unverified;
           # never fabricate a signature, identity or provider acknowledgement.
-          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/check_worker_external_receipt.py --claim-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/external-receipt-denial.json"
+          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_external_receipt_denial.py --claim-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/external-receipt-denial.json"
           python3 -c "import json,os; r=json.load(open(os.environ['TARANOM_AI_RESTART_WITNESS'].replace('epoch-witness.json','external-receipt-denial.json'))); assert r['status']=='EXTERNAL_RECEIPT_NOT_SUPPLIED' and not r['external_receipt_verified'] and not r['independent_custody_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
           # Independently verify full chain after real restart under the
           # verifier-only POSIX account and prove requester DAC denial.
