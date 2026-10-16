@@ -127,6 +127,63 @@ def main():
         check(status,denied)
         assert status==403,(header,status,denied)
 
+
+    # TRN-TECH-137: as-of and keyset timeline from the immutable real
+    # PostgreSQL chain; each page pins exact current revision.
+    for number in (1,2):
+        status,added=send(BASE+"/"+item+"/activity",{
+            "requestRef":"test:timelinereq-"+str(number),
+            "noteRef":"test:timelinenote-"+str(number),
+            "expectedPreviousNo":number})
+        check(status,added)
+        assert status==200 and added["outcome"]=="Recorded"
+    prefix=BASE+"/"+item+"/activity-page?"
+    def pg(after,limit,current,asof):
+        return send(prefix+"afterNo="+str(after)+"&limit="+str(limit)+
+                    "&expectedCurrentNo="+str(current)+"&asOfNo="+str(asof))
+    status,one=pg(0,2,3,3)
+    check(status,one)
+    assert status==200 and one["outcome"]=="Read"
+    assert one["data"]["currentNo"]==3 and one["data"]["asOfNo"]==3
+    assert [x["activityNo"] for x in one["data"]["events"]]==[1,2]
+    assert one["data"]["hasMore"] is True and one["data"]["nextAfterNo"]==2
+    status,two=pg(2,2,3,3)
+    check(status,two)
+    assert status==200 and [x["activityNo"] for x in two["data"]["events"]]==[3]
+    assert two["data"]["hasMore"] is False and two["data"]["nextAfterNo"] is None
+    status,historic=pg(0,2,3,2)
+    check(status,historic)
+    assert status==200 and historic["data"]["hasMore"] is False
+    assert len(historic["data"]["events"])==2
+    status,zero=pg(0,2,3,0)
+    check(status,zero)
+    assert status==200 and zero["data"]["events"]==[]
+    status,stale=pg(0,2,2,2)
+    check(status,stale)
+    assert status==409 and stale["outcome"]=="StaleRevision"
+    assert stale["data"]["currentNo"]==3 and "events" not in stale["data"]
+    for uri in (
+        prefix+"afterNo=00&limit=2&expectedCurrentNo=3&asOfNo=3",
+        prefix+"afterNo=0&limit=02&expectedCurrentNo=3&asOfNo=3",
+        prefix+"afterNo=0&limit=2&expectedCurrentNo=3&asOfNo=4",
+        prefix+"afterNo=4&limit=2&expectedCurrentNo=3&asOfNo=3",
+        prefix+"afterNo=0&limit=6&expectedCurrentNo=3&asOfNo=3",
+        prefix+"afterNo=0&limit=2&expectedCurrentNo=3",
+        prefix+"afterNo=0&limit=2&expectedCurrentNo=3&asOfNo=3&scope=test:corporate",
+    ):
+        status,bad=send(uri)
+        check(status,bad)
+        assert status==400,(uri,status,bad)
+    status,unauthorized=send(prefix+
+        "afterNo=0&limit=2&expectedCurrentNo=3&asOfNo=3",
+        headers={"Authorization":"Bearer untrusted"})
+    check(status,unauthorized)
+    assert status==403
+    status,missing=send(BASE+"/test:timeline-missing-"+uuid4().hex+
+        "/activity-page?afterNo=0&limit=2&expectedCurrentNo=0&asOfNo=0")
+    check(status,missing)
+    assert status==404
+
     print("PASS: real ASP.NET organization QA via restricted PostgreSQL, exact replay, CAS and denied authority")
 
 if __name__=="__main__":

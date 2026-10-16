@@ -135,3 +135,64 @@ test('ORG127-02 forged workqueue envelope and revision cannot display',async({pa
  await expect(q.getByRole('status')).toContainText('معتبر نیست');
  await expect(q.getByTestId('org-queue-rows')).toHaveCount(0);
 });
+
+
+test('ORG128-01 pinned as-of timeline pages and rejects concurrent append',async({page,request})=>{
+ const item=ref();
+ const create=await request.post(base,{data:{itemRef:item,sourceRef:'test:timeline-source'}});
+ expect(create.status()).toBe(200);
+ for(let n=0;n<3;n++){
+  const reply=await request.post(base+'/'+encodeURIComponent(item)+'/activity',{
+   data:{requestRef:'test:req128-'+n,noteRef:'test:note128-'+n,expectedPreviousNo:n}});
+  expect(reply.status()).toBe(200);
+ }
+ await page.goto('/org-drafts-qa');
+ const root=page.getByTestId('org-draft-qa');
+ await root.getByRole('textbox',{name:'شناسه پیش‌نویس آزمایشی'}).fill(item);
+ await root.getByRole('button',{name:'خواندن پیش‌نویس از PostgreSQL'}).click();
+ const timeline=root.getByTestId('org-draft-timeline');
+ await expect(timeline).toContainText('نسخه ثبت‌شده هنگام آخرین خواندن: 3');
+ const asOf=timeline.getByRole('textbox',{name:'نمایش فعالیت‌ها تا نسخه'});
+ await asOf.fill('2');
+ await timeline.getByRole('button',{name:'مشاهده نسخه تاریخی'}).click();
+ await expect(timeline.getByTestId('org-timeline-events')).toContainText('test:note128-0');
+ await expect(timeline.getByTestId('org-timeline-events')).toContainText('test:note128-1');
+ await expect(timeline.getByTestId('org-timeline-events')).not.toContainText('test:note128-2');
+ await expect(timeline.getByRole('button',{name:'صفحه بعد تاریخچه'})).toHaveCount(0);
+ await asOf.fill('3');
+ await timeline.getByRole('button',{name:'مشاهده نسخه تاریخی'}).click();
+ await expect(timeline.getByRole('button',{name:'صفحه بعد تاریخچه'})).toBeVisible();
+ await timeline.getByRole('button',{name:'صفحه بعد تاریخچه'}).click();
+ await expect(timeline.getByTestId('org-timeline-events')).toContainText('test:note128-2');
+ const concurrent=await request.post(base+'/'+encodeURIComponent(item)+'/activity',{
+  data:{requestRef:'test:req128-next',noteRef:'test:note128-next',expectedPreviousNo:3}});
+ expect(concurrent.status()).toBe(200);
+ await timeline.getByRole('button',{name:'مشاهده نسخه تاریخی'}).click();
+ await expect(timeline.getByRole('status')).toContainText('نسخه فعلی تغییر کرده است');
+ await expect(timeline.getByTestId('org-timeline-events')).toHaveCount(0);
+});
+test('ORG128-02 forged timeline response and invalid cutoff fail closed',async({page,request})=>{
+ const item=ref();
+ const saved=await request.post(base,{data:{itemRef:item,sourceRef:'test:timeline'}});
+ expect(saved.status()).toBe(200);
+ await page.goto('/org-drafts-qa');
+ const root=page.getByTestId('org-draft-qa');
+ await root.getByRole('textbox',{name:'شناسه پیش‌نویس آزمایشی'}).fill(item);
+ await root.getByRole('button',{name:'خواندن پیش‌نویس از PostgreSQL'}).click();
+ const t=root.getByTestId('org-draft-timeline');
+ const input=t.getByRole('textbox',{name:'نمایش فعالیت‌ها تا نسخه'});
+ await input.fill('01');
+ await expect(t.getByRole('button',{name:'مشاهده نسخه تاریخی'})).toBeDisabled();
+ await input.fill('0');
+ await page.route('**/internal/demo/v1/org-drafts/*/activity-page?*',route=>
+  route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+   contract:'TRN-TECH-135',source:'SUPPORT_SCOPE_EPHEMERAL_POSTGRES_ONLY',
+   syntheticOnly:true,organizationAuthenticated:true,operatorAuthorized:false,
+   businessStatusChanged:false,nationalReleaseAllowed:false,outcome:'Read',
+   data:{itemRef:item,currentNo:0,expectedCurrentNo:0,asOfNo:0,afterNo:0,
+    limit:2,hasMore:false,nextAfterNo:null,events:[]}
+  })}));
+ await t.getByRole('button',{name:'مشاهده نسخه تاریخی'}).click();
+ await expect(t.getByRole('status')).toContainText('قابل تأیید نیست');
+ await expect(t.getByTestId('org-timeline-events')).toHaveCount(0);
+});
