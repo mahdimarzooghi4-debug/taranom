@@ -15,6 +15,31 @@ internal static class AiWorkerQaHttp
     private const string Command = "READ_SYNTHETIC_INVENTORY";
     private static readonly SemaphoreSlim Slots = new(4, 4);
     private static readonly AiWorkerQaCounters Counters = new();
+    private static AiWorkerQaEvidenceLedger? Evidence;
+
+    internal static void InitializeEvidence()
+    {
+        if(Environment.GetEnvironmentVariable("TARANOM_AI_WORKER_EVIDENCE_TEST_ONLY")
+            != "CI_EPHEMERAL_ONLY")
+            return;
+        if(Evidence != null)
+            throw new InvalidOperationException("SYNTHETIC_EVIDENCE_ALREADY_INITIALIZED");
+        var path=Environment.GetEnvironmentVariable("TARANOM_AI_WORKER_EVIDENCE_FILE")
+            ?? throw new InvalidOperationException("SYNTHETIC_EVIDENCE_FILE_REQUIRED");
+        var ledger=new AiWorkerQaEvidenceLedger(path);
+        ledger.Append(Counters.Snapshot().InstanceEpoch,AiWorkerQaEvidenceKind.Boot);
+        Evidence=ledger;
+    }
+    private static AiWorkerQaEvidenceKind AsEvidence(AiWorkerQaResult result) =>
+        result switch
+        {
+            AiWorkerQaResult.Success => AiWorkerQaEvidenceKind.Success,
+            AiWorkerQaResult.ProcessRejected => AiWorkerQaEvidenceKind.ProcessRejected,
+            AiWorkerQaResult.InvalidReply => AiWorkerQaEvidenceKind.InvalidReply,
+            AiWorkerQaResult.DeadlineExceeded => AiWorkerQaEvidenceKind.DeadlineExceeded,
+            AiWorkerQaResult.RequestCancelled => AiWorkerQaEvidenceKind.RequestCancelled,
+            _ => AiWorkerQaEvidenceKind.Unavailable
+        };
 
     private static bool Ref(string? value) =>
         value is {Length: >= 6 and <= 128} &&
@@ -44,6 +69,9 @@ internal static class AiWorkerQaHttp
             "CI_EPHEMERAL_ONLY")
             return Reply(503, "WORKER_NOT_CONFIGURED");
         if (!Safe(c)) return Reply(403, "UNTRUSTED_REQUEST_HINT");
+        try { Evidence?.Verify(); }
+        catch (InvalidOperationException)
+        { return Reply(503,"INTERNAL_WORKER_UNAVAILABLE"); }
         var s = Counters.Snapshot();
         return Reply(200,"EPHEMERAL_WORKER_COUNTERS_ONLY",new {
             s.Started, s.Success, s.ProcessRejected, s.InvalidReply,
@@ -111,6 +139,8 @@ internal static class AiWorkerQaHttp
             if (!Slots.Wait(0))
             {
                 Counters.DenyCapacity();
+                Evidence?.Append(Counters.Snapshot().InstanceEpoch,
+                    AiWorkerQaEvidenceKind.CapacityDenied);
                 return Reply(503, "WORKER_CAPACITY_EXCEEDED");
             }
             Counters.Start();
@@ -133,8 +163,15 @@ internal static class AiWorkerQaHttp
             {
                 // One completion per admitted request even for unexpected
                 // IO/process errors. There are no request-specific labels.
-                Counters.Complete(outcome);
-                Slots.Release();
+                try
+                {
+                    Counters.Complete(outcome);
+                    // A persistence error overrides even a read-only success:
+                    // the caller receives generic 503, never a fake positive.
+                    Evidence?.Append(Counters.Snapshot().InstanceEpoch,
+                        AsEvidence(outcome));
+                }
+                finally { Slots.Release(); }
             }
         }
         catch (JsonException)

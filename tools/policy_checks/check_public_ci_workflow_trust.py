@@ -323,6 +323,10 @@ DISPATCHER_BRANCHES = {
         "sprint-144-ai-worker-lifecycle-epoch-restart",
         "main",
     ),
+    "sprint-145-ai-worker-synthetic-evidence-ledger.yml": (
+        "sprint-145-ai-worker-synthetic-evidence-ledger",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
