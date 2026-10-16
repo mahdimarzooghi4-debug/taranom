@@ -4,16 +4,19 @@ using Npgsql;
 
 namespace Taranom.CenterWorkflow.Demo;
 
-// TRN-TECH-147: genuine local PostgreSQL immutable DENIAL log.
-// The owner connection is allowed only by the existing disposable test-host
-// process. It MUST NOT be reused as a real administrative data source.
+// TRN-TECH-148: the schema owner initializes the disposable test fixture,
+// then HTTP gets separate, non-inheriting, minimally privileged DB principals.
+// Neither HTTP principal can update, delete, truncate or own audit schema.
 internal sealed record AiAdminDenialRecord(
     long Seq, string RequestRef, string Operation, string TargetRef,
     string EvidenceStatus, string PreviousSha256, string EventSha256);
 internal sealed record AiAdminDenialWrite(string Outcome, AiAdminDenialRecord Record);
 
-internal sealed class PgSyntheticAiAdminDenial(NpgsqlDataSource source)
+internal sealed class PgSyntheticAiAdminDenial(
+    NpgsqlDataSource writer, NpgsqlDataSource reader)
 {
+    internal const string WriterRole = "taranom_ai_denial_writer_test";
+    internal const string ReaderRole = "taranom_ai_denial_reader_test";
     private const string EmptyDigest = "0000000000000000000000000000000000000000000000000000000000000000";
     private const int MaxEvents = 4096;
     private const string SelectSql = """
@@ -59,6 +62,130 @@ internal sealed class PgSyntheticAiAdminDenial(NpgsqlDataSource source)
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // Separate role credentials are freshly minted by this isolated CI job;
+    // no password, role grant or real service credential is kept in Git.
+    internal static async Task<NpgsqlDataSource> RestrictedAsync(
+        NpgsqlDataSource owner,NpgsqlConnectionStringBuilder admin,bool write)
+    {
+        if(Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY") !=
+             "CI_EPHEMERAL_ONLY" ||
+           Environment.GetEnvironmentVariable("TARANOM_AI_ADMIN_QA") !=
+             "CI_EPHEMERAL_ONLY" ||
+           admin.Host is not ("localhost" or "127.0.0.1") ||
+           admin.Database != "taranom_sprint64_center" || admin.Port != 5432)
+            throw new InvalidOperationException("AI_AUDIT_TEST_DB_ONLY");
+        var role=write?WriterRole:ReaderRole;
+        var env=write?"TARANOM_AI_AUDIT_WRITER_TEST_PASSWORD":
+                      "TARANOM_AI_AUDIT_READER_TEST_PASSWORD";
+        var secret=Environment.GetEnvironmentVariable(env);
+        if(secret is not {Length: >= 40 and <= 96} ||
+            secret.Any(c=>!char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_')))
+            throw new InvalidOperationException("AI_AUDIT_ROLE_PASSWORD_REQUIRED");
+        // All SQL object/role names are fixed constants; secret is a strictly
+        // validated ASCII token and cannot terminate a SQL string literal.
+        // Owner connection is used only in this bootstrapping method.
+        var sql=write?"""
+            DO $body$ BEGIN
+              IF NOT EXISTS(SELECT 1 FROM pg_roles
+                WHERE rolname='taranom_ai_denial_writer_test') THEN
+                CREATE ROLE taranom_ai_denial_writer_test LOGIN NOINHERIT
+                    NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
+              END IF;
+            END $body$;
+            REVOKE ALL ON TABLE internal_test_ai_admin_denial
+                FROM taranom_ai_denial_writer_test;
+            GRANT USAGE ON SCHEMA public TO taranom_ai_denial_writer_test;
+            GRANT SELECT,INSERT ON TABLE internal_test_ai_admin_denial
+                TO taranom_ai_denial_writer_test;
+            """ : """
+            DO $body$ BEGIN
+              IF NOT EXISTS(SELECT 1 FROM pg_roles
+                WHERE rolname='taranom_ai_denial_reader_test') THEN
+                CREATE ROLE taranom_ai_denial_reader_test LOGIN NOINHERIT
+                    NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
+              END IF;
+            END $body$;
+            REVOKE ALL ON TABLE internal_test_ai_admin_denial
+                FROM taranom_ai_denial_reader_test;
+            GRANT USAGE ON SCHEMA public TO taranom_ai_denial_reader_test;
+            GRANT SELECT ON TABLE internal_test_ai_admin_denial
+                TO taranom_ai_denial_reader_test;
+            """;
+        await using(var conn=await owner.OpenConnectionAsync())
+        {
+            await using(var setup=new NpgsqlCommand(sql,conn))
+                await setup.ExecuteNonQueryAsync();
+            await using(var credential=new NpgsqlCommand(
+                "ALTER ROLE "+role+" PASSWORD '"+secret+"'",conn))
+                await credential.ExecuteNonQueryAsync();
+        }
+        var config=new NpgsqlConnectionStringBuilder(admin.ConnectionString)
+        {
+            Username=role,Password=secret,Pooling=false
+        };
+        var scoped=NpgsqlDataSource.Create(config.ConnectionString);
+        try
+        {
+            await VerifyRestrictedAsync(scoped,role,write);
+            return scoped;
+        }
+        catch
+        {
+            await scoped.DisposeAsync();
+            throw;
+        }
+    }
+
+    private static async Task VerifyRestrictedAsync(
+        NpgsqlDataSource source,string role,bool writer)
+    {
+        await using var conn=await source.OpenConnectionAsync();
+        // Verify session_user as well as current_user. A SET ROLE session or
+        // superuser-owned connection is never accepted as an HTTP principal.
+        await using(var cmd=new NpgsqlCommand("""
+            SELECT current_user,session_user,rolcanlogin,rolinherit,rolsuper,
+                   rolbypassrls,rolcreaterole,rolcreatedb,rolreplication,
+                   (SELECT COUNT(*) FROM pg_auth_members WHERE member=r.oid)
+            FROM pg_roles r WHERE r.rolname=current_user
+            """,conn))
+        await using(var read=await cmd.ExecuteReaderAsync())
+        {
+            if(!await read.ReadAsync() ||
+                read.GetString(0)!=role || read.GetString(1)!=role ||
+                !read.GetBoolean(2) || read.GetBoolean(3) ||
+                read.GetBoolean(4) || read.GetBoolean(5) ||
+                read.GetBoolean(6) || read.GetBoolean(7) ||
+                read.GetBoolean(8) || read.GetInt64(9)!=0)
+                throw new InvalidOperationException("AI_AUDIT_ROLE_ESCALATED");
+        }
+        await using var privilege=new NpgsqlCommand("""
+          SELECT c.relname,
+                 has_table_privilege(current_user,c.oid,'SELECT'),
+                 has_table_privilege(current_user,c.oid,'INSERT'),
+                 has_table_privilege(current_user,c.oid,'UPDATE'),
+                 has_table_privilege(current_user,c.oid,'DELETE'),
+                 has_table_privilege(current_user,c.oid,'TRUNCATE')
+          FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname='public' AND c.relkind='r'
+            AND c.relname LIKE 'internal_test_%'
+          ORDER BY c.relname
+          """,conn);
+        await using var rows=await privilege.ExecuteReaderAsync();
+        bool present=false;
+        while(await rows.ReadAsync())
+        {
+            bool audit=rows.GetString(0)=="internal_test_ai_admin_denial";
+            if(audit)present=true;
+            if(rows.GetBoolean(1)!=audit ||
+               rows.GetBoolean(2)!=(audit&&writer) ||
+               rows.GetBoolean(3) || rows.GetBoolean(4) ||
+               rows.GetBoolean(5))
+                throw new InvalidOperationException("AI_AUDIT_SCOPE_RIGHTS_ESCALATED");
+        }
+        if(!present)
+            throw new InvalidOperationException("AI_AUDIT_SCHEMA_MISSING");
+    }
+
     private static string Digest(long seq,string request,string operation,
         string target,string evidence,string previous)
     {
@@ -101,7 +228,7 @@ internal sealed class PgSyntheticAiAdminDenial(NpgsqlDataSource source)
     internal async Task<AiAdminDenialWrite> RecordAsync(string requestRef,
         string operation,string targetRef,string evidenceStatus)
     {
-        await using var conn=await source.OpenConnectionAsync();
+        await using var conn=await writer.OpenConnectionAsync();
         await using var tx=await conn.BeginTransactionAsync();
         await using (var lockCmd=new NpgsqlCommand(
             "SELECT pg_advisory_xact_lock(138, 147)",conn,tx))
@@ -143,7 +270,7 @@ internal sealed class PgSyntheticAiAdminDenial(NpgsqlDataSource source)
 
     internal async Task<AiAdminDenialRecord?> ReadAsync(string requestRef)
     {
-        await using var conn=await source.OpenConnectionAsync();
+        await using var conn=await reader.OpenConnectionAsync();
         var history=await ReadAndVerifyAsync(conn);
         return history.Find(x=>x.RequestRef==requestRef);
     }

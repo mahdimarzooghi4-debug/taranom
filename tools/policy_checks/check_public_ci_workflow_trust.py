@@ -299,6 +299,10 @@ DISPATCHER_BRANCHES = {
         "sprint-138-ai-admin-audited-deny-gateway",
         "main",
     ),
+    "sprint-139-ai-audit-restricted-db-roles.yml": (
+        "sprint-139-ai-audit-restricted-db-roles",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
