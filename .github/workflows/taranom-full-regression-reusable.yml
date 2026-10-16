@@ -77,9 +77,12 @@ jobs:
       - name: Verify comprehensive national release blockers remain DENY-ONLY
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_national_launch_blockers.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_stage4_test_preflight.py' -v
           mkdir -p TestResults
           python3 tools/policy_checks/check_national_launch_blockers.py --root . --report-json TestResults/fullci-national-blockers.json
           test -s TestResults/fullci-national-blockers.json
+          python3 tools/policy_checks/check_stage4_test_preflight.py --root . --report-json TestResults/fullci-stage4-preflight.json
+          test -s TestResults/fullci-stage4-preflight.json
       - name: Build bounded member governance contract project
         run: |
           dotnet restore tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj
@@ -107,6 +110,7 @@ jobs:
           path: |
             TestResults/sprint03-governance.xml
             TestResults/fullci-national-blockers.json
+            TestResults/fullci-stage4-preflight.json
             TestResults/fullci-public-history-safety.json
             TestResults/fullci-private-evidence-empty.json
             TestResults/fullci-workflow-trust.json
