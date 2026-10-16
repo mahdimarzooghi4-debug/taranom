@@ -263,6 +263,10 @@ DISPATCHER_BRANCHES = {
         "sprint-129-stage4-synthetic-test-preflight",
         "main",
     ),
+    "sprint-130-stage4-recovery-security-parity.yml": (
+        "sprint-130-stage4-recovery-security-parity",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

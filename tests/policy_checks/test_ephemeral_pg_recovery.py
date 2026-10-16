@@ -104,5 +104,38 @@ class EphemeralRecoveryContractTests(unittest.TestCase):
         self.assertIn('"rpo_rto_verified": False',source)
 
 
+    def test_acl_capture_is_not_stripped_by_recovery(self):
+        source=(ROOT/"tools/recovery/rehearse_ephemeral_postgres.py").read_text()
+        self.assertNotIn('"--no-acl"',source)
+        self.assertIn("attest_parity(before[3], after[3])",source)
+        self.assertIn('"stage4_recovery_verified": False',source)
+
+    def test_security_catalog_denies_both_missing_grants_and_rls(self):
+        import verify_postgres_security as sec
+        self.assertEqual(5, len(sec.SECURITY_QUERIES))
+        self.assertIn("aclexplode",sec.SECURITY_QUERIES["functions"])
+        self.assertIn("pg_get_functiondef",sec.SECURITY_QUERIES["functions"])
+        self.assertIn("pg_get_expr",sec.SECURITY_QUERIES["policies"])
+        self.assertIn("relforcerowsecurity",sec.SECURITY_QUERIES["tables"])
+
+    def test_missing_security_metadata_or_nonsense_json_denied(self):
+        import verify_postgres_security as sec
+        with self.assertRaisesRegex(sec.SecurityMismatch,"NOT_ARRAY"):
+            sec.collect_security(lambda _: b'{}')
+        with self.assertRaisesRegex(sec.SecurityMismatch,"UNPARSABLE"):
+            sec.collect_security(lambda _: b'{garbled')
+
+    def test_source_security_is_verified_before_parity(self):
+        import verify_postgres_security as sec
+        with self.assertRaisesRegex(sec.SecurityMismatch,"INCOMPLETE"):
+            sec.attest_parity({}, {})
+
+    def test_recovery_cannot_claim_stage_from_catalog_parity(self):
+        source=(ROOT/"tools/recovery/rehearse_ephemeral_postgres.py").read_text()
+        self.assertIn('"production_recovery_verified": False',source)
+        self.assertIn('"stage4_recovery_verified": False',source)
+        self.assertIn('"national_release_allowed": False',source)
+
+
 if __name__=="__main__":
     unittest.main()

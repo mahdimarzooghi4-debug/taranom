@@ -15,6 +15,9 @@ import re
 import subprocess
 import sys
 import tempfile
+from verify_postgres_security import (
+    collect_security, attest_parity, SecurityMismatch,
+)
 
 SOURCE = "taranom_sprint64_center"
 DESTINATION = "taranom_sprint77_restore"
@@ -171,7 +174,14 @@ def _catalog(container, database):
         ).decode("ascii").strip()
         if mismatch != "0":
             _deny("RECOVERY_EVENT_AUDIT_LINK_MISMATCH")
-    return names, schema, rows
+    # Capture and independently evaluate ACL/RLS/functions/effective rights
+    # on BOTH source and restore. Rows and schema alone are not enough.
+    try:
+        security = collect_security(
+            lambda sql: _query(container, database, sql))
+    except SecurityMismatch as exc:
+        _deny(str(exc))
+    return names, schema, rows, security
 
 
 def _guard_test(container):
@@ -195,7 +205,7 @@ def rehearse():
         with os.fdopen(fd, "wb") as dump_file:
             run_checked([
                 "docker", "exec", container, "pg_dump", "-U", "postgres",
-                "-d", SOURCE, "-Fc", "--no-owner", "--no-acl"
+                "-d", SOURCE, "-Fc", "--no-owner"
             ], output_file=dump_file)
         if not 0 < path.stat().st_size <= MAX_DUMP_SIZE:
             _deny("RECOVERY_BACKUP_SIZE_UNVERIFIABLE")
@@ -206,7 +216,7 @@ def rehearse():
         with path.open("rb") as dump_file:
             run_checked([
                 "docker", "exec", "-i", container, "pg_restore", "-U", "postgres",
-                "-d", DESTINATION, "--no-owner", "--no-acl", "--exit-on-error"
+                "-d", DESTINATION, "--no-owner", "--exit-on-error"
             ], input_file=dump_file)
         after = _catalog(container, DESTINATION)
         if before[0] != after[0]:
@@ -215,6 +225,10 @@ def rehearse():
             _deny("RECOVERY_RESTORED_SCHEMA_DIFFERS")
         if before[2] != after[2]:
             _deny("RECOVERY_RESTORED_CONTENT_DIFFERS")
+        try:
+            attest_parity(before[3], after[3])
+        except SecurityMismatch as exc:
+            _deny(str(exc))
         _guard_test(container)
         if after != _catalog(container, DESTINATION):
             _deny("RECOVERY_GUARD_CHECK_CHANGED_RESTORED_BYTES")
@@ -228,6 +242,8 @@ def rehearse():
             "synthetic_only": True,
             "production_recovery_verified": False,
             "rpo_rto_verified": False,
+            "security_posture_equal": True,
+            "stage4_recovery_verified": False,
             "national_release_allowed": False}
 
 
