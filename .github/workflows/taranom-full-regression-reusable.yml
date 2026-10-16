@@ -845,6 +845,10 @@ jobs:
           # Show counter loss explicitly; NEVER declare continuity/audit success.
           cd "$GITHUB_WORKSPACE"
           test -s "$TARANOM_AI_RESTART_WITNESS"
+          # TRN-TECH-155: verifier-owned disposable checkpoint OUTSIDE
+          # Kestrel's process environment, before real SIGTERM.
+          anchor_tmp=$(mktemp -d /tmp/taranom-anchor-XXXXXX)
+          TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" python3 tools/qa/worker_evidence_anchor.py create
           kill -TERM "$server_pid"
           wait "$server_pid" || true
           stopped=0
@@ -869,6 +873,7 @@ jobs:
           fi
           python3 tests/center_demo/test_ai_worker_restart_http.py
           python3 tools/qa/verify_ai_worker_evidence.py
+          TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" python3 tools/qa/worker_evidence_anchor.py verify
       - name: Rehearse real isolated PostgreSQL dump and restored journal integrity
         env:
           CI: 'true'
