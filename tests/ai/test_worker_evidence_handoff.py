@@ -48,6 +48,10 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual(5,handoff.export(self.export_dir,self.holder))
         shutil.copyfile(self.export_dir/handoff.ZIP_NAME,
                         self.receive_dir/handoff.ZIP_NAME)
+        # shutil.copyfile creates destination with default umask; a
+        # separate recipient must explicitly apply restrictive 0600,
+        # and the verifier still rejects the permissive-path attack test.
+        (self.receive_dir/handoff.ZIP_NAME).chmod(0o600)
 
     def consume(self,folder=None):
         return handoff.receive(folder or self.receive_dir,self.holder)
