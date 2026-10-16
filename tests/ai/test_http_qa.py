@@ -97,7 +97,7 @@ class QaApiTests(unittest.TestCase):
     def test_no_cross_origin_post_or_cors_grant(self):
         code,raw,headers=self.fetch("/internal/qa/v1/ai/inventory?tenant=test:tenant-a")
         self.assertEqual(200,code)
-        self.assertEqual("null",headers.get("Access-Control-Allow-Origin"))
+        self.assertNotIn("Access-Control-Allow-Origin",headers)
         self.assertIn("default-src 'none'",headers.get("Content-Security-Policy",""))
 
     def test_qa_html_is_real_local_panel_with_no_activation(self):
