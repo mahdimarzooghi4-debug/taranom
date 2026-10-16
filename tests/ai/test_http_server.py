@@ -99,4 +99,58 @@ class HttpQaTests(unittest.TestCase):
         self.assertIsNone(headers.get("Access-Control-Allow-Origin"))
         self.assertFalse(body["productionAllowed"])
 
+
+    def test_real_http_shadow_fit_benchmark_and_idempotency(self):
+        from tests.ai.test_shadow_training import sample_manifest, train, bench
+        for path,payload in (("/datasets",sample_manifest()),
+                             ("/shadow-training",train()),
+                             ("/shadow-benchmarks",bench())):
+            status,headers,value=self.request("POST","/internal/ai-test/v1"+path,payload)
+            self.assertEqual(200,status,value)
+            self.assertEqual(CONTRACT,value["contract"])
+            self.assertFalse(value["productionAllowed"])
+            self.assertFalse(value["trainingAllowed"])
+            self.assertFalse(value["adminAuthenticated"])
+            self.assertFalse(value["operatorAuthorized"])
+            self.assertEqual("no-store",headers["Cache-Control"])
+        status,_,response=self.request("GET","/internal/ai-test/v1/inventory?tenant=test:team")
+        self.assertEqual(200,status)
+        self.assertEqual(1,len(response["data"]["training_runs"]))
+        self.assertEqual(1,len(response["data"]["shadow_benchmarks"]))
+        self.assertEqual("9",response["data"]["shadow_benchmarks"][0]["baseline_mse"])
+        self.assertEqual("0",response["data"]["shadow_benchmarks"][0]["shadow_mse"])
+        self.assertFalse(response["data"]["training_runs"][0]["candidate_approved"])
+        self.assertFalse(response["data"]["shadow_benchmarks"][0]["winner_selected"])
+        self.assertFalse(response["data"]["production_allowed"])
+        status,_,replay=self.request("POST","/internal/ai-test/v1/shadow-training",train())
+        self.assertEqual(200,status)
+        self.assertEqual("REPLAY_SHADOW_ONLY",replay["data"]["status"])
+        status,_,again=self.request("POST","/internal/ai-test/v1/shadow-benchmarks",bench())
+        self.assertEqual(200,status)
+        self.assertEqual("REPLAY_SHADOW_DIAGNOSTIC",again["data"]["status"])
+
+    def test_http_shadow_training_leak_and_fake_promotion_denied(self):
+        from tests.ai.test_shadow_training import sample_manifest, train, bench
+        self.assertEqual(200,self.request("POST","/internal/ai-test/v1/datasets",sample_manifest())[0])
+        wrong=train()
+        wrong["samples"][0]["source_ref"]="test:s3"
+        status,_,v=self.request("POST","/internal/ai-test/v1/shadow-training",wrong)
+        self.assertEqual(400,status)
+        self.assertEqual("REJECTED",v["outcome"])
+        forged=train()
+        forged["activateProduction"]=True
+        status,_,v=self.request("POST","/internal/ai-test/v1/shadow-training",forged)
+        self.assertEqual(400,status)
+        self.assertFalse(v["productionAllowed"])
+        self.assertEqual(404,self.request("POST","/internal/ai-test/v1/models/promote",
+                                         {"activateProduction":True})[0])
+        self.assertEqual(200,self.request("POST","/internal/ai-test/v1/shadow-training",train())[0])
+        wrong_bench=bench()
+        wrong_bench["samples"][0]["source_ref"]="test:s1"
+        status,_,v=self.request("POST","/internal/ai-test/v1/shadow-benchmarks",wrong_bench)
+        self.assertEqual(400,status)
+        self.assertEqual("REJECTED",v["outcome"])
+        self.assertEqual(403,self.request("POST","/internal/ai-test/v1/shadow-benchmarks",
+                                         bench(),headers={"Authorization":"Bearer fake"})[0])
+
 if __name__=="__main__":unittest.main()
