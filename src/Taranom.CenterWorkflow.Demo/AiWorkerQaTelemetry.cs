@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace Taranom.CenterWorkflow.Demo;
 
 // TRN-TECH-152: process-local, fixed-dimensional, non-identifying synthetic
@@ -16,12 +18,17 @@ internal sealed class AiWorkerQaFailure(AiWorkerQaResult result)
 }
 
 internal readonly record struct AiWorkerQaSnapshot(
-    long Started, long Success, long ProcessRejected, long InvalidReply,
+    string InstanceEpoch, long Started, long Success, long ProcessRejected, long InvalidReply,
     long DeadlineExceeded, long RequestCancelled, long Unavailable,
     long CapacityDenied, long InFlight, long PeakInFlight);
 
 internal sealed class AiWorkerQaCounters
 {
+    // A fresh, NONIDENTIFYING 128-bit process-epoch witness. It exists only
+    // to expose discontinuity of volatile counters across host restarts.
+    // This is not an actor/session/service identity or a metrics label.
+    private readonly string instanceEpoch =
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
     private long started;
     private long success;
     private long processRejected;
@@ -66,7 +73,7 @@ internal sealed class AiWorkerQaCounters
         Interlocked.Decrement(ref inFlight);
     }
     internal AiWorkerQaSnapshot Snapshot() => new(
-        Interlocked.Read(ref started), Interlocked.Read(ref success),
+        instanceEpoch, Interlocked.Read(ref started), Interlocked.Read(ref success),
         Interlocked.Read(ref processRejected), Interlocked.Read(ref invalidReply),
         Interlocked.Read(ref deadlineExceeded), Interlocked.Read(ref requestCancelled),
         Interlocked.Read(ref unavailable), Interlocked.Read(ref capacityDenied),
