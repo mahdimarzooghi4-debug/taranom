@@ -13,7 +13,8 @@ from pathlib import Path
 import re
 import sys
 
-from tools.policy_checks.check_national_launch_blockers import (
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_national_launch_blockers import (
     MANIFEST as NATIONAL_MANIFEST, REQUIRED, audit_inventory, load_inventory,
 )
 
