@@ -655,24 +655,20 @@ jobs:
           python3 tests/ops_status/test_three_market_entry_http.py
           python3 tests/ops_status/test_payer_scenario_http.py
           python3 tests/ops_status/test_unified_local_surfaces_http.py
-          cd apps/ops-web
-          CI=true npm run test:e2e -- --grep-invert 'AI133-'
-      - name: Verify real synthetic-only Python AI registry HTTP and Persian React UI
-        run: |
           export TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY
           export TARANOM_AI_HTTP_TEST_ONLY=CI_EPHEMERAL_ONLY
           mkdir -p "$RUNNER_TEMP/taranom-ai-qa"
           python3 -m ai.taranom_internal.server --db "$RUNNER_TEMP/taranom-ai-qa/registry.sqlite3" > "$RUNNER_TEMP/taranom-ai-http.log" 2>&1 &
           qa_pid=$!
-          trap 'kill "$qa_pid" 2>/dev/null || true' EXIT
-          ready=0
+          trap 'kill "$qa_pid" "$server_pid" 2>/dev/null || true' EXIT
+          ai_ready=0
           for attempt in $(seq 1 30); do
-            if curl --silent --fail --max-time 2 http://127.0.0.1:4335/internal/ai-test/v1/health > /dev/null; then ready=1; break; fi
+            if curl --silent --fail --max-time 2 http://127.0.0.1:4335/internal/ai-test/v1/health > /dev/null; then ai_ready=1; break; fi
             sleep 1
           done
-          test "$ready" = "1"
+          test "$ai_ready" = "1"
           cd apps/ops-web
-          CI=true npx playwright test tests/ai-lab.spec.ts
+          CI=true npm run test:e2e
       - name: Upload local-only HTTP/browser QA records
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
