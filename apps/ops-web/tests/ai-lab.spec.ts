@@ -8,6 +8,7 @@ test('AI133-01 real Python HTTP, persisted dataset/model/evaluation and Persian 
  await page.goto(host+'/operations/ai-lab');
  await expect(page.getByRole('heading',{name:'مدیریت آزمایشی Dataset و نسخه مدل'})).toBeVisible();
  await page.getByRole('textbox',{name:'محدوده تست'}).fill(ref);
+ await page.getByRole('button',{name:'بازخوانی رجیستری'}).click();
  const inventory=page.getByTestId('ai-qa-inventory');
  await expect(inventory).toContainText('Dataset: 0');
  await page.getByRole('button',{name:'ثبت Dataset ساختگی'}).click();
@@ -19,7 +20,9 @@ test('AI133-01 real Python HTTP, persisted dataset/model/evaluation and Persian 
  await expect(inventory).toContainText('MAE 0.5 / MSE 0.25');
  await expect(inventory).toContainText('مدل عملیاتی: هیچ');
  await page.reload();
- await expect(page.getByRole('status')).toContainText('اطلاعات نسخه‌دار');
+ await page.getByRole('textbox',{name:'محدوده تست'}).fill(ref);
+ await page.getByRole('button',{name:'بازخوانی رجیستری'}).click();
+ await expect(page.getByTestId('ai-qa-inventory')).toContainText('ارزیابی: 1');
  expect(outside).toEqual([]);
 });
 test('AI133-02 forged authorization envelope, hostile header and production method denied',async({page,request})=>{
