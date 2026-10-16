@@ -80,6 +80,9 @@ jobs:
           mkdir -p TestResults
           python3 tools/qa/check_worker_external_custody.py --manifest docs/governance/ai-worker-external-custody-template.json --report-json TestResults/fullci-worker-external-custody-unconfigured.json
           python3 -c "import json; r=json.load(open('TestResults/fullci-worker-external-custody-unconfigured.json')); assert r['status']=='EXTERNAL_CUSTODY_NOT_CONFIGURED' and not r['independent_custody_verified'] and not r['external_receipt_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
+          # TRN-TECH-159 receipt claims are never a trusted external receipt.
+          # All receipt integrity/replay/role-spoof attacks run in the
+          # canonical tests/ai discovery (same mandatory 14-job workflow).
       - name: Verify comprehensive national release blockers remain DENY-ONLY
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_national_launch_blockers.py' -v
@@ -898,6 +901,11 @@ jobs:
           TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_out" python3 tools/qa/worker_evidence_handoff.py export
           cp -- "$handoff_out/worker-evidence.zip" "$handoff_in/worker-evidence.zip"
           TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_evidence_handoff.py receive
+          # The test-only Worker archive is structurally verifiable.
+          # An *absent* outside custodian receipt must remain unverified;
+          # never fabricate a signature, identity or provider acknowledgement.
+          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/check_worker_external_receipt.py --claim-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/external-receipt-denial.json"
+          python3 -c "import json,os; r=json.load(open(os.environ['TARANOM_AI_RESTART_WITNESS'].replace('epoch-witness.json','external-receipt-denial.json'))); assert r['status']=='EXTERNAL_RECEIPT_NOT_SUPPLIED' and not r['external_receipt_verified'] and not r['independent_custody_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
           # Independently verify full chain after real restart under the
           # verifier-only POSIX account and prove requester DAC denial.
           python3 tools/qa/worker_posix_custody_ci.py finish
