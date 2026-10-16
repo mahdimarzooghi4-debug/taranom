@@ -1,0 +1,12 @@
+name: Sprint 149 Worker External Custody Discovery Full Regression
+on:
+  push:
+    branches: [sprint-149-worker-external-custody-gate]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

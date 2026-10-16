@@ -75,6 +75,11 @@ jobs:
           python3 -m unittest discover -s tests/ai -p 'test_*.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_external_ai_boundary.py' -v
           python3 tools/policy_checks/check_external_ai_boundary.py --root .
+          # TRN-TECH-158: inspect only an EMPTY provider-neutral template;
+          # real outside custody remains UNCONFIGURED, never CI-approved.
+          mkdir -p TestResults
+          python3 tools/qa/check_worker_external_custody.py --manifest docs/governance/ai-worker-external-custody-template.json --report-json TestResults/fullci-worker-external-custody-unconfigured.json
+          python3 -c "import json; r=json.load(open('TestResults/fullci-worker-external-custody-unconfigured.json')); assert r['status']=='EXTERNAL_CUSTODY_NOT_CONFIGURED' and not r['independent_custody_verified'] and not r['external_receipt_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
       - name: Verify comprehensive national release blockers remain DENY-ONLY
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_national_launch_blockers.py' -v

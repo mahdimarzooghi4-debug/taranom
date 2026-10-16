@@ -339,6 +339,10 @@ DISPATCHER_BRANCHES = {
         "sprint-148-worker-posix-custody-qa",
         "main",
     ),
+    "sprint-149-worker-external-custody-gate.yml": (
+        "sprint-149-worker-external-custody-gate",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
