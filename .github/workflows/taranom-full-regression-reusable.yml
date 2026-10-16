@@ -781,6 +781,7 @@ jobs:
           export TARANOM_AI_WORKER_BRIDGE_TEST_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
           export TARANOM_AI_WORKER_REPO_ROOT="$GITHUB_WORKSPACE"
           export TARANOM_AI_WORKER_QA=CI_EPHEMERAL_ONLY
+          export TARANOM_AI_RESTART_WITNESS="$bridge_tmp/epoch-witness.json"
           TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY python3 -c 'import os; from ai.taranom_internal.registry import OfflineRegistry; OfflineRegistry(os.environ["TARANOM_AI_BRIDGE_TEST_DB"]).initialize()'
           cd src/Taranom.CenterWorkflow.Demo
           TARANOM_AI_ADMIN_QA=CI_EPHEMERAL_ONLY TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
@@ -840,7 +841,7 @@ jobs:
           # TRN-TECH-153: real Kestrel process restart under disposable CI.
           # Show counter loss explicitly; NEVER declare continuity/audit success.
           cd "$GITHUB_WORKSPACE"
-          python3 tests/center_demo/test_ai_worker_restart_http.py before "$bridge_tmp/epoch-witness.json"
+          test -s "$TARANOM_AI_RESTART_WITNESS"
           kill -TERM "$server_pid"
           wait "$server_pid" || true
           stopped=0
@@ -863,7 +864,7 @@ jobs:
             echo "Disposable Kestrel restart failed" >&2
             exit 1
           fi
-          python3 tests/center_demo/test_ai_worker_restart_http.py after "$bridge_tmp/epoch-witness.json"
+          python3 tests/center_demo/test_ai_worker_restart_http.py
       - name: Rehearse real isolated PostgreSQL dump and restored journal integrity
         env:
           CI: 'true'

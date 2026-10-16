@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""TRN-TECH-153: actual Kestrel process restart and volatile telemetry loss.
+"""TRN-TECH-153: canonical once-only post-restart Kestrel/Worker HTTP test.
 
-Called only by the isolated 14-job CI harness with 'before' and 'after' phases.
-The witness file includes NO sensitive identifiers, host credential or model.
+The independent pre-restart witness is written by the existing canonical
+test_ai_worker_bridge_http.py. This test must be invoked once, with no
+extra CLI arguments, by the full CI test census. No secret is recorded.
 """
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 import re
-import sys
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
@@ -64,27 +65,16 @@ def post_inventory():
 
 
 def main():
-    assert len(sys.argv)==3 and sys.argv[1] in ("before","after")
-    mode=sys.argv[1]
-    witness=Path(sys.argv[2])
+    witness=Path(os.environ["TARANOM_AI_RESTART_WITNESS"])
     assert witness.is_absolute() and witness.parent.name.startswith("taranom-worker-")
-    status,data=get("telemetry")
-    assert status==200
-    current=check(data)
-    if mode=="before":
-        assert current["started"]>=5
-        assert current["success"]>=5
-        assert current["inFlight"]==0
-        witness.write_text(json.dumps({
-            "instanceEpoch":current["instanceEpoch"],
-            "started":current["started"],
-            "success":current["success"]
-        }),encoding="utf-8")
-        print("PASS: pre-restart volatile synthetic counters observed")
-        return
     old=json.loads(witness.read_text(encoding="utf-8"))
+    assert set(old)=={"instanceEpoch","started","success"}
     assert re.fullmatch("[0-9a-f]{32}",old["instanceEpoch"])
-    assert old["started"]>0 and old["success"]>0
+    assert type(old["started"]) is int and old["started"]>0
+    assert type(old["success"]) is int and old["success"]>0
+    status,response=get("telemetry")
+    assert status==200
+    current=check(response)
     assert current["instanceEpoch"] != old["instanceEpoch"],(
         "STILL_SAME_PROCESS_OR_STALE_TELEMETRY",current)
     assert all(current[k]==0 for k in COUNTERS),current
@@ -92,24 +82,24 @@ def main():
     _,later=get("telemetry")
     fresh=check(later)
     assert fresh["instanceEpoch"]==current["instanceEpoch"]
-    assert fresh["started"]==1 and fresh["success"]==1, fresh
-    assert fresh["inFlight"]==0 and fresh["peakInFlight"]==1, fresh
+    assert fresh["started"]==1 and fresh["success"]==1,fresh
+    assert fresh["inFlight"]==0 and fresh["peakInFlight"]==1,fresh
     assert fresh["capacityDenied"]==0,fresh
     for k in ("processRejected","invalidReply","deadlineExceeded",
               "requestCancelled","unavailable"):
         assert fresh[k]==0,fresh
-    serialized=json.dumps(later)
-    for secret in ("test:restart-read","test:team-1","requestRef",
-                   "tenantRef","mac","Authorization","Bearer"):
-        assert secret not in serialized,secret
+    encoded=json.dumps(later)
+    for sensitive in ("test:restart-read","test:team-1","requestRef",
+                      "tenantRef","mac","Authorization","Bearer"):
+        assert sensitive not in encoded,sensitive
     try:
         get("telemetry?tenantRef=test:other")
     except HTTPError as exc:
         assert exc.code==403
     else:
         raise AssertionError("FORGED_TELEMETRY_QUERY_ACCEPTED")
-    print("PASS: actual Kestrel restart detected; old counts intentionally lost, "
-          "new epoch starts empty and read-only worker recovers")
+    print("PASS: real Kestrel host restart changed ephemeral epoch, lost old "
+          "counters and recovered one authenticated synthetic read-only worker response")
 
 
 if __name__ == "__main__":
