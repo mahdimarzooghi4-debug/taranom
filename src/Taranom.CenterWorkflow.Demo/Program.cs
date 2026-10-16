@@ -70,6 +70,16 @@ if (orgQaEnabled)
         new PgScopedDraftWorkQueue(orgQaDatabase);
 }
 
+// TRN-TECH-147: opt-in ephemeral AI admin DENIAL journal only.
+var aiAdminQaEnabled = Environment.GetEnvironmentVariable("TARANOM_AI_ADMIN_QA") ==
+    "CI_EPHEMERAL_ONLY";
+if (aiAdminQaEnabled)
+{
+    await Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial.InitializeAsync(dataSource);
+    Taranom.CenterWorkflow.Demo.AiAdminQaHttp.Journal =
+        new Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial(dataSource);
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(4320));
 var app = builder.Build();
@@ -113,6 +123,14 @@ app.Use(async (context, next) =>
     }
     await next();
 });
+
+if (aiAdminQaEnabled)
+{
+    app.MapPost("/internal/demo/v1/ai-admin/denials",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AiAdminQaHttp.Record);
+    app.MapGet("/internal/demo/v1/ai-admin/denials/{requestRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AiAdminQaHttp.Read);
+}
 
 CenterHttp.Store = store;
 app.MapGet("/internal/demo/v1/centers/{centerRef}",

@@ -768,7 +768,7 @@ jobs:
       - name: Execute PostgreSQL-backed real HTTP, denied business authority and UI QA
         run: |
           cd src/Taranom.CenterWorkflow.Demo
-          TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
+          TARANOM_AI_ADMIN_QA=CI_EPHEMERAL_ONLY TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           cd "$GITHUB_WORKSPACE"
@@ -781,6 +781,7 @@ jobs:
             echo "Ephemeral test-only center host failed to start" >&2
             exit 1
           fi
+          python3 tests/center_demo/test_ai_admin_denial_http.py
           python3 tests/center_demo/test_real_center_demo_http.py
           python3 tests/center_demo/test_proofing_correction_http.py
           python3 tests/center_demo/test_late_evidence_work_item_http.py

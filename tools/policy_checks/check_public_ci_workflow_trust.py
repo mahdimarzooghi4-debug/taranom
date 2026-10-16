@@ -295,6 +295,10 @@ DISPATCHER_BRANCHES = {
         "sprint-137-ai-admin-cryptographic-identity-gate",
         "main",
     ),
+    "sprint-138-ai-admin-audited-deny-gateway.yml": (
+        "sprint-138-ai-admin-audited-deny-gateway",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
