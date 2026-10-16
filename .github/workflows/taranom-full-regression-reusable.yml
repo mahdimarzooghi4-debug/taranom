@@ -655,6 +655,18 @@ jobs:
           python3 tests/ops_status/test_three_market_entry_http.py
           python3 tests/ops_status/test_payer_scenario_http.py
           python3 tests/ops_status/test_unified_local_surfaces_http.py
+          export TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY
+          export TARANOM_AI_HTTP_TEST_ONLY=CI_EPHEMERAL_ONLY
+          ai_tmp=$(mktemp -d /tmp/taranom-ai-qa.XXXXXX)
+          python3 -m ai.taranom_internal.server --db "$ai_tmp/registry.sqlite3" > "$RUNNER_TEMP/taranom-ai-http.log" 2>&1 &
+          qa_pid=$!
+          trap 'kill "$qa_pid" "$server_pid" 2>/dev/null || true' EXIT
+          ai_ready=0
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail --max-time 2 http://127.0.0.1:4335/internal/ai-test/v1/health > /dev/null; then ai_ready=1; break; fi
+            sleep 1
+          done
+          test "$ai_ready" = "1"
           cd apps/ops-web
           CI=true npm run test:e2e
       - name: Upload local-only HTTP/browser QA records

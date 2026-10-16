@@ -1,0 +1,14 @@
+name: Sprint 133 Internal AI Offline QA Control Plane Full Regression
+on:
+  push:
+    branches: [sprint-133-offline-ai-admin-qa-http-ui]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
