@@ -85,7 +85,7 @@ internal static class AiWorkerQaHttp
             try
             {
                 var counts = await InvokeAsync(request.GetString()!,
-                    tenant.GetString()!);
+                    tenant.GetString()!,c.RequestAborted);
                 return Reply(200, "SYNTHETIC_INVENTORY_OBSERVED",
                     new {requestRef=request.GetString(), tenantRef=tenant.GetString(),
                         counts, workerStatus="SYNTHETIC_READ_ONLY"});
@@ -109,7 +109,7 @@ internal static class AiWorkerQaHttp
     }
 
     private static async Task<Dictionary<string,int>> InvokeAsync(
-        string request, string tenant)
+        string request, string tenant,CancellationToken aborted)
     {
         var root = Environment.GetEnvironmentVariable("TARANOM_AI_WORKER_REPO_ROOT");
         var db = Environment.GetEnvironmentVariable("TARANOM_AI_BRIDGE_TEST_DB");
@@ -152,34 +152,57 @@ internal static class AiWorkerQaHttp
         info.Environment["TARANOM_AI_BRIDGE_TEST_DB"] = db;
         info.Environment["TARANOM_AI_WORKER_BRIDGE_TEST_KEY"] = rawKey;
 
+        return await RunProcessAsync(info,payload,key,request,tenant,nonce,
+            TimeSpan.FromSeconds(4),aborted);
+    }
+
+    // One-shot subprocess lifecycle shared by the fixed HTTP caller and
+    // the nondeployable fault-injection probe. A caller cannot choose the
+    // process path or fault mode through any HTTP request.
+    internal static async Task<Dictionary<string,int>> RunProcessAsync(
+        ProcessStartInfo info,string payload,byte[] key,string request,
+        string tenant,string nonce,TimeSpan deadline,
+        CancellationToken abort = default)
+    {
+        if (Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY") !=
+                "CI_EPHEMERAL_ONLY" ||
+            info.UseShellExecute || !info.RedirectStandardInput ||
+            !info.RedirectStandardOutput || !info.RedirectStandardError ||
+            key.Length != 32 || Encoding.UTF8.GetByteCount(payload) is < 2 or > 1024 ||
+            deadline <= TimeSpan.Zero || deadline > TimeSpan.FromSeconds(4))
+            throw new InvalidOperationException("TEST_WORKER_EXECUTION_DENIED");
+
         using var process = new Process { StartInfo = info };
-        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(abort);
+        stop.CancelAfter(deadline);
         var started = false;
         try
         {
             started = process.Start();
             if (!started)
                 throw new InvalidOperationException("WORKER_START_FAILED");
-            // Stderr is never inherited into .NET/CI logs. Concurrent bounded
-            // draining prevents worker diagnostics from blocking stdout.
+            // Both streams are read at the same time, never written to
+            // console or logs. Cap stdout and stderr independently.
             var errorTask = ReadCappedAsync(
-                process.StandardError.BaseStream, 1024, limit.Token);
-            await process.StandardInput.WriteAsync(payload.AsMemory(), limit.Token);
+                process.StandardError.BaseStream,1024,stop.Token);
+            await process.StandardInput.WriteAsync(payload.AsMemory(),stop.Token);
             process.StandardInput.Close();
             var (output,count) = await ReadCappedAsync(
-                process.StandardOutput.BaseStream, 2048, limit.Token);
+                process.StandardOutput.BaseStream,2048,stop.Token);
             if (count is < 2 or > 2048)
-                throw new InvalidOperationException("WORKER_OUTPUT_LIMIT");
-            await process.WaitForExitAsync(limit.Token);
+                throw new InvalidOperationException("WORKER_OUTPUT_INVALID");
+            await process.WaitForExitAsync(stop.Token);
             var (_,errors) = await errorTask;
             if (errors != 0 || process.ExitCode != 0)
-                throw new InvalidOperationException("WORKER_FAILED");
+                throw new InvalidOperationException("WORKER_PROCESS_REJECTED");
             return AiWorkerReplyVerifier.Verify(
-                output.AsMemory(0,count), key,request,tenant,nonce);
+                output.AsMemory(0,count),key,request,tenant,nonce);
         }
-        catch (OperationCanceledException)
+        catch(OperationCanceledException)
         {
-            throw new InvalidOperationException("WORKER_DEADLINE_EXCEEDED");
+            // Either child deadline or host request aborted. Both deny;
+            // there is no retry or synthetic success fallback.
+            throw new InvalidOperationException("WORKER_CANCELLED_OR_TIMED_OUT");
         }
         finally
         {
@@ -190,9 +213,14 @@ internal static class AiWorkerQaHttp
                     if (!process.HasExited)
                         process.Kill(entireProcessTree:true);
                 }
-                // A child may finish precisely between status and kill.
-                catch (InvalidOperationException) { }
-                catch (Win32Exception) { }
+                catch(InvalidOperationException) { }
+                catch(Win32Exception) { }
+                // Best effort process reaping after kill. Do not hide the
+                // original failure if the OS cannot reap within 2 seconds.
+                try { await process.WaitForExitAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(2)); }
+                catch(TimeoutException) { }
+                catch(InvalidOperationException) { }
             }
         }
     }

@@ -311,6 +311,10 @@ DISPATCHER_BRANCHES = {
         "sprint-141-ai-worker-boundary-adversarial-hardening",
         "main",
     ),
+    "sprint-142-ai-worker-fault-recovery-controls.yml": (
+        "sprint-142-ai-worker-fault-recovery-controls",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
