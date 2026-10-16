@@ -137,5 +137,103 @@ class EphemeralRecoveryContractTests(unittest.TestCase):
         self.assertIn('"national_release_allowed": False',source)
 
 
+    @staticmethod
+    def secure_catalog():
+        import verify_postgres_security as sec
+        tables=[{"name":n,"rls":True,"force":True,"acl":[]}
+                for n in sorted(sec.MANDATORY_RLS)]
+        policies=[{"name":n} for n in sorted(sec.MANDATORY_POLICIES)]
+        functions=[{"name":n,"public_execute":False,"acl":[]}
+                   for n in sorted(sec.PRIVILEGED_FUNCTIONS)]
+        roles=[{"name":n,"login":True,"inherit":False,"superuser":False,
+                "bypassrls":False,"createrole":False,"createdb":False}
+               for n in sorted(sec.SCOPE_ROLES)]
+        permissions=[{"role":role,"table":table,"select":True,
+                      "insert":table=="internal_test_org_draft_item",
+                      "update":False,"delete":False,"truncate":False}
+                     for role in sorted(sec.SCOPE_ROLES)
+                     for table in sorted(sec.MANDATORY_RLS)]
+        return {"tables":tables,"policies":policies,"functions":functions,
+                "scope_roles":roles,"effective_privileges":permissions}
+
+    def test_secure_security_catalog_can_be_compared(self):
+        import verify_postgres_security as sec
+        value=self.secure_catalog()
+        self.assertIsNone(sec.attest_parity(value,value))
+
+    def test_restore_cannot_downgrade_force_rls(self):
+        import verify_postgres_security as sec
+        import copy
+        data=self.secure_catalog()
+        downgraded=copy.deepcopy(data)
+        downgraded["tables"][0]["force"]=False
+        with self.assertRaisesRegex(sec.SecurityMismatch,
+                                    "RECOVERY_RLS_FORCE_DISABLED"):
+            sec.attest_parity(data,downgraded)
+
+    def test_restore_cannot_drop_scoped_policy(self):
+        import verify_postgres_security as sec
+        import copy
+        data=self.secure_catalog()
+        downgraded=copy.deepcopy(data)
+        downgraded["policies"].pop()
+        with self.assertRaisesRegex(sec.SecurityMismatch,
+                                    "RECOVERY_RLS_POLICIES_MISSING"):
+            sec.attest_parity(data,downgraded)
+
+    def test_restore_cannot_make_definer_function_public(self):
+        import verify_postgres_security as sec
+        import copy
+        data=self.secure_catalog()
+        downgraded=copy.deepcopy(data)
+        downgraded["functions"][0]["public_execute"]=True
+        with self.assertRaisesRegex(sec.SecurityMismatch,
+                                    "RECOVERY_PUBLIC_FUNCTION_EXECUTE"):
+            sec.attest_parity(data,downgraded)
+
+    def test_restore_cannot_enable_rls_bypass_login(self):
+        import verify_postgres_security as sec
+        import copy
+        data=self.secure_catalog()
+        downgraded=copy.deepcopy(data)
+        downgraded["scope_roles"][0]["bypassrls"]=True
+        with self.assertRaisesRegex(sec.SecurityMismatch,
+                                    "RECOVERY_SCOPE_ROLE_ESCALATED"):
+            sec.attest_parity(data,downgraded)
+
+    def test_restore_cannot_grant_direct_activity_insert(self):
+        import verify_postgres_security as sec
+        import copy
+        data=self.secure_catalog()
+        downgraded=copy.deepcopy(data)
+        for access in downgraded["effective_privileges"]:
+            if access["table"]=="internal_test_org_draft_activity":
+                access["insert"]=True
+                break
+        with self.assertRaisesRegex(sec.SecurityMismatch,
+                                    "RECOVERY_DIRECT_JOURNAL_INSERT"):
+            sec.attest_parity(data,downgraded)
+
+    def test_restore_cannot_silently_expand_table_acl(self):
+        import verify_postgres_security as sec
+        import copy
+        data=self.secure_catalog()
+        downgraded=copy.deepcopy(data)
+        downgraded["tables"][0]["acl"].append(["PUBLIC","postgres","SELECT",False])
+        with self.assertRaisesRegex(sec.SecurityMismatch,
+                                    "RECOVERY_SECURITY_POSTURE_DIFFERS"):
+            sec.attest_parity(data,downgraded)
+
+    def test_restore_cannot_grant_delete_on_org_draft(self):
+        import verify_postgres_security as sec
+        import copy
+        data=self.secure_catalog()
+        downgraded=copy.deepcopy(data)
+        downgraded["effective_privileges"][0]["delete"]=True
+        with self.assertRaisesRegex(sec.SecurityMismatch,
+                                    "RECOVERY_SCOPE_RIGHTS_ESCALATED"):
+            sec.attest_parity(data,downgraded)
+
+
 if __name__=="__main__":
     unittest.main()
