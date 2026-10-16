@@ -154,7 +154,7 @@ def main(argv=None):
     try:
         root=a.root.resolve(strict=True)
         doc=read_manifest(root/MANIFEST)
-        if os.environ.get("GITHUB_EVENT_NAME")!="push":
+        if os.environ.get("GITHUB_EVENT_NAME")!="push" or os.environ.get("GITHUB_REF_NAME")!=TARGET_BRANCH:
             # PR merge refs are not the submitted branch commit. Never
             # make an assertion about exact PR ancestry from that checkout,
             # but still produce an explicitly non-authorizing CI artifact.

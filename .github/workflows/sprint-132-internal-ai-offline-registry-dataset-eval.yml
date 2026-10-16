@@ -1,0 +1,14 @@
+name: Sprint 132 Internal AI Offline Registry Dataset Evaluation Full Regression
+on:
+  push:
+    branches: [sprint-132-internal-ai-offline-registry-dataset-eval]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
