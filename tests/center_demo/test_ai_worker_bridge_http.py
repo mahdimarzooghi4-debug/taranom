@@ -6,6 +6,16 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 ROOT = "http://127.0.0.1:4320/internal/demo/v1/ai-worker/inventory"
+METRICS = "http://127.0.0.1:4320/internal/demo/v1/ai-worker/telemetry"
+
+def metrics(headers=None, query=""):
+    req=Request(METRICS+query,headers=(headers or {}),method="GET")
+    try:
+        with urlopen(req,timeout=12) as response:
+            return response.status,json.loads(response.read())
+    except HTTPError as err:
+        return err.code,json.loads(err.read())
+
 
 
 def send(body=None, headers=None, raw=None):
@@ -28,6 +38,22 @@ def check(value):
 
 
 def main():
+    initial_status, initial = metrics()
+    assert initial_status == 200, initial
+    check(initial)
+    assert initial["outcome"] == "EPHEMERAL_WORKER_COUNTERS_ONLY", initial
+    start = initial["data"]
+    assert not start["auditEvidence"]
+    assert not start["operationalIdentityVerified"]
+    assert not start["productionReady"]
+    assert start["inFlight"] == 0
+    for key in ("Authorization", "Cookie", "X-Tenant", "X-Role"):
+        status, rejected = metrics({key: "fake"})
+        check(rejected)
+        assert status == 403, (key,rejected)
+    status, rejected = metrics(query="?tenantRef=test:other")
+    check(rejected)
+    assert status == 403
     values = []
     for n in range(5):
         status, v = send({"requestRef": f"test:bridge-{n}",
@@ -73,6 +99,25 @@ def main():
         assert (s == 200 and r["data"]["counts"]["datasets"] == 0) or (
             s == 503 and r["outcome"] == "WORKER_CAPACITY_EXCEEDED"), (s,r)
     assert any(s == 200 for s, _ in many), many
+    status, current = metrics()
+    assert status == 200, current
+    check(current)
+    s = current["data"]
+    expected_ok = 5 + sum(code == 200 for code,_ in many)
+    expected_full = sum(code == 503 for code,_ in many)
+    assert s["started"] - start["started"] == expected_ok, s
+    assert s["success"] - start["success"] == expected_ok, s
+    assert s["capacityDenied"] - start["capacityDenied"] == expected_full, s
+    assert s["inFlight"] == 0, s
+    assert s["peakInFlight"] <= 4, s
+    for failure in ("processRejected","invalidReply","deadlineExceeded",
+                    "requestCancelled","unavailable"):
+        assert s[failure] == start[failure], s
+    encoded=json.dumps(current)
+    for forbidden in ("test:bridge-", "test:team-1",
+                      "TOP_SECRET_TEST_SENTINEL","requestRef","tenantRef",
+                      "mac", "token", "sourceRef"):
+        assert forbidden not in encoded, forbidden
     print("PASS: signed local .NET/Python/SQLite synthetic inventory bridge; "
           "bounded input, denied authority, isolation and parallel calls")
 

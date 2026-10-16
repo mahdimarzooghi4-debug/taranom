@@ -14,6 +14,7 @@ internal static class AiWorkerQaHttp
     private const string Contract = "TRN-TECH-149";
     private const string Command = "READ_SYNTHETIC_INVENTORY";
     private static readonly SemaphoreSlim Slots = new(4, 4);
+    private static readonly AiWorkerQaCounters Counters = new();
 
     private static bool Ref(string? value) =>
         value is {Length: >= 6 and <= 128} &&
@@ -33,6 +34,38 @@ internal static class AiWorkerQaHttp
             committeeApproved = false, data
         }, statusCode: code);
 
+    // Read-only, never durable audit evidence. Host-level loopback and
+    // forwarded-authority denial continue to run before this handler.
+    internal static IResult Telemetry(HttpContext c)
+    {
+        if (Environment.GetEnvironmentVariable("TARANOM_AI_WORKER_QA") !=
+            "CI_EPHEMERAL_ONLY" ||
+            Environment.GetEnvironmentVariable("TARANOM_AI_ADMIN_QA") !=
+            "CI_EPHEMERAL_ONLY")
+            return Reply(503, "WORKER_NOT_CONFIGURED");
+        if (!Safe(c)) return Reply(403, "UNTRUSTED_REQUEST_HINT");
+        var s = Counters.Snapshot();
+        return Reply(200,"EPHEMERAL_WORKER_COUNTERS_ONLY",new {
+            s.Started, s.Success, s.ProcessRejected, s.InvalidReply,
+            s.DeadlineExceeded, s.RequestCancelled, s.Unavailable,
+            s.CapacityDenied, s.InFlight, s.PeakInFlight,
+            auditEvidence=false, operationalIdentityVerified=false,
+            productionReady=false
+        });
+    }
+
+    private static bool Safe(HttpContext c) =>
+        !c.Request.Headers.ContainsKey("Authorization") &&
+        !c.Request.Headers.ContainsKey("Cookie") &&
+        !c.Request.Headers.ContainsKey("X-Actor") &&
+        !c.Request.Headers.ContainsKey("X-Tenant") &&
+        !c.Request.Headers.ContainsKey("X-Organization") &&
+        !c.Request.Headers.ContainsKey("X-Role") &&
+        !c.Request.Headers.ContainsKey("X-Org-Scope") &&
+        !c.Request.Headers.ContainsKey("X-Admin") &&
+        !c.Request.Headers.ContainsKey("Origin") &&
+        c.Request.Query.Count == 0;
+
     internal static async Task<IResult> Read(HttpContext c)
     {
         if (Environment.GetEnvironmentVariable("TARANOM_AI_WORKER_QA") !=
@@ -40,16 +73,7 @@ internal static class AiWorkerQaHttp
             Environment.GetEnvironmentVariable("TARANOM_AI_ADMIN_QA") !=
             "CI_EPHEMERAL_ONLY")
             return Reply(503, "WORKER_NOT_CONFIGURED");
-        if (c.Request.Headers.ContainsKey("Authorization") ||
-            c.Request.Headers.ContainsKey("Cookie") ||
-            c.Request.Headers.ContainsKey("X-Actor") ||
-            c.Request.Headers.ContainsKey("X-Tenant") ||
-            c.Request.Headers.ContainsKey("X-Organization") ||
-            c.Request.Headers.ContainsKey("X-Role") ||
-            c.Request.Headers.ContainsKey("X-Admin") ||
-            c.Request.Headers.ContainsKey("Origin") ||
-            c.Request.Query.Count != 0)
-            return Reply(403, "UNTRUSTED_REQUEST_HINT");
+        if (!Safe(c)) return Reply(403, "UNTRUSTED_REQUEST_HINT");
         if (c.Request.ContentType != "application/json" ||
             c.Request.ContentLength is null or < 2 or > 256)
             return Reply(400, "INVALID_TEST_FRAME");
@@ -81,17 +105,31 @@ internal static class AiWorkerQaHttp
             // Immediate capacity admission; never queue unbounded child
             // processes behind unauthenticated CI-only requests.
             if (!Slots.Wait(0))
+            {
+                Counters.DenyCapacity();
                 return Reply(503, "WORKER_CAPACITY_EXCEEDED");
+            }
+            Counters.Start();
+            var outcome = AiWorkerQaResult.Unavailable;
             try
             {
                 var counts = await InvokeAsync(request.GetString()!,
                     tenant.GetString()!,c.RequestAborted);
+                outcome = AiWorkerQaResult.Success;
                 return Reply(200, "SYNTHETIC_INVENTORY_OBSERVED",
                     new {requestRef=request.GetString(), tenantRef=tenant.GetString(),
                         counts, workerStatus="SYNTHETIC_READ_ONLY"});
             }
+            catch (AiWorkerQaFailure rejected)
+            {
+                outcome = rejected.Result;
+                throw;
+            }
             finally
             {
+                // One completion per admitted request even for unexpected
+                // IO/process errors. There are no request-specific labels.
+                Counters.Complete(outcome);
                 Slots.Release();
             }
         }
@@ -180,7 +218,7 @@ internal static class AiWorkerQaHttp
         {
             started = process.Start();
             if (!started)
-                throw new InvalidOperationException("WORKER_START_FAILED");
+                throw new AiWorkerQaFailure(AiWorkerQaResult.Unavailable);
             // Both streams are read at the same time, never written to
             // console or logs. Cap stdout and stderr independently.
             var errorTask = ReadCappedAsync(
@@ -190,19 +228,28 @@ internal static class AiWorkerQaHttp
             var (output,count) = await ReadCappedAsync(
                 process.StandardOutput.BaseStream,2048,stop.Token);
             if (count is < 2 or > 2048)
-                throw new InvalidOperationException("WORKER_OUTPUT_INVALID");
+                throw new AiWorkerQaFailure(AiWorkerQaResult.InvalidReply);
             await process.WaitForExitAsync(stop.Token);
             var (_,errors) = await errorTask;
             if (errors != 0 || process.ExitCode != 0)
-                throw new InvalidOperationException("WORKER_PROCESS_REJECTED");
-            return AiWorkerReplyVerifier.Verify(
-                output.AsMemory(0,count),key,request,tenant,nonce);
+                throw new AiWorkerQaFailure(AiWorkerQaResult.ProcessRejected);
+            try
+            {
+                return AiWorkerReplyVerifier.Verify(
+                    output.AsMemory(0,count),key,request,tenant,nonce);
+            }
+            catch (InvalidOperationException)
+            {
+                throw new AiWorkerQaFailure(AiWorkerQaResult.InvalidReply);
+            }
         }
         catch(OperationCanceledException)
         {
-            // Either child deadline or host request aborted. Both deny;
-            // there is no retry or synthetic success fallback.
-            throw new InvalidOperationException("WORKER_CANCELLED_OR_TIMED_OUT");
+            // Both deny. Counters distinguish caller abort from deadline
+            // without preserving request, tenant, credential or model labels.
+            throw new AiWorkerQaFailure(abort.IsCancellationRequested
+                ? AiWorkerQaResult.RequestCancelled
+                : AiWorkerQaResult.DeadlineExceeded);
         }
         finally
         {
