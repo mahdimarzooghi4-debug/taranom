@@ -62,12 +62,17 @@ def main():
     s, v = send(raw=b'{"requestRef":"test:a","requestRef":"test:b","tenantRef":"test:t"}')
     check(v)
     assert s == 400, v
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    # The child-process boundary has a hard four-slot capacity. Depending on
+    # timing, a simultaneous burst either finishes read-only or fails closed.
+    with ThreadPoolExecutor(max_workers=12) as pool:
         many = list(pool.map(lambda n: send({
             "requestRef": f"test:concurrent-{n}", "tenantRef": "test:team-1"}),
-            range(8)))
-    assert all(s == 200 and r["data"]["counts"]["datasets"] == 0
-               for s, r in many), many
+            range(24)))
+    for s, r in many:
+        check(r)
+        assert (s == 200 and r["data"]["counts"]["datasets"] == 0) or (
+            s == 503 and r["outcome"] == "WORKER_CAPACITY_EXCEEDED"), (s,r)
+    assert any(s == 200 for s, _ in many), many
     print("PASS: signed local .NET/Python/SQLite synthetic inventory bridge; "
           "bounded input, denied authority, isolation and parallel calls")
 

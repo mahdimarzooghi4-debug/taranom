@@ -52,13 +52,17 @@ class IsolatedWorkerTests(unittest.TestCase):
         p = self.run_worker(json.dumps(frame()))
         self.assertEqual(0, p.returncode, p.stderr)
         v = json.loads(p.stdout)
-        self.assertEqual(9, len(v))
+        self.assertEqual(12, len(v))
+        self.assertEqual(CONTRACT, v["contract"])
+        self.assertEqual(CMD, v["command"])
+        self.assertEqual("test:team-1", v["tenantRef"])
         self.assertEqual({"datasets": 0, "modelVersions": 0, "evaluations": 0,
                           "trainingRuns": 0, "benchmarks": 0}, v["counts"])
         for denied in ("adminAuthenticated", "productionAllowed", "trainingAllowed"):
             self.assertIs(v[denied], False)
-        self.assertEqual(sign(v["requestRef"], v["nonce"], v["status"],
-                              0, 0, 0, 0, 0), v["mac"])
+        self.assertEqual(sign(CONTRACT, CMD, v["requestRef"], v["tenantRef"],
+                              v["nonce"], v["status"], "true", "false",
+                              "false", "false", 0, 0, 0, 0, 0), v["mac"])
         self.assertNotIn(KEY, p.stdout)
 
     def test_invalid_auth_and_bypass_fields_fail_without_echo(self):

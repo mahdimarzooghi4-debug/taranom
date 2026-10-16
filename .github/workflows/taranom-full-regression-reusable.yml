@@ -731,6 +731,7 @@ jobs:
         run: |
           dotnet restore src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj
           dotnet build src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj --no-restore --configuration Release
+          dotnet run --project tests/Taranom.AiWorkerBoundary.Probe/Taranom.AiWorkerBoundary.Probe.csproj --configuration Release
           cd apps/center-demo-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck

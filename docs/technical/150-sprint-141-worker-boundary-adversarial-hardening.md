@@ -1,0 +1,12 @@
+# TRN-TECH-150 — Sprint 141: fail-closed internal AI worker boundary hardening
+
+Stacked on the Sprint 140 synthetic transport. Production IPC topology and authorized operator/service identity are still OPEN (TRN-TECH-005).
+
+## Executed engineering changes
+1. The Python one-shot worker now binds its complete response to the same HMAC challenge: exact contract/command, request and tenant references, nonce, synthetic-only and all false authority flags, stable status and all five deterministic read-only counters. The transport continues to mint a fresh nonce per invocation and a CI-only random key.
+2. The .NET response verifier is independently exercised using a new C# executable probe with 30 adversarial/positive cases. It rejects a duplicate or missing response field, extra field, malformed UTF-8/JSON, wrong JSON type, mutated scope, wrong nonce, forged status, authority escalation, missing/invalid/changed MAC, negative/oversized counts and request/tenant replay. Parsing exceptions become a single redacted fail-closed error. This is **not** authentication or a human approval.
+3. The .NET HTTP host caps concurrent Python subprocesses to four. Saturation returns an explicit non-authorizing 503 without queueing requests or spawning a fifth child. Standard error is redirected, read with a byte cap and never logged. The stdout cap (2048 bytes), time budget (4 seconds), one-shot execution, tightly allowlisted child environment and process-tree termination on cancellation remain. Only an exact authenticated and denied-authority response can be surfaced as successful synthetic inventory.
+4. Real Kestrel + SQLite integration stress-tests 24 parallel read requests, accepting only success with zero synthetic counts or explicit capacity-denied 503. Actual Python subprocess tests validate the tightened response protocol. The existing 14-job CI and security checks remain mandatory; no legacy tests are skipped.
+
+## Explicit exclusions
+No runtime model inference/training, real datasets, patient identity, consent approval, OIDC, human committee authority, Production model activation or public worker API. This is test-only hardening, **not** selected Production process isolation/sandbox, service identity, credential management, rate limits, transport or security certification. National launch remains DENIED_BY_DEFAULT. PR stays Draft/Open/Unmerged. No Merge, Ready for Review, Stage, QA Gate, Release or Production.

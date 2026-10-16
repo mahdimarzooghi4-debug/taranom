@@ -307,6 +307,10 @@ DISPATCHER_BRANCHES = {
         "sprint-140-internal-ai-worker-isolated-ipc",
         "main",
     ),
+    "sprint-141-ai-worker-boundary-adversarial-hardening.yml": (
+        "sprint-141-ai-worker-boundary-adversarial-hardening",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
