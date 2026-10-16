@@ -259,6 +259,10 @@ DISPATCHER_BRANCHES = {
         "sprint-128-org-draft-pinned-activity-timeline",
         "main",
     ),
+    "sprint-129-stage4-synthetic-test-preflight.yml": (
+        "sprint-129-stage4-synthetic-test-preflight",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "contract": "TRN-TECH-138",
+  "intent": "STAGE4_TEST_PREPARATION_ONLY",
+  "scope": "EPHEMERAL_SYNTHETIC_REHEARSAL_ONLY",
+  "environment": "UNDEFINED_NO_STAGE4_TARGET_CONFIRMED",
+  "stage_test_admission": "DENIED_UNVERIFIED",
+  "stage_deployment_authorized": false,
+  "production_release_allowed": false,
+  "real_user_access_allowed": false,
+  "external_partner_access_verified": false,
+  "reviewers_independently_approved": false,
+  "github_snapshot": {
+    "observed_date": "2026-10-16",
+    "is_live_verification": false,
+    "pr_numbers": [
+      132,
+      133,
+      134,
+      135,
+      136,
+      137,
+      138,
+      139,
+      140
+    ],
+    "chain_is_merged": false
+  },
+  "pending_stage_gates": [
+    "FORMAL_STAGE4_SCOPE_AND_ENVIRONMENT",
+    "EPHEMERAL_NETWORK_AND_DATA_ISOLATION",
+    "INDEPENDENT_CODE_AND_SECURITY_APPROVAL",
+    "EXPLICIT_STAGE_TEST_DEPLOYMENT_AUTHORIZATION",
+    "ISOLATED_STAGE_BACKUP_AND_ROLLBACK_EVIDENCE",
+    "STAGE_SERVICE_IDENTITY_AND_PERMISSION_MODEL",
+    "GITHUB_STACK_INTEGRATION_AND_EXACT_HEAD_QA"
+  ],
+  "national_blockers_manifest": "docs/governance/national-launch-blockers.json",
+  "non_authorization_note": "This is a static GitHub snapshot and source inventory, NOT live evidence of Stage 4 configuration, independent reviewer approval, legitimate data authority, actual access control, deployment permission or production readiness."
+}
