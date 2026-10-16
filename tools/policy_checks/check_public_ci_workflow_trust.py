@@ -327,6 +327,10 @@ DISPATCHER_BRANCHES = {
         "sprint-145-ai-worker-synthetic-evidence-ledger",
         "main",
     ),
+    "sprint-146-ai-worker-independent-anchor.yml": (
+        "sprint-146-ai-worker-independent-anchor",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -1,0 +1,12 @@
+name: Sprint 146 AI Worker Independent Anchor Full Regression
+on:
+  push:
+    branches: [sprint-146-ai-worker-independent-anchor]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
