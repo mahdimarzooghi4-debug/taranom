@@ -10,3 +10,6 @@ using System.Runtime.CompilerServices;
 // TRN-TECH-151: independently execute malicious process behavior against
 // the same synthetic host runner, without adding any HTTP fault switch.
 [assembly: InternalsVisibleTo("Taranom.AiWorkerFault.Probe")]
+
+// TRN-TECH-152: test-only telemetry invariants, no runtime disclosure.
+[assembly: InternalsVisibleTo("Taranom.AiWorkerTelemetry.Probe")]

@@ -315,6 +315,10 @@ DISPATCHER_BRANCHES = {
         "sprint-142-ai-worker-fault-recovery-controls",
         "main",
     ),
+    "sprint-143-ai-worker-operational-fault-telemetry.yml": (
+        "sprint-143-ai-worker-operational-fault-telemetry",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

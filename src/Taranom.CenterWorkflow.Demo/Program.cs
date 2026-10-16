@@ -138,6 +138,8 @@ if (aiAdminQaEnabled &&
     // TRN-TECH-149: disposable read-only child-process inventory probe.
     app.MapPost("/internal/demo/v1/ai-worker/inventory",
         (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AiWorkerQaHttp.Read);
+    app.MapGet("/internal/demo/v1/ai-worker/telemetry",
+        (Func<HttpContext,IResult>)Taranom.CenterWorkflow.Demo.AiWorkerQaHttp.Telemetry);
 }
 
 if (aiAdminQaEnabled)
