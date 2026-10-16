@@ -283,6 +283,10 @@ DISPATCHER_BRANCHES = {
         "sprint-134-synthetic-ai-shadow-training-benchmark",
         "main",
     ),
+    "sprint-135-shadow-qa-workspace-e2e.yml": (
+        "sprint-135-shadow-qa-workspace-e2e",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
