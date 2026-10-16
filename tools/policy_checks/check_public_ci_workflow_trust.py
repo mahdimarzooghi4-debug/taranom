@@ -279,6 +279,10 @@ DISPATCHER_BRANCHES = {
         "sprint-133-offline-ai-admin-qa-http-ui",
         "main",
     ),
+    "sprint-134-synthetic-ai-shadow-training-benchmark.yml": (
+        "sprint-134-synthetic-ai-shadow-training-benchmark",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

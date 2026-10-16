@@ -168,6 +168,8 @@ class OfflineRegistry:
                 """)
         finally:
             con.close()
+        from .training import bootstrap
+        bootstrap(self)
 
     def freeze_dataset(self,claim):
         c=_mapping(claim,("tenant","version_ref","purpose_ref","category_ref",
@@ -319,7 +321,9 @@ class OfflineRegistry:
                            model_ref,version_ref,mse,mae,status
                            FROM evaluations WHERE tenant=? ORDER BY evaluation_ref""",
                            (tenant,))]
+        from .training import inventory
+        shadow=inventory(self,tenant)
         return {"tenant":tenant,"datasets":datasets,"model_versions":models,
-                "evaluations":evaluations,"stage_admission":"DENIED",
+                "evaluations":evaluations,**shadow,"stage_admission":"DENIED",
                 "production_allowed":False,"training_allowed":False,
                 "real_data_eligible":False}
