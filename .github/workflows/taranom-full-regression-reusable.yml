@@ -906,6 +906,10 @@ jobs:
           # never fabricate a signature, identity or provider acknowledgement.
           TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_external_receipt_denial.py --claim-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/external-receipt-denial.json"
           python3 -c "import json,os; r=json.load(open(os.environ['TARANOM_AI_RESTART_WITNESS'].replace('epoch-witness.json','external-receipt-denial.json'))); assert r['status']=='EXTERNAL_RECEIPT_NOT_SUPPLIED' and not r['external_receipt_verified'] and not r['independent_custody_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
+          # TRN-TECH-160: no outside identity authority or trusted root.
+          # Even a perfectly matching synthetic claim remains unverified.
+          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_custodian_identity_boundary.py --identity-template docs/governance/ai-worker-custodian-identity-template.json --receipt-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/custodian-identity-denial.json"
+          python3 -c "import json,os,pathlib; r=json.loads((pathlib.Path(os.environ['TARANOM_AI_RESTART_WITNESS']).parent/'custodian-identity-denial.json').read_text()); assert r['status']=='EXTERNAL_CUSTODIAN_IDENTITY_NOT_CONFIGURED' and r['synthetic_archive_shape_checked'] and not r['custodian_identity_verified'] and not r['separate_admin_domain_verified'] and not r['trust_anchor_verified'] and not r['external_receipt_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
           # Independently verify full chain after real restart under the
           # verifier-only POSIX account and prove requester DAC denial.
           python3 tools/qa/worker_posix_custody_ci.py finish
