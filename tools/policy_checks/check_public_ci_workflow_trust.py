@@ -343,6 +343,10 @@ DISPATCHER_BRANCHES = {
         "sprint-149-worker-external-custody-gate",
         "main",
     ),
+    "sprint-150-worker-external-receipt-denial.yml": (
+        "sprint-150-worker-external-receipt-denial",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
