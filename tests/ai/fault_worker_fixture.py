@@ -11,7 +11,7 @@ import sys
 import time
 
 def signed(key, *fields):
-    return hmac.new(key,"\\n".join(map(str,fields)).encode(),
+    return hmac.new(key,"\n".join(map(str,fields)).encode(),
                     hashlib.sha256).hexdigest().upper()
 
 def main():
@@ -39,13 +39,13 @@ def main():
         sys.stdout.buffer.write(b"{broken")
         return 0
     if mode=="invalid-utf8":
-        sys.stdout.buffer.write(b"\\xff\\xfe{}")
+        sys.stdout.buffer.write(b"\xff\xfe{}")
         return 0
     if mode=="overflow-stdout":
         sys.stdout.buffer.write(b"x"*3000)
         return 0
     if mode=="stderr-leak":
-        sys.stderr.write("TOP_SECRET_TEST_SENTINEL\\n")
+        sys.stderr.write("TOP_SECRET_TEST_SENTINEL\n")
     if mode=="overflow-stderr":
         sys.stderr.write("TOP_SECRET_TEST_SENTINEL"*300)
     if mode=="bad-proof":
