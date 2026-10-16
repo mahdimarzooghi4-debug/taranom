@@ -657,8 +657,8 @@ jobs:
           python3 tests/ops_status/test_unified_local_surfaces_http.py
           export TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY
           export TARANOM_AI_HTTP_TEST_ONLY=CI_EPHEMERAL_ONLY
-          mkdir -p "$RUNNER_TEMP/taranom-ai-qa"
-          python3 -m ai.taranom_internal.server --db "$RUNNER_TEMP/taranom-ai-qa/registry.sqlite3" > "$RUNNER_TEMP/taranom-ai-http.log" 2>&1 &
+          ai_tmp=$(mktemp -d /tmp/taranom-ai-qa.XXXXXX)
+          python3 -m ai.taranom_internal.server --db "$ai_tmp/registry.sqlite3" > "$RUNNER_TEMP/taranom-ai-http.log" 2>&1 &
           qa_pid=$!
           trap 'kill "$qa_pid" "$server_pid" 2>/dev/null || true' EXIT
           ai_ready=0
