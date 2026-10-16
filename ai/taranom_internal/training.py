@@ -79,6 +79,8 @@ def fit(registry,claim):
     if len(rows)<2:raise RegistryRejected("SHADOW_TRAINING_NEEDS_TWO_SAMPLES")
     with registry.transaction() as con:
         manifest_sha,manifest=dataset(con,c["tenant"],c["dataset_ref"])
+        from .provenance import guard_manifest
+        guard_manifest(con,c["tenant"],manifest)
         if {r[0] for r in rows}!=partition(manifest,"TRAINING"):
             raise RegistryRejected("TRAINING_PARTITION_MISMATCH")
         with localcontext() as ctx:
@@ -149,6 +151,8 @@ def compare(registry,claim):
         manifest_sha,manifest=dataset(con,c["tenant"],dataset_ref)
         if artifact["dataset_sha256"]!=manifest_sha:
             raise RegistryRejected("STALE_SHADOW_DATASET")
+        from .provenance import guard_manifest
+        guard_manifest(con,c["tenant"],manifest)
         model=con.execute("""SELECT artifact_sha FROM model_versions
           WHERE tenant=? AND model_ref=? AND version_ref=?""",
           (c["tenant"],model_ref,version_ref)).fetchone()

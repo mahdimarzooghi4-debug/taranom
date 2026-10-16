@@ -168,8 +168,10 @@ class OfflineRegistry:
                 """)
         finally:
             con.close()
-        from .training import bootstrap
-        bootstrap(self)
+        from .training import bootstrap as bootstrap_training
+        from .provenance import bootstrap as bootstrap_provenance
+        bootstrap_training(self)
+        bootstrap_provenance(self)
 
     def freeze_dataset(self,claim):
         c=_mapping(claim,("tenant","version_ref","purpose_ref","category_ref",
@@ -181,6 +183,8 @@ class OfflineRegistry:
         snapshot["sources"]=sources
         digest=_hash(snapshot)
         with self.transaction() as con:
+            from .provenance import guard_manifest
+            guard_manifest(con,c["tenant"],snapshot)
             existing=con.execute("SELECT version_ref,manifest_sha FROM datasets WHERE tenant=? AND request_ref=?",
                 (c["tenant"],c["request_ref"])).fetchone()
             if existing:
@@ -267,6 +271,8 @@ class OfflineRegistry:
             if not dataset:
                 raise RegistryRejected("DATASET_NOT_FOUND")
             manifest=json.loads(dataset[0])
+            from .provenance import guard_manifest
+            guard_manifest(con,c["tenant"],manifest)
             expected={s["source_ref"] for s in manifest["sources"]
                       if s["partition"]=="INDEPENDENT_EVALUATION"}
             if set(seen)!=expected:
@@ -322,8 +328,10 @@ class OfflineRegistry:
                            FROM evaluations WHERE tenant=? ORDER BY evaluation_ref""",
                            (tenant,))]
         from .training import inventory
+        from .provenance import read_summary
         shadow=inventory(self,tenant)
+        provenance=read_summary(self,tenant)
         return {"tenant":tenant,"datasets":datasets,"model_versions":models,
-                "evaluations":evaluations,**shadow,"stage_admission":"DENIED",
+                "evaluations":evaluations,**shadow,"source_provenance":provenance,"stage_admission":"DENIED",
                 "production_allowed":False,"training_allowed":False,
                 "real_data_eligible":False}

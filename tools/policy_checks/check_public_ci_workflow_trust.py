@@ -287,6 +287,10 @@ DISPATCHER_BRANCHES = {
         "sprint-135-shadow-qa-workspace-e2e",
         "main",
     ),
+    "sprint-136-ai-source-provenance-retirement.yml": (
+        "sprint-136-ai-source-provenance-retirement",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

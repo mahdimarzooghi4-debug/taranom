@@ -143,7 +143,10 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(403,"UNTRUSTED_REQUEST_AUTHORITY");return
         part=urlsplit(self.path)
         from .training import fit, compare
-        actions={BASE+"/datasets":self.registry.freeze_dataset,
+        from .provenance import register,retire
+        actions={BASE+"/source-claims":lambda body:register(self.registry,body),
+                 BASE+"/source-retire":lambda body:retire(self.registry,body),
+                 BASE+"/datasets":self.registry.freeze_dataset,
                  BASE+"/models":self.registry.register_model,
                  BASE+"/evaluations":self.registry.evaluate_synthetic,
                  BASE+"/shadow-training":lambda data:fit(self.registry,data),

@@ -21,7 +21,8 @@ def main(args=None):
     listing=cmd.add_parser("inventory")
     listing.add_argument("--tenant",required=True)
     for name in ("freeze-dataset","register-model","evaluate",
-                 "train-shadow","benchmark-shadow"):
+                 "train-shadow","benchmark-shadow",
+                 "register-source-claim","retire-source"):
         item=cmd.add_parser(name)
         item.add_argument("--input-json",required=True)
     a=p.parse_args(args)
@@ -39,7 +40,10 @@ def main(args=None):
                 raise RegistryRejected("UNTRUSTED_JSON_INPUT_FILE")
             raw=json.loads(f.read_text("utf-8"),object_pairs_hook=_unique)
             from .training import fit, compare
-            command={"freeze-dataset":registry.freeze_dataset,
+            from .provenance import register,retire
+            command={"register-source-claim":lambda value:register(registry,value),
+                     "retire-source":lambda value:retire(registry,value),
+                     "freeze-dataset":registry.freeze_dataset,
                      "register-model":registry.register_model,
                      "evaluate":registry.evaluate_synthetic,
                      "train-shadow":lambda value:fit(registry,value),
