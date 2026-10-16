@@ -49,6 +49,10 @@ internal static class AiWorkerQaHttp
             s.Started, s.Success, s.ProcessRejected, s.InvalidReply,
             s.DeadlineExceeded, s.RequestCancelled, s.Unavailable,
             s.CapacityDenied, s.InFlight, s.PeakInFlight,
+            s.InstanceEpoch,
+            // A new epoch says exactly that volatile counters restarted;
+            // it is NOT continuity attestation, uptime or audit evidence.
+            counterResetOnRestart=true, continuityAttested=false,
             auditEvidence=false, operationalIdentityVerified=false,
             productionReady=false
         });

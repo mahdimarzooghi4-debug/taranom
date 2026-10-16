@@ -10,7 +10,9 @@ if (Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY") !=
 var counter = new AiWorkerQaCounters();
 var empty=counter.Snapshot();
 if(empty.Started != 0 || empty.InFlight != 0 ||
-    empty.CapacityDenied != 0 || empty.PeakInFlight != 0)
+    empty.CapacityDenied != 0 || empty.PeakInFlight != 0 ||
+    empty.InstanceEpoch.Length != 32 ||
+    !empty.InstanceEpoch.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
     throw new InvalidOperationException("NON_EMPTY_TEST_COUNTERS");
 for(var i=0;i<4;i++) counter.Start();
 var initial=counter.Snapshot();
@@ -23,6 +25,8 @@ counter.Complete(AiWorkerQaResult.DeadlineExceeded);
 counter.DenyCapacity();
 counter.DenyCapacity();
 var mid=counter.Snapshot();
+if (mid.InstanceEpoch != empty.InstanceEpoch)
+    throw new InvalidOperationException("PROCESS_EPOCH_CHANGED_WITHOUT_RESTART");
 if(mid.Started!=4 || mid.InFlight!=0 || mid.PeakInFlight!=4 ||
     mid.Success!=1 || mid.ProcessRejected!=1 || mid.InvalidReply!=1 ||
     mid.DeadlineExceeded!=1 || mid.CapacityDenied!=2)
@@ -48,6 +52,16 @@ if(x.Started!=404 || x.InFlight!=0 || x.CapacityDenied!=82 ||
     x.ProcessRejected!=101 || x.InvalidReply!=1 || x.DeadlineExceeded!=1 ||
     x.PeakInFlight<4)
     throw new InvalidOperationException("COUNTER_CONCURRENCY_LOST");
+// A new host constructs a NEW epoch and no history. Deliberately do NOT
+// copy counters to the next process, or present a cumulative fake audit.
+var restarted = new AiWorkerQaCounters().Snapshot();
+if (restarted.InstanceEpoch == empty.InstanceEpoch ||
+    restarted.Started != 0 || restarted.Success != 0 ||
+    restarted.CapacityDenied != 0 || restarted.InFlight != 0 ||
+    restarted.PeakInFlight != 0)
+    throw new InvalidOperationException("VOLATILE_EPOCH_RESTART_NOT_DETECTED");
+if (counter.Snapshot().InstanceEpoch != empty.InstanceEpoch)
+    throw new InvalidOperationException("COUNTER_EPOCH_UNSTABLE");
 // Serialization is fixed-dimensional, contains no arbitrary actor,
 // request reference, source contents, signed frames or diagnosis.
 var serialized=JsonSerializer.Serialize(x);

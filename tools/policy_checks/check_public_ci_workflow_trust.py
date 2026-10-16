@@ -319,6 +319,10 @@ DISPATCHER_BRANCHES = {
         "sprint-143-ai-worker-operational-fault-telemetry",
         "main",
     ),
+    "sprint-144-ai-worker-lifecycle-epoch-restart.yml": (
+        "sprint-144-ai-worker-lifecycle-epoch-restart",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real Kestrel -> bounded local child Python -> SQLite synthetic inventory."""
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
@@ -46,6 +47,9 @@ def main():
     assert not start["auditEvidence"]
     assert not start["operationalIdentityVerified"]
     assert not start["productionReady"]
+    assert not start["continuityAttested"]
+    assert start["counterResetOnRestart"] is True
+    assert re.fullmatch(r"[0-9a-f]{32}", start["instanceEpoch"])
     assert start["inFlight"] == 0
     for key in ("Authorization", "Cookie", "X-Tenant", "X-Role"):
         status, rejected = metrics({key: "fake"})
@@ -103,6 +107,9 @@ def main():
     assert status == 200, current
     check(current)
     s = current["data"]
+    assert s["instanceEpoch"] == start["instanceEpoch"]
+    assert s["counterResetOnRestart"] is True
+    assert s["continuityAttested"] is False
     expected_ok = 5 + sum(code == 200 for code,_ in many)
     expected_full = sum(code == 503 for code,_ in many)
     assert s["started"] - start["started"] == expected_ok, s
