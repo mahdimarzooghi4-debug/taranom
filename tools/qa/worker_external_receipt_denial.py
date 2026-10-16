@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import re
 import sys
+from zipfile import BadZipFile
 
 import check_worker_external_custody as custody
 import worker_evidence_anchor as anchor
@@ -79,7 +80,7 @@ def inspect(archive, untrusted_claim, expected_transfer=EXPECTED_TEST_TRANSFER):
                 result["status"]="DENIED_INVALID_SYNTHETIC_ARCHIVE"
                 return result
         except (AssertionError,ValueError,TypeError,KeyError,IndexError,
-                UnicodeError,EOFError):
+                UnicodeError,EOFError,BadZipFile):
             result["status"]="DENIED_INVALID_SYNTHETIC_ARCHIVE"
             return result
         result["internal_archive_shape_checked"]=True
