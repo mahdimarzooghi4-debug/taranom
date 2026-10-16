@@ -147,7 +147,6 @@ class OfflineRegistry:
         con=_open(self.database)
         try:
             con.execute("BEGIN IMMEDIATE")
-            con.executescript("")  # Do not implicitly commit while transactional.
             yield con
             con.commit()
         except BaseException:
