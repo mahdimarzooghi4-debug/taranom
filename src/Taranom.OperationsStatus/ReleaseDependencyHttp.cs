@@ -58,6 +58,59 @@ internal static class ReleaseDependencyHttp
         });
     }
 
+    // TRN-TECH-169: informational, source-pinned handoff only. It is never
+    // independent evidence verification, owner assignment or release approval.
+    internal static IResult ReadPacket(HttpContext context)
+    {
+        var query=context.Request.Query;
+        if(query.Count!=1||!query.TryGetValue("requirement",out var values)||
+            values.Count!=1||!Required.Contains(values[0]??"",StringComparer.Ordinal))
+            return Results.Json(new {
+                contract="TRN-TECH-169",status="INVALID_REQUIREMENT",
+                releaseAdmission="DENIED_BY_DEFAULT",formalApprovalObserved=false,
+                nationalReleaseAllowed=false
+            },statusCode:StatusCodes.Status400BadRequest);
+        var source=TryRead(Environment.GetEnvironmentVariable("TARANOM_OPS_REPO_ROOT"));
+        if(source is null)
+            return Results.Json(new {
+                contract="TRN-TECH-169",status="SOURCE_UNVERIFIABLE",
+                releaseAdmission="DENIED_BY_DEFAULT",formalApprovalObserved=false,
+                nationalReleaseAllowed=false,candidates=Array.Empty<object>()
+            },statusCode:StatusCodes.Status503ServiceUnavailable);
+        var category=values[0]!;
+        var row=source.Value.Rows.SingleOrDefault(x=>x.Requirement==category);
+        if(row is null)
+            return Results.Json(new {
+                contract="TRN-TECH-169",status="SOURCE_UNVERIFIABLE",
+                releaseAdmission="DENIED_BY_DEFAULT",formalApprovalObserved=false,
+                nationalReleaseAllowed=false,candidates=Array.Empty<object>()
+            },statusCode:StatusCodes.Status503ServiceUnavailable);
+        var candidates=source.Value.Candidates.Where(c=>
+            c.RelatedUnverifiedRequirements.Contains(category,StringComparer.Ordinal))
+            .ToArray();
+        var linked=source.Value.Candidates.Where(c=>
+            row.AffectedEpicIds.Contains(c.EpicId,StringComparer.Ordinal)&&
+            c.EvidenceLane=="NONPRODUCTION_REFERENCE_ONLY").Length;
+        if(linked!=row.LinkedNonProductionCandidatePairsInAffectedEpics||
+            (row.AffectedEpicIds.Length>0&&candidates.Length==0))
+            return Results.Json(new {
+                contract="TRN-TECH-169",status="SOURCE_UNVERIFIABLE",
+                releaseAdmission="DENIED_BY_DEFAULT",formalApprovalObserved=false,
+                nationalReleaseAllowed=false,candidates=Array.Empty<object>()
+            },statusCode:StatusCodes.Status503ServiceUnavailable);
+        return Results.Json(new {
+            contract="TRN-TECH-169",status="DRAFT_UNVERIFIED_REVIEW_PACKET",
+            sourceFingerprint=source.Value.Fingerprint,requirement=row.Requirement,
+            blockedDomainIds=row.BlockedDomainIds,affectedEpicIds=row.AffectedEpicIds,
+            affectedMarketOrNationalIds=row.AffectedMarketOrNationalIds,
+            policyRefs=row.PolicyRefs,candidates,
+            decisionOwner="NOT_ASSIGNED",humanDecisionStatus="NOT_OBSERVED",
+            independentEvidenceVerified=false,formalApprovalObserved=false,
+            productionReady=false,nationalReleaseAllowed=false,
+            releaseAdmission="DENIED_BY_DEFAULT"
+        });
+    }
+
     private static (string Fingerprint,ReleaseDependencyRow[] Rows,
         EngineeringCandidate[] Candidates)? TryRead(string? repo)
     {

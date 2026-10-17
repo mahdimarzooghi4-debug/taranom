@@ -50,6 +50,8 @@ app.MapGet("/internal/ops/v1/epic-progress",
     (Func<HttpContext,IResult>)EpicProgressHttp.Read);
 app.MapGet("/internal/ops/v1/dependencies",
     (Func<HttpContext,IResult>)ReleaseDependencyHttp.Read);
+app.MapGet("/internal/ops/v1/dependencies/packet",
+    (Func<HttpContext,IResult>)ReleaseDependencyHttp.ReadPacket);
 // The Epic candidate inventory is never Production acceptance or a release gate.
 app.MapGet("/internal/ops/v1/status", () =>
 {

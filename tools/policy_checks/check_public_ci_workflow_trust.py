@@ -383,6 +383,10 @@ DISPATCHER_BRANCHES = {
         "sprint-159-dependency-capability-drilldown",
         "main",
     ),
+    "sprint-160-unverified-evidence-review-packets.yml": (
+        "sprint-160-unverified-evidence-review-packets",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
