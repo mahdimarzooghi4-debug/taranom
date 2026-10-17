@@ -51,19 +51,12 @@ internal static class ProofingDemoHttp
             !req.ContentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) ||
             req.ContentLength is > 1400)
             return Answer(400, "INVALID_TEST_INPUT", caseRef, null);
-        var bytes = new byte[1401];
-        var len = 0;
         try
         {
-            while (len < bytes.Length)
-            {
-                var n = await req.Body.ReadAsync(bytes.AsMemory(len));
-                if (n == 0) break;
-                len += n;
-            }
-            if (len is < 2 or > 1400)
+            var body = await SyntheticCommandIngress.ReadAsync(req,1400);
+            if(body is null)
                 return Answer(400, "INVALID_TEST_INPUT", caseRef, null);
-            using var doc = JsonDocument.Parse(bytes.AsMemory(0,len),
+            using var doc = JsonDocument.Parse(body.AsMemory(),
                 new JsonDocumentOptions { MaxDepth = 3 });
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object ||
@@ -178,6 +171,8 @@ internal static class ProofingDemoHttp
         {
             return Answer(400, "INVALID_TEST_INPUT", caseRef, null);
         }
+        catch (OperationCanceledException)
+        {return Answer(503,"TEST_JOURNAL_UNVERIFIABLE",caseRef,null);}
         catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException
                                     or OverflowException)
         {

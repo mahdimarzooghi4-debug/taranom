@@ -54,18 +54,11 @@ internal static class LateEvidenceHttp
             || req.ContentLength is > 1400)
             return Reply(400,"INVALID_TEST_INPUT",id,null);
 
-        var bytes=new byte[1401];
-        var len=0;
         try
         {
-            while (len < bytes.Length)
-            {
-                var n=await req.Body.ReadAsync(bytes.AsMemory(len));
-                if(n==0)break;
-                len+=n;
-            }
-            if(len is < 2 or > 1400)return Reply(400,"INVALID_TEST_INPUT",id,null);
-            using var document=JsonDocument.Parse(bytes.AsMemory(0,len),
+            var body=await SyntheticCommandIngress.ReadAsync(req,1400);
+            if(body is null)return Reply(400,"INVALID_TEST_INPUT",id,null);
+            using var document=JsonDocument.Parse(body.AsMemory(),
                 new JsonDocumentOptions{MaxDepth=3});
             var root=document.RootElement;
             if(root.ValueKind!=JsonValueKind.Object ||
@@ -140,6 +133,8 @@ internal static class LateEvidenceHttp
         {
             return Reply(400,"INVALID_TEST_INPUT",id,null);
         }
+        catch (OperationCanceledException)
+        {return Reply(503,"SOURCE_INTEGRITY_UNVERIFIABLE",id,null);}
         catch (Exception ex) when (ex is NpgsqlException or
                                       InvalidOperationException or OverflowException)
         {
