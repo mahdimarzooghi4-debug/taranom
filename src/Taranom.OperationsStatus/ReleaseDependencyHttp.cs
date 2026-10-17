@@ -88,9 +88,9 @@ internal static class ReleaseDependencyHttp
         var candidates=source.Value.Candidates.Where(c=>
             c.RelatedUnverifiedRequirements.Contains(category,StringComparer.Ordinal))
             .ToArray();
-        var linked=source.Value.Candidates.Where(c=>
+        var linked=source.Value.Candidates.Count(c=>
             row.AffectedEpicIds.Contains(c.EpicId,StringComparer.Ordinal)&&
-            c.EvidenceLane=="NONPRODUCTION_REFERENCE_ONLY").Length;
+            c.EvidenceLane=="NONPRODUCTION_REFERENCE_ONLY");
         if(linked!=row.LinkedNonProductionCandidatePairsInAffectedEpics||
             (row.AffectedEpicIds.Length>0&&candidates.Length==0))
             return Results.Json(new {
