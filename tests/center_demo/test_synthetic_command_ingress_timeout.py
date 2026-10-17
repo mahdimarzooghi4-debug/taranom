@@ -56,7 +56,10 @@ def attempt(name):
         assert response.status==200
         state=json.loads(response.read())
     assert state["contract"].startswith("TRN-TECH-")
-    assert state["events"]==[],(name,state)
+    if name=="support":
+        assert state["followUps"]==[] and state["followUpCount"]==0,(name,state)
+    else:
+        assert state["events"]==[],(name,state)
     assert state["nationalReleaseAllowed"] is False
     if name=="proofing":
         assert state["caseRevision"]==0
