@@ -371,6 +371,10 @@ DISPATCHER_BRANCHES = {
         "sprint-156-operations-dependency-worklist-ui",
         "main",
     ),
+    "sprint-157-epic-engineering-gap-workbench.yml": (
+        "sprint-157-epic-engineering-gap-workbench",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

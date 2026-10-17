@@ -7,12 +7,22 @@ type Requirement={
  decisionOwner:'NOT_ASSIGNED';evidenceStatus:'BLOCKED_UNVERIFIED';
  humanDecisionStatus:'NOT_OBSERVED';formalAcceptanceObserved:false;
 };
+type EngineeringCandidate={
+ id:string;epicId:string;title:string;
+ evidenceClass:'SYNTHETIC_INTERNAL'|'DISCONNECTED_UI_ONLY'|'OFFLINE_POLICY_ONLY'|'NO_EVIDENCE';
+ codeRef:string|null;testRef:string|null;
+ evidenceLane:'MISSING_CODE_TEST_REFERENCE'|'NONPRODUCTION_REFERENCE_ONLY';
+ epicMissingExternalEvidence:string[];relatedUnverifiedRequirements:string[];
+ formalAcceptanceObserved:false;engineeringReadiness:'NOT_ESTABLISHED';
+};
 type Source={
  contract:'TRN-TECH-165';status:'DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST';
  releaseAdmission:'DENIED_BY_DEFAULT';formalApprovalObserved:false;
  productionReady:false;nationalReleaseAllowed:false;
  blockedDomains:17;candidateCapabilities:39;requiredOwnersUnassigned:18;
  sourceFingerprint:string;workItems:Requirement[];
+ engineeringCandidates:EngineeringCandidate[];
+ technicalReferencesPresent:26;technicalReferencesMissing:13;
 };
 type State={kind:'LOADING'|'UNAVAILABLE'}|{kind:'READY';snapshot:Source};
 const domains=[...Array.from({length:13},(_,i)=>'TRN-EP-'+String(i+1).padStart(2,'0')),
@@ -36,7 +46,10 @@ function valid(x:unknown):x is Source{
  a.blockedDomains!==17||a.candidateCapabilities!==39||
  a.requiredOwnersUnassigned!==18||
  typeof a.sourceFingerprint!=='string'||!/^[a-f0-9]{64}$/.test(a.sourceFingerprint)||
- !Array.isArray(a.workItems)||a.workItems.length!==18)return false;
+ !Array.isArray(a.workItems)||a.workItems.length!==18||
+ a.technicalReferencesPresent!==26||a.technicalReferencesMissing!==13||
+ !Array.isArray(a.engineeringCandidates)||a.engineeringCandidates.length!==39)
+ return false;
  const seen=new Set<string>(),covered=new Set<string>();
  for(const item of a.workItems){
   if(!item||!required.includes(item.requirement)||seen.has(item.requirement)||
@@ -61,13 +74,51 @@ function valid(x:unknown):x is Source{
    item.affectedMarketOrNationalIds.some(v=>!ids.has(v)||v.startsWith('TRN-EP-')))
    return false;
  }
- return seen.size===18&&covered.size===17;
+ if(seen.size!==18||covered.size!==17)return false;
+ const candidates=new Set<string>();const epicCounts=new Map<string,number>();
+ let nonProduction=0,missing=0;
+ const evidenceClasses=['SYNTHETIC_INTERNAL','DISCONNECTED_UI_ONLY',
+  'OFFLINE_POLICY_ONLY','NO_EVIDENCE'];
+ for(const c of a.engineeringCandidates){
+  if(!c||typeof c.id!=='string'||typeof c.epicId!=='string'||
+   !domains.slice(0,13).includes(c.epicId)||
+   !c.id.startsWith('TRN-CAP-'+c.epicId.slice(7)+'-')||
+   c.id.length!==13||!['01','02','03'].includes(c.id.slice(-2))||
+   candidates.has(c.id)||typeof c.title!=='string'||!c.title.trim()||
+   !evidenceClasses.includes(c.evidenceClass)||
+   c.formalAcceptanceObserved!==false||c.engineeringReadiness!=='NOT_ESTABLISHED'||
+   !Array.isArray(c.epicMissingExternalEvidence)||
+   c.epicMissingExternalEvidence.length===0||
+   c.epicMissingExternalEvidence.some(x=>typeof x!=='string'||!required.includes(x))||
+   !Array.isArray(c.relatedUnverifiedRequirements)||!c.relatedUnverifiedRequirements.length||
+   c.relatedUnverifiedRequirements.some(x=>!seen.has(x)))return false;
+  const knownRelated=a.workItems.filter(w=>w.affectedEpicIds.includes(c.epicId))
+   .map(w=>w.requirement);
+  if(knownRelated.length!==c.relatedUnverifiedRequirements.length||
+    new Set(c.relatedUnverifiedRequirements).size!==knownRelated.length||
+    c.relatedUnverifiedRequirements.some(x=>!knownRelated.includes(x)))return false;
+  if(c.evidenceClass==='NO_EVIDENCE'){
+   if(c.evidenceLane!=='MISSING_CODE_TEST_REFERENCE'||c.codeRef!==null||c.testRef!==null)return false;
+   missing++;
+  }else{
+   if(c.evidenceLane!=='NONPRODUCTION_REFERENCE_ONLY'||
+    typeof c.codeRef!=='string'||!c.codeRef||
+    typeof c.testRef!=='string'||!c.testRef)return false;
+   nonProduction++;
+  }
+  candidates.add(c.id);
+  epicCounts.set(c.epicId,(epicCounts.get(c.epicId)??0)+1);
+ }
+ return candidates.size===39&&epicCounts.size===13&&
+  [...epicCounts.values()].every(n=>n===3)&&nonProduction===26&&missing===13;
 }
 export function ReleaseDependenciesApp(){
  const [state,setState]=useState<State>({kind:'LOADING'});
  const [cycle,setCycle]=useState(0);
  const [query,setQuery]=useState('');
  const [domain,setDomain]=useState('ALL');
+ const [engineeringEpic,setEngineeringEpic]=useState('ALL');
+ const [lane,setLane]=useState('ALL');
  useEffect(()=>{
   const abort=new AbortController();setState({kind:'LOADING'});
   const read=async()=>{
@@ -88,6 +139,10 @@ export function ReleaseDependenciesApp(){
   (!query.trim()||(x.requirement+' '+x.blockedDomainIds.join(' ')+
    ' '+x.policyRefs.join(' ')).toLowerCase().includes(query.trim().toLowerCase()))
  )??[],[source,domain,query]);
+ const engineering=useMemo(()=>source?.engineeringCandidates.filter(x=>
+  (engineeringEpic==='ALL'||x.epicId===engineeringEpic)&&
+  (lane==='ALL'||x.evidenceLane===lane)
+ )??[],[source,engineeringEpic,lane]);
  return <div dir="rtl" className="release-dependencies">
   <a href="#dependencies-main" className="skip">پرش به محتوای اصلی</a>
   <header><h1>صف وابستگی‌های تکمیل محصول ترنم</h1>
@@ -110,7 +165,9 @@ export function ReleaseDependenciesApp(){
       <div className="metric"><strong>{source.blockedDomains}</strong>حوزه انتشار مسدود</div>
       <div className="metric"><strong>{source.workItems.length}</strong>دسته وابستگی باز</div>
       <div className="metric"><strong>{source.candidateCapabilities}</strong>قابلیت پیشنهادی، نه پذیرفته‌شده</div>
-      <div className="metric"><strong>{source.requiredOwnersUnassigned}</strong>مسئول تعیین‌شده در این فهرست: صفر</div>
+      <div className="metric"><strong>{source.requiredOwnersUnassigned}</strong>دسته وابستگی بدون متولی ثبت‌شده</div>
+      <div className="metric"><strong>{source.technicalReferencesPresent}</strong>معیار با ارجاع فنی آزمایشی</div>
+      <div className="metric"><strong>{source.technicalReferencesMissing}</strong>معیار فاقد ارجاع کد و آزمون</div>
      </div>
      <small>اثر انگشت منبع: <code>{source.sourceFingerprint}</code></small>
     </>}
@@ -136,7 +193,37 @@ export function ReleaseDependenciesApp(){
      <p><strong>مدرک: {item.evidenceStatus} | تصمیم انسانی: {item.humanDecisionStatus} | مسئول: {item.decisionOwner}</strong></p>
     </article>)}</div>
    </section>}
-   <footer>TRN-TECH-165 | فقط‌خواندنی | فاقد اختیار انسانی/بالینی/مالی | DENIED_BY_DEFAULT</footer>
+   {source&&<section className="panel" aria-labelledby="engineering-title">
+    <h2 id="engineering-title">ماتریس مهندسی و وابستگی بیرونی هر Epic</h2>
+    <p>ارجاع کد و آزمون تنها نشانه وجود نمونه فنی است، نه مجوز کدنویسی قابلیت واقعی،
+     تکمیل آن، تأیید مدرک یا آمادگی Production. همه موارد به شواهد واقعی وابسته‌اند.</p>
+    <div className="toolbar">
+     <label>حوزه Epic
+      <select value={engineeringEpic} onChange={e=>setEngineeringEpic(e.target.value)}>
+       <option value="ALL">تمام ۱۳ Epic</option>
+       {domains.slice(0,13).map(id=><option key={id} value={id}>{id}</option>)}
+      </select></label>
+     <label>نوع فاصله فنی
+      <select value={lane} onChange={e=>setLane(e.target.value)}>
+       <option value="ALL">تمام ۳۹ معیار پیشنهادی</option>
+       <option value="NONPRODUCTION_REFERENCE_ONLY">دارای ارجاع کد و آزمون غیرعملیاتی</option>
+       <option value="MISSING_CODE_TEST_REFERENCE">فاقد ارجاع کد و آزمون</option>
+      </select></label>
+    </div>
+    <p role="status" data-testid="engineering-count">
+     {engineering.length} معیار پیشنهادی؛ آمادگی مهندسی همه نامشخص و انتشار مسدود است.
+    </p>
+    {engineering.map(c=><article key={c.id} data-engineering-candidate>
+     <h3>{c.id} — {c.title}</h3>
+     <p>حوزه: {c.epicId} | مسیر مدرک: {c.evidenceLane}</p>
+     <p>ارجاع کد: <code>{c.codeRef??'فاقد ارجاع'}</code></p>
+     <p>ارجاع آزمون: <code>{c.testRef??'فاقد ارجاع'}</code></p>
+     <p>وابستگی‌های بیرونی Epic: {c.epicMissingExternalEvidence.join('، ')}</p>
+     <p>دسته‌های تصمیم باز مرتبط: {c.relatedUnverifiedRequirements.join('، ')}</p>
+     <strong>آمادگی مهندسی: {c.engineeringReadiness} | پذیرش رسمی: NOT_OBSERVED</strong>
+    </article>)}
+   </section>}
+   <footer>TRN-TECH-165/166 | فقط‌خواندنی | فاقد اختیار انسانی/بالینی/مالی | DENIED_BY_DEFAULT</footer>
   </main>
  </div>;
 }
