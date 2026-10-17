@@ -109,6 +109,23 @@ function valid(x:unknown):x is Source{
   candidates.add(c.id);
   epicCounts.set(c.epicId,(epicCounts.get(c.epicId)??0)+1);
  }
+ // TRN-TECH-168: a self-consistent but forged join must never look authoritative.
+ // Reconstruct each Epic's missing evidence and each row's nonproduction pair count
+ // from the independently projected cross-references, not from claimed counts.
+ const presentByEpic=new Map<string,number>();
+ for(const c of a.engineeringCandidates){
+  if(c.evidenceLane==='NONPRODUCTION_REFERENCE_ONLY')
+   presentByEpic.set(c.epicId,(presentByEpic.get(c.epicId)??0)+1);
+  const expected=a.workItems.filter(w=>w.affectedEpicIds.includes(c.epicId))
+   .map(w=>w.requirement);
+  if(c.epicMissingExternalEvidence.length!==expected.length||
+   new Set(c.epicMissingExternalEvidence).size!==expected.length||
+   c.epicMissingExternalEvidence.some(x=>!expected.includes(x)))return false;
+ }
+ for(const w of a.workItems){
+  const derived=w.affectedEpicIds.reduce((sum,id)=>sum+(presentByEpic.get(id)??0),0);
+  if(w.linkedNonProductionCandidatePairsInAffectedEpics!==derived)return false;
+ }
  return candidates.size===39&&epicCounts.size===13&&
   [...epicCounts.values()].every(n=>n===3)&&nonProduction===26&&missing===13;
 }
@@ -119,6 +136,7 @@ export function ReleaseDependenciesApp(){
  const [domain,setDomain]=useState('ALL');
  const [engineeringEpic,setEngineeringEpic]=useState('ALL');
  const [lane,setLane]=useState('ALL');
+ const [selectedRequirement,setSelectedRequirement]=useState('ALL');
  useEffect(()=>{
   const abort=new AbortController();setState({kind:'LOADING'});
   const read=async()=>{
@@ -141,8 +159,9 @@ export function ReleaseDependenciesApp(){
  )??[],[source,domain,query]);
  const engineering=useMemo(()=>source?.engineeringCandidates.filter(x=>
   (engineeringEpic==='ALL'||x.epicId===engineeringEpic)&&
-  (lane==='ALL'||x.evidenceLane===lane)
- )??[],[source,engineeringEpic,lane]);
+  (lane==='ALL'||x.evidenceLane===lane)&&
+  (selectedRequirement==='ALL'||x.relatedUnverifiedRequirements.includes(selectedRequirement))
+ )??[],[source,engineeringEpic,lane,selectedRequirement]);
  return <div dir="rtl" className="release-dependencies">
   <a href="#dependencies-main" className="skip">پرش به محتوای اصلی</a>
   <header><h1>صف وابستگی‌های تکمیل محصول ترنم</h1>
@@ -191,6 +210,7 @@ export function ReleaseDependenciesApp(){
      <p>مستندات تصمیم: {item.policyRefs.join('، ')}</p>
      <p>ارجاع‌های کد و آزمون غیرعملیاتی در Epicهای متأثر: {item.linkedNonProductionCandidatePairsInAffectedEpics}</p>
      <p><strong>مدرک: {item.evidenceStatus} | تصمیم انسانی: {item.humanDecisionStatus} | مسئول: {item.decisionOwner}</strong></p>
+     <button type="button" onClick={()=>{setEngineeringEpic('ALL');setLane('ALL');setSelectedRequirement(item.requirement);}}>نمایش قابلیت‌های مرتبط</button>
     </article>)}</div>
    </section>}
    {source&&<section className="panel" aria-labelledby="engineering-title">
@@ -203,6 +223,11 @@ export function ReleaseDependenciesApp(){
        <option value="ALL">تمام ۱۳ Epic</option>
        {domains.slice(0,13).map(id=><option key={id} value={id}>{id}</option>)}
       </select></label>
+     <label>وابستگی بیرونی برای ردیابی قابلیت‌ها
+      <select value={selectedRequirement} onChange={e=>setSelectedRequirement(e.target.value)}>
+       <option value="ALL">تمام وابستگی‌ها</option>
+       {source.workItems.map(w=><option key={w.requirement} value={w.requirement}>{w.requirement}</option>)}
+      </select></label>
      <label>نوع فاصله فنی
       <select value={lane} onChange={e=>setLane(e.target.value)}>
        <option value="ALL">تمام ۳۹ معیار پیشنهادی</option>
@@ -211,7 +236,7 @@ export function ReleaseDependenciesApp(){
       </select></label>
     </div>
     <p role="status" data-testid="engineering-count">
-     {engineering.length} معیار پیشنهادی؛ آمادگی مهندسی همه نامشخص و انتشار مسدود است.
+     {engineering.length} معیار پیشنهادی مرتبط؛ آمادگی مهندسی همه نامشخص و انتشار مسدود است.
     </p>
     {engineering.map(c=><article key={c.id} data-engineering-candidate>
      <h3>{c.id} — {c.title}</h3>

@@ -1,0 +1,12 @@
+name: Sprint 159 Dependency Capability Drilldown Full Regression
+on:
+  push:
+    branches: [sprint-159-dependency-capability-drilldown]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
