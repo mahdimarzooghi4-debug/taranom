@@ -359,6 +359,10 @@ DISPATCHER_BRANCHES = {
         "sprint-153-worker-trust-temporal-denial",
         "main",
     ),
+    "sprint-154-worker-time-revocation-provenance-denial.yml": (
+        "sprint-154-worker-time-revocation-provenance-denial",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
