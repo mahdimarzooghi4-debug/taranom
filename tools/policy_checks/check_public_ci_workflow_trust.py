@@ -367,6 +367,10 @@ DISPATCHER_BRANCHES = {
         "sprint-155-release-blocker-dependency-worklist",
         "main",
     ),
+    "sprint-156-operations-dependency-worklist-ui.yml": (
+        "sprint-156-operations-dependency-worklist-ui",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
