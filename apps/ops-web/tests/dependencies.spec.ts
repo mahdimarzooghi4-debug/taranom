@@ -125,3 +125,45 @@ test('ENGINEERING157-04 spoofed missing evidence and dropped proposal fail close
  await expect(page.getByTestId('dependencies-status')).toContainText('قابل تأیید نیست');
  await expect(page.locator('[data-engineering-candidate]')).toHaveCount(0);
 });
+
+test('ENGINEERING159-01 browser drills from an unverified requirement into exactly its linked proposals',async({page,request})=>{
+ const source=await (await request.get('/internal/ops/v1/dependencies')).json();
+ const code='LEGAL_OPERATOR_IDENTITY';
+ const expected=source.engineeringCandidates.filter((c:{relatedUnverifiedRequirements:string[]})=>
+  c.relatedUnverifiedRequirements.includes(code)).length;
+ expect(expected).toBeGreaterThan(0);
+ await page.goto('/operations/dependencies');
+ await page.locator('[data-dependency]').filter({has:page.getByRole('heading',{name:code})})
+  .getByRole('button',{name:'نمایش قابلیت‌های مرتبط'}).click();
+ await expect(page.getByLabel('وابستگی بیرونی برای ردیابی قابلیت‌ها')).toHaveValue(code);
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(expected);
+ await expect(page.getByTestId('engineering-count')).toContainText('انتشار مسدود');
+ await page.getByLabel('وابستگی بیرونی برای ردیابی قابلیت‌ها').selectOption('ALL');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(39);
+ await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
+});
+
+test('ENGINEERING159-02 forged nonproduction-pair cross-count clears previously valid data',async({page})=>{
+ await page.goto('/operations/dependencies');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(39);
+ await page.route('**/internal/ops/v1/dependencies',async route=>{
+  const r=await route.fetch();const x=await r.json();
+  x.workItems[0].linkedNonProductionCandidatePairsInAffectedEpics=39;
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+ });
+ await page.getByRole('button',{name:'بازخوانی وابستگی‌ها'}).click();
+ await expect(page.getByTestId('dependencies-status')).toContainText('قابل تأیید نیست');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(0);
+ await expect(page.locator('[data-dependency]')).toHaveCount(0);
+});
+
+test('ENGINEERING159-03 forged Epic-level external dependency fails closed',async({page})=>{
+ await page.route('**/internal/ops/v1/dependencies',async route=>{
+  const r=await route.fetch();const x=await r.json();
+  x.engineeringCandidates[0].epicMissingExternalEvidence=['DATA_RIGHTS_AND_CONSENT'];
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+ });
+ await page.goto('/operations/dependencies');
+ await expect(page.getByTestId('dependencies-status')).toContainText('قابل تأیید نیست');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(0);
+});
