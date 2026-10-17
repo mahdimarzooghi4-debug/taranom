@@ -50,7 +50,7 @@ class ProvenanceDenialTests(unittest.TestCase):
             self.assertIs(result[flag],False,flag)
         out=json.dumps(result)
         for forbidden in ("test:untrusted", "test:synthetic", "2026-01",
-                          "Bearer","patient","signature"):
+                          "Bearer","patient","test:forged-proof"):
             self.assertNotIn(forbidden,out)
 
     def test_empty_template_remains_unconfigured(self):
