@@ -363,6 +363,10 @@ DISPATCHER_BRANCHES = {
         "sprint-154-worker-time-revocation-provenance-denial",
         "main",
     ),
+    "sprint-155-release-blocker-dependency-worklist.yml": (
+        "sprint-155-release-blocker-dependency-worklist",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

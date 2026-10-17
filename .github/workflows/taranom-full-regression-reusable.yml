@@ -26,6 +26,13 @@ jobs:
           python3 -m unittest discover -s tests/policy_checks -p 'test_epic_capability_progress.py' -v
           python3 tools/policy_checks/check_epic_capability_progress.py --root . --report-json TestResults/fullci-epic-progress.json
           python3 -c "import json; p=json.load(open('TestResults/fullci-epic-progress.json')); assert p['status']=='DRAFT_EVIDENCE_CATALOG_ONLY' and p['epic_count']==13 and p['provisional_capabilities']==39 and p['external_blockers_unverified']==17 and p['overall_implementation_completion_pct'] is None and not p['national_release_allowed']"
+      - name: Compile source-backed national dependency worklist without invented owners
+        run: |
+          python3 -m unittest discover -s tests/policy_checks -p 'test_release_dependency_worklist.py' -v
+          python3 tools/policy_checks/build_release_dependency_worklist.py --root . --report-json TestResults/fullci-release-dependency-worklist.json --report-md TestResults/fullci-release-dependency-worklist.md --report-csv TestResults/fullci-release-dependency-worklist.csv
+          python3 -c "import json; r=json.load(open('TestResults/fullci-release-dependency-worklist.json')); assert r['status']=='DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST' and r['blocked_domains']==17 and r['required_owners_unassigned'] == 18 and len(r['work_items'])==18 and r['candidate_capabilities']==39 and r['formal_approval_observed'] is False and r['production_ready'] is False and r['national_release_allowed'] is False"
+          test -s TestResults/fullci-release-dependency-worklist.md
+          test -s TestResults/fullci-release-dependency-worklist.csv
       - name: Build and security-test offline Epic delivery console and CSV
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_epic_progress_console.py' -v
