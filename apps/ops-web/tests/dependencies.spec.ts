@@ -200,8 +200,9 @@ test('HANDOFF160-01 actual .NET packet derives only unverified policies and cand
   expect(r.status()).toBe(400);
   expect((await r.json()).nationalReleaseAllowed).toBe(false);
  }
+ // No POST mapping exists for the new packet route: denial is 404, not 405.
  expect((await request.post('/internal/ops/v1/dependencies/packet?requirement=LEGAL_OPERATOR_IDENTITY',
-  {data:{approved:true}})).status()).toBe(405);
+  {data:{approved:true}})).status()).toBe(404);
 });
 
 test('HANDOFF160-02 Persian browser shows exact unverified packet and clears on reset',async({page,request})=>{
