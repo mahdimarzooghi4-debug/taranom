@@ -1,0 +1,12 @@
+name: Sprint 153 Worker Temporal Trust Denial Full Regression
+on:
+  push:
+    branches: [sprint-153-worker-trust-temporal-denial]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
