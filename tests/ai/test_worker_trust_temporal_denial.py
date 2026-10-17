@@ -13,6 +13,8 @@ import worker_trust_key_lifecycle_denial as lifecycle
 import worker_custodian_identity_boundary as identity
 import worker_evidence_anchor as anchor
 
+DEFAULT_CONTEXT = object()
+
 class SyntheticTemporalTests(unittest.TestCase):
     def setUp(self):
         self.old="test:old-key-for-time-claim-one"
@@ -42,10 +44,11 @@ class SyntheticTemporalTests(unittest.TestCase):
             "challenge_ref":identity.TEST_CHALLENGE
         }
 
-    def eval(self,candidate=None,ctx=None):
+    def eval(self,candidate=None,ctx=DEFAULT_CONTEXT):
         frame={"schema_version":target.SCHEMA,"scope":target.SCOPE,
                "candidate":self.candidate if candidate is None else candidate}
-        return target.inspect(anchor.canonical(frame),self.ctx if ctx is None else ctx)
+        return target.inspect(anchor.canonical(frame),
+                              self.ctx if ctx is DEFAULT_CONTEXT else ctx)
 
     def denied(self,report):
         self.assertEqual(target.SCOPE,report["scope"])
@@ -101,7 +104,10 @@ class SyntheticTemporalTests(unittest.TestCase):
 
     def test_regressing_or_tied_observation_time_denied(self):
         for when in ("2026-01-01T00:59:59Z","2026-01-01T01:00:00Z"):
-            changed={**self.events[1],"claimed_observed_at":when}
+            # Isolate observation-order failure: effective time must first
+            # be on/before claimed observation, or that earlier gate wins.
+            changed={**self.events[1],"claimed_observed_at":when,
+                     "claimed_effective_at":"2026-01-01T00:30:00Z"}
             r=self.eval({**self.candidate,"events":[self.events[0],changed]})
             self.assertEqual("DENIED_EVENT_OBSERVATION_ORDER",r["status"])
             self.denied(r)
