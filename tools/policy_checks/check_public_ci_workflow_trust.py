@@ -379,6 +379,10 @@ DISPATCHER_BRANCHES = {
         "sprint-158-synthetic-command-ingress-deadline",
         "main",
     ),
+    "sprint-159-dependency-capability-drilldown.yml": (
+        "sprint-159-dependency-capability-drilldown",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
