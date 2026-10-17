@@ -54,6 +54,15 @@ def verify_release_dependencies():
     assert body["candidateCapabilities"] == 39
     assert body["requiredOwnersUnassigned"] == 18
     assert len(body["workItems"]) == 18
+    assert len(body["engineeringCandidates"]) == 39
+    assert body["technicalReferencesPresent"] == 26
+    assert body["technicalReferencesMissing"] == 13
+    assert len([x for x in body["engineeringCandidates"]
+                if x["evidenceLane"] == "MISSING_CODE_TEST_REFERENCE"]) == 13
+    assert all(x["engineeringReadiness"] == "NOT_ESTABLISHED"
+               and x["formalAcceptanceObserved"] is False
+               and x["relatedUnverifiedRequirements"] for x in body["engineeringCandidates"])
+    assert len({x["id"] for x in body["engineeringCandidates"]}) == 39
     assert len({x["requirement"] for x in body["workItems"]}) == 18
     assert len(body["sourceFingerprint"]) == 64
     assert all(x["decisionOwner"] == "NOT_ASSIGNED"

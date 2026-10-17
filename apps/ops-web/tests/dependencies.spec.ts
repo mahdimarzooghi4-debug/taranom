@@ -72,3 +72,56 @@ test('DEPENDENCIES156-05 hostile Host, forwarded authority and unknown routes fa
  expect((await request.get('/operations/dependencies/approval')).status()).toBe(404);
  expect((await request.get('/internal/ops/v1/dependencies/verified')).status()).toBe(404);
 });
+
+test('ENGINEERING157-01 real .NET joins 39 proposals and 18 outside dependencies without approval',async({request})=>{
+ const r=await request.get('/internal/ops/v1/dependencies');
+ expect(r.status()).toBe(200);
+ const x=await r.json();
+ expect(x.engineeringCandidates).toHaveLength(39);
+ expect(x.technicalReferencesPresent).toBe(26);
+ expect(x.technicalReferencesMissing).toBe(13);
+ expect(x.engineeringCandidates.filter((c:{evidenceLane:string})=>
+  c.evidenceLane==='MISSING_CODE_TEST_REFERENCE')).toHaveLength(13);
+ expect(x.engineeringCandidates.every((c:{engineeringReadiness:string,formalAcceptanceObserved:boolean,relatedUnverifiedRequirements:string[]})=>
+  c.engineeringReadiness==='NOT_ESTABLISHED'&&
+  c.formalAcceptanceObserved===false&&c.relatedUnverifiedRequirements.length>0)).toBe(true);
+ expect(x.productionReady).toBe(false);
+ expect(x.nationalReleaseAllowed).toBe(false);
+});
+test('ENGINEERING157-02 real Persian browser distinguishes nonproduction refs from missing evidence',async({page})=>{
+ await page.goto('/operations/dependencies');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(39);
+ await page.getByLabel('نوع فاصله فنی').selectOption('MISSING_CODE_TEST_REFERENCE');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(13);
+ await page.getByLabel('حوزه Epic').selectOption('TRN-EP-01');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(1);
+ await expect(page.getByTestId('engineering-count')).toContainText('آمادگی مهندسی همه نامشخص');
+ await page.getByLabel('نوع فاصله فنی').selectOption('NONPRODUCTION_REFERENCE_ONLY');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(2);
+ await page.getByLabel('حوزه Epic').selectOption('ALL');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(26);
+ await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
+});
+test('ENGINEERING157-03 fake engineering readiness or missing candidate fails closed and clears display',async({page})=>{
+ await page.goto('/operations/dependencies');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(39);
+ await page.route('**/internal/ops/v1/dependencies',async route=>{
+  const r=await route.fetch();const x=await r.json();
+  x.engineeringCandidates[0].engineeringReadiness='CODE_READY';
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+ });
+ await page.getByRole('button',{name:'بازخوانی وابستگی‌ها'}).click();
+ await expect(page.getByTestId('dependencies-status')).toContainText('قابل تأیید نیست');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(0);
+ await expect(page.locator('[data-dependency]')).toHaveCount(0);
+});
+test('ENGINEERING157-04 spoofed missing evidence and dropped proposal fail closed',async({page})=>{
+ await page.route('**/internal/ops/v1/dependencies',async route=>{
+  const r=await route.fetch();const x=await r.json();
+  x.engineeringCandidates.pop();
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+ });
+ await page.goto('/operations/dependencies');
+ await expect(page.getByTestId('dependencies-status')).toContainText('قابل تأیید نیست');
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(0);
+});

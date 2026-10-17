@@ -42,3 +42,7 @@
 .release-dependencies article{margin:.7rem 0;padding:1rem;border:1px solid #c4d3dd;border-radius:10px;background:#fff;overflow-wrap:anywhere}
 .release-dependencies code{overflow-wrap:anywhere;unicode-bidi:isolate;direction:ltr}
 .release-dependencies .alert{border-right:5px solid #a8482c;background:#fff4ee;padding:1rem}
+
+/* TRN-TECH-166: never present candidate technical code as a verified readiness gate */
+.release-dependencies [data-engineering-candidate] code{unicode-bidi:isolate;direction:ltr;overflow-wrap:anywhere}
+.release-dependencies [data-engineering-candidate] strong{display:block;color:#963d26}

@@ -13,6 +13,12 @@ internal sealed record ReleaseDependencyRow(
     int LinkedNonProductionCandidatePairsInAffectedEpics,string DecisionOwner,
     string EvidenceStatus,string HumanDecisionStatus,bool FormalAcceptanceObserved);
 
+internal sealed record EngineeringCandidate(
+    string Id,string EpicId,string Title,string EvidenceClass,string? CodeRef,
+    string? TestRef,string EvidenceLane,string[] EpicMissingExternalEvidence,
+    string[] RelatedUnverifiedRequirements,bool FormalAcceptanceObserved,
+    string EngineeringReadiness);
+
 internal static class ReleaseDependencyHttp
 {
     private const string Contract="TRN-TECH-165";
@@ -37,18 +43,23 @@ internal static class ReleaseDependencyHttp
                 releaseAdmission="DENIED_BY_DEFAULT",formalApprovalObserved=false,
                 productionReady=false,nationalReleaseAllowed=false,
                 blockedDomains=0,candidateCapabilities=0,requiredOwnersUnassigned=0,
-                workItems=Array.Empty<object>()
+                workItems=Array.Empty<object>(),
+                engineeringCandidates=Array.Empty<object>(),
+                technicalReferencesPresent=0,technicalReferencesMissing=0
             },statusCode:StatusCodes.Status503ServiceUnavailable);
         return Results.Json(new {
             contract=Contract,status="DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST",
             releaseAdmission="DENIED_BY_DEFAULT",formalApprovalObserved=false,
             productionReady=false,nationalReleaseAllowed=false,
             blockedDomains=17,candidateCapabilities=39,requiredOwnersUnassigned=18,
-            sourceFingerprint=source.Value.Fingerprint,workItems=source.Value.Rows
+            sourceFingerprint=source.Value.Fingerprint,workItems=source.Value.Rows,
+            engineeringCandidates=source.Value.Candidates,
+            technicalReferencesPresent=26,technicalReferencesMissing=13
         });
     }
 
-    private static (string Fingerprint,ReleaseDependencyRow[] Rows)? TryRead(string? repo)
+    private static (string Fingerprint,ReleaseDependencyRow[] Rows,
+        EngineeringCandidate[] Candidates)? TryRead(string? repo)
     {
         if(string.IsNullOrWhiteSpace(repo))return null;
         try
@@ -119,7 +130,28 @@ internal static class ReleaseDependencyHttp
                     linked,"NOT_ASSIGNED","BLOCKED_UNVERIFIED","NOT_OBSERVED",false));
             }
             if(rows.Count!=18 || rows.Sum(x=>x.BlockedDomainIds.Length)<17)return null;
-            return (fingerprint,rows.ToArray());
+            var candidates=new List<EngineeringCandidate>();
+            foreach(var epic in inventory.Epics.OrderBy(x=>x.Id,StringComparer.Ordinal))
+            {
+                var related=rows.Where(x=>x.AffectedEpicIds.Contains(epic.Id,StringComparer.Ordinal))
+                    .Select(x=>x.Requirement).OrderBy(x=>x,StringComparer.Ordinal).ToArray();
+                if(related.Length==0||epic.MissingExternalEvidence.Length==0)return null;
+                foreach(var cap in epic.Capabilities.OrderBy(x=>x.Id,StringComparer.Ordinal))
+                {
+                    var missing=cap.EvidenceClass=="NO_EVIDENCE";
+                    if(missing!=(cap.CodeRef is null&&cap.TestRef is null))return null;
+                    candidates.Add(new EngineeringCandidate(cap.Id,epic.Id,cap.Title,
+                        cap.EvidenceClass,cap.CodeRef,cap.TestRef,
+                        missing?"MISSING_CODE_TEST_REFERENCE":"NONPRODUCTION_REFERENCE_ONLY",
+                        epic.MissingExternalEvidence,related,false,"NOT_ESTABLISHED"));
+                }
+            }
+            if(candidates.Count!=39||
+               candidates.Count(x=>x.EvidenceLane=="MISSING_CODE_TEST_REFERENCE")!=13||
+               candidates.Count(x=>x.EvidenceLane=="NONPRODUCTION_REFERENCE_ONLY")!=26||
+               candidates.Select(x=>x.Id).Distinct(StringComparer.Ordinal).Count()!=39)
+                return null;
+            return (fingerprint,rows.ToArray(),candidates.ToArray());
         }
         catch(Exception error) when(error is IOException or UnauthorizedAccessException or
             JsonException or ArgumentException or InvalidOperationException or
