@@ -82,7 +82,35 @@ function valid(x:unknown):x is Source{
  for(const c of a.engineeringCandidates){
   if(!c||typeof c.id!=='string'||typeof c.epicId!=='string'||
    !domains.slice(0,13).includes(c.epicId)||
-   !new RegExp('^TRN-CAP-'+c.epicId.slice(7)+'-(01|02|03)
+   !c.id.startsWith('TRN-CAP-'+c.epicId.slice(7)+'-')||
+   c.id.length!==13||!['01','02','03'].includes(c.id.slice(-2))||
+   candidates.has(c.id)||typeof c.title!=='string'||!c.title.trim()||
+   !evidenceClasses.includes(c.evidenceClass)||
+   c.formalAcceptanceObserved!==false||c.engineeringReadiness!=='NOT_ESTABLISHED'||
+   !Array.isArray(c.epicMissingExternalEvidence)||
+   c.epicMissingExternalEvidence.length===0||
+   c.epicMissingExternalEvidence.some(x=>typeof x!=='string'||!required.includes(x))||
+   !Array.isArray(c.relatedUnverifiedRequirements)||!c.relatedUnverifiedRequirements.length||
+   c.relatedUnverifiedRequirements.some(x=>!seen.has(x)))return false;
+  const knownRelated=a.workItems.filter(w=>w.affectedEpicIds.includes(c.epicId))
+   .map(w=>w.requirement);
+  if(knownRelated.length!==c.relatedUnverifiedRequirements.length||
+    new Set(c.relatedUnverifiedRequirements).size!==knownRelated.length||
+    c.relatedUnverifiedRequirements.some(x=>!knownRelated.includes(x)))return false;
+  if(c.evidenceClass==='NO_EVIDENCE'){
+   if(c.evidenceLane!=='MISSING_CODE_TEST_REFERENCE'||c.codeRef!==null||c.testRef!==null)return false;
+   missing++;
+  }else{
+   if(c.evidenceLane!=='NONPRODUCTION_REFERENCE_ONLY'||
+    typeof c.codeRef!=='string'||!c.codeRef||
+    typeof c.testRef!=='string'||!c.testRef)return false;
+   nonProduction++;
+  }
+  candidates.add(c.id);
+  epicCounts.set(c.epicId,(epicCounts.get(c.epicId)??0)+1);
+ }
+ return candidates.size===39&&epicCounts.size===13&&
+  [...epicCounts.values()].every(n=>n===3)&&nonProduction===26&&missing===13;
 }
 export function ReleaseDependenciesApp(){
  const [state,setState]=useState<State>({kind:'LOADING'});
@@ -196,112 +224,6 @@ export function ReleaseDependenciesApp(){
     </article>)}
    </section>}
    <footer>TRN-TECH-165/166 | فقط‌خواندنی | فاقد اختیار انسانی/بالینی/مالی | DENIED_BY_DEFAULT</footer>
-  </main>
- </div>;
-}
-).test(c.id)||
-   candidates.has(c.id)||typeof c.title!=='string'||!c.title.trim()||
-   !evidenceClasses.includes(c.evidenceClass)||
-   c.formalAcceptanceObserved!==false||c.engineeringReadiness!=='NOT_ESTABLISHED'||
-   !Array.isArray(c.epicMissingExternalEvidence)||
-   c.epicMissingExternalEvidence.length===0||
-   c.epicMissingExternalEvidence.some(x=>typeof x!=='string'||!required.includes(x))||
-   !Array.isArray(c.relatedUnverifiedRequirements)||!c.relatedUnverifiedRequirements.length||
-   c.relatedUnverifiedRequirements.some(x=>!seen.has(x)))return false;
-  const knownRelated=a.workItems.filter(w=>w.affectedEpicIds.includes(c.epicId))
-   .map(w=>w.requirement);
-  if(knownRelated.length!==c.relatedUnverifiedRequirements.length||
-    new Set(c.relatedUnverifiedRequirements).size!==knownRelated.length||
-    c.relatedUnverifiedRequirements.some(x=>!knownRelated.includes(x)))return false;
-  if(c.evidenceClass==='NO_EVIDENCE'){
-   if(c.evidenceLane!=='MISSING_CODE_TEST_REFERENCE'||c.codeRef!==null||c.testRef!==null)return false;
-   missing++;
-  }else{
-   if(c.evidenceLane!=='NONPRODUCTION_REFERENCE_ONLY'||
-    typeof c.codeRef!=='string'||!c.codeRef||
-    typeof c.testRef!=='string'||!c.testRef)return false;
-   nonProduction++;
-  }
-  candidates.add(c.id);
-  epicCounts.set(c.epicId,(epicCounts.get(c.epicId)??0)+1);
- }
- return candidates.size===39&&epicCounts.size===13&&
-  [...epicCounts.values()].every(n=>n===3)&&nonProduction===26&&missing===13;
-}
-export function ReleaseDependenciesApp(){
- const [state,setState]=useState<State>({kind:'LOADING'});
- const [cycle,setCycle]=useState(0);
- const [query,setQuery]=useState('');
- const [domain,setDomain]=useState('ALL');
- useEffect(()=>{
-  const abort=new AbortController();setState({kind:'LOADING'});
-  const read=async()=>{
-   try{
-    const response=await fetch('/internal/ops/v1/dependencies',
-     {method:'GET',credentials:'omit',cache:'no-store',signal:abort.signal});
-    if(!response.ok)throw Error('SOURCE_UNAVAILABLE');
-    const result:unknown=await response.json();
-    if(!valid(result))throw Error('SOURCE_UNTRUSTED');
-    if(!abort.signal.aborted)setState({kind:'READY',snapshot:result});
-   }catch{if(!abort.signal.aborted)setState({kind:'UNAVAILABLE'});}
-  };
-  void read();return ()=>abort.abort();
- },[cycle]);
- const source=state.kind==='READY'?state.snapshot:null;
- const shown=useMemo(()=>source?.workItems.filter(x=>
-  (domain==='ALL'||x.blockedDomainIds.includes(domain))&&
-  (!query.trim()||(x.requirement+' '+x.blockedDomainIds.join(' ')+
-   ' '+x.policyRefs.join(' ')).toLowerCase().includes(query.trim().toLowerCase()))
- )??[],[source,domain,query]);
- return <div dir="rtl" className="release-dependencies">
-  <a href="#dependencies-main" className="skip">پرش به محتوای اصلی</a>
-  <header><h1>صف وابستگی‌های تکمیل محصول ترنم</h1>
-   <p>خواندن زنده از سرویس محلی .NET؛ تصمیم‌ها و مدارک واقعی هنوز احراز نشده‌اند.</p></header>
-  <main id="dependencies-main">
-   <nav aria-label="عملیات"><a href="/operations">عملیات فنی</a> | <a href="/operations/progress">قابلیت‌های پیشنهادی</a></nav>
-   <section className="alert" role="note">
-    <strong>عرضه جامع سراسری: DENIED_BY_DEFAULT</strong>
-    <p>فهرست کار و نیاز به شواهد است، نه تعیین متولی، اولویت، تأیید، درصد پیشرفت یا مجوز استقرار.</p>
-   </section>
-   <section className="panel">
-    <div className="heading"><h2>وضعیت منابع تصمیم</h2>
-     <button type="button" onClick={()=>setCycle(n=>n+1)}>بازخوانی وابستگی‌ها</button></div>
-    <p role="status" data-testid="dependencies-status">
-     {state.kind==='LOADING'?'در حال دریافت فهرست مستند از سرویس محلی':
-      state.kind==='UNAVAILABLE'?'منبع یا اتصال قابل تأیید نیست؛ هیچ وابستگی تأیید نمی‌شود.':
-      'فهرست وابستگی‌های باز از منبع موجود خوانده شد؛ هیچ موردی تأیید نشده است.'}</p>
-    {source&&<>
-     <div className="summary" aria-label="تعداد موضوعات باز، نه پیشرفت">
-      <div className="metric"><strong>{source.blockedDomains}</strong>حوزه انتشار مسدود</div>
-      <div className="metric"><strong>{source.workItems.length}</strong>دسته وابستگی باز</div>
-      <div className="metric"><strong>{source.candidateCapabilities}</strong>قابلیت پیشنهادی، نه پذیرفته‌شده</div>
-      <div className="metric"><strong>{source.requiredOwnersUnassigned}</strong>مسئول تعیین‌شده در این فهرست: صفر</div>
-     </div>
-     <small>اثر انگشت منبع: <code>{source.sourceFingerprint}</code></small>
-    </>}
-   </section>
-   {source&&<section className="panel">
-    <h2>بررسی وابستگی‌ها و منابع Business</h2>
-    <div className="toolbar">
-     <label>جست‌وجوی مدرک، حوزه یا تصمیم
-      <input type="search" value={query} autoComplete="off"
-       onChange={e=>setQuery(e.target.value)} placeholder="TRN-BIZ-035"/></label>
-     <label>حوزه متأثر
-      <select value={domain} onChange={e=>setDomain(e.target.value)}>
-       <option value="ALL">تمام حوزه‌ها</option>
-       {domains.map(x=><option key={x} value={x}>{x}</option>)}
-      </select></label>
-    </div>
-    <p role="status" data-testid="dependencies-filter-count">{shown.length} دسته وابستگی باز</p>
-    <div data-testid="dependencies-list">{shown.map(item=><article data-dependency key={item.requirement}>
-     <h3>{item.requirement}</h3>
-     <p>حوزه‌های متأثر: {item.blockedDomainIds.join('، ')}</p>
-     <p>مستندات تصمیم: {item.policyRefs.join('، ')}</p>
-     <p>ارجاع‌های کد و آزمون غیرعملیاتی در Epicهای متأثر: {item.linkedNonProductionCandidatePairsInAffectedEpics}</p>
-     <p><strong>مدرک: {item.evidenceStatus} | تصمیم انسانی: {item.humanDecisionStatus} | مسئول: {item.decisionOwner}</strong></p>
-    </article>)}</div>
-   </section>}
-   <footer>TRN-TECH-165 | فقط‌خواندنی | فاقد اختیار انسانی/بالینی/مالی | DENIED_BY_DEFAULT</footer>
   </main>
  </div>;
 }
