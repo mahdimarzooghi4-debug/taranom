@@ -821,6 +821,7 @@ jobs:
           python3 tests/center_demo/test_proofing_correction_http.py
           python3 tests/center_demo/test_late_evidence_work_item_http.py
           python3 tests/center_demo/test_care_coordination_http.py
+          python3 tests/center_demo/test_synthetic_command_ingress_timeout.py
           python3 tests/center_demo/test_support_history_http.py
           python3 tests/center_demo/test_support_worklist_http.py
           # Actual PostgreSQL DDL admission/recovery; refuses changed versions.

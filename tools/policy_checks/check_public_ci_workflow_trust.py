@@ -375,6 +375,10 @@ DISPATCHER_BRANCHES = {
         "sprint-157-epic-engineering-gap-workbench",
         "main",
     ),
+    "sprint-158-synthetic-command-ingress-deadline.yml": (
+        "sprint-158-synthetic-command-ingress-deadline",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
