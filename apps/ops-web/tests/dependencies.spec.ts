@@ -167,3 +167,85 @@ test('ENGINEERING159-03 forged Epic-level external dependency fails closed',asyn
  await expect(page.getByTestId('dependencies-status')).toContainText('قابل تأیید نیست');
  await expect(page.locator('[data-engineering-candidate]')).toHaveCount(0);
 });
+
+test('HANDOFF160-01 actual .NET packet derives only unverified policies and candidates',async({request})=>{
+ const all=await (await request.get('/internal/ops/v1/dependencies')).json();
+ for(const item of all.workItems){
+  const r=await request.get('/internal/ops/v1/dependencies/packet?requirement='+encodeURIComponent(item.requirement));
+  expect(r.status()).toBe(200);
+  expect(r.headers()['cache-control']).toBe('no-store');
+  expect(r.headers()['access-control-allow-origin']).toBeUndefined();
+  const x=await r.json();
+  expect(x.contract).toBe('TRN-TECH-169');
+  expect(x.status).toBe('DRAFT_UNVERIFIED_REVIEW_PACKET');
+  expect(x.sourceFingerprint).toBe(all.sourceFingerprint);
+  expect(x.requirement).toBe(item.requirement);
+  expect(x.policyRefs).toEqual(item.policyRefs);
+  expect(x.blockedDomainIds).toEqual(item.blockedDomainIds);
+  expect(x.affectedEpicIds).toEqual(item.affectedEpicIds);
+  expect(x.affectedMarketOrNationalIds).toEqual(item.affectedMarketOrNationalIds);
+  expect(x.candidates).toEqual(all.engineeringCandidates.filter((c:{relatedUnverifiedRequirements:string[]})=>
+   c.relatedUnverifiedRequirements.includes(item.requirement)));
+  expect(x.decisionOwner).toBe('NOT_ASSIGNED');
+  expect(x.humanDecisionStatus).toBe('NOT_OBSERVED');
+  expect(x.independentEvidenceVerified).toBe(false);
+  expect(x.formalApprovalObserved).toBe(false);
+  expect(x.productionReady).toBe(false);
+  expect(x.nationalReleaseAllowed).toBe(false);
+  expect(x.releaseAdmission).toBe('DENIED_BY_DEFAULT');
+ }
+ for(const query of ['','?requirement=UNKNOWN','?requirement=LEGAL_OPERATOR_IDENTITY&extra=1',
+  '?requirement=LEGAL_OPERATOR_IDENTITY&requirement=LEGAL_OPERATOR_IDENTITY']){
+  const r=await request.get('/internal/ops/v1/dependencies/packet'+query);
+  expect(r.status()).toBe(400);
+  expect((await r.json()).nationalReleaseAllowed).toBe(false);
+ }
+ // No POST mapping exists for the new packet route: denial is 404, not 405.
+ expect((await request.post('/internal/ops/v1/dependencies/packet?requirement=LEGAL_OPERATOR_IDENTITY',
+  {data:{approved:true}})).status()).toBe(404);
+});
+
+test('HANDOFF160-02 Persian browser shows exact unverified packet and clears on reset',async({page,request})=>{
+ const all=await (await request.get('/internal/ops/v1/dependencies')).json();
+ const item=all.workItems.find((w:{requirement:string})=>w.requirement==='LEGAL_OPERATOR_IDENTITY');
+ const expected=all.engineeringCandidates.filter((c:{relatedUnverifiedRequirements:string[]})=>
+  c.relatedUnverifiedRequirements.includes(item.requirement)).length;
+ await page.goto('/operations/dependencies');
+ await page.getByLabel('وابستگی بیرونی برای ردیابی قابلیت‌ها').selectOption(item.requirement);
+ await expect(page.getByTestId('packet-status')).toContainText('شواهد و مسئول هنوز تأیید نشده');
+ await expect(page.getByTestId('packet-summary')).toContainText(item.policyRefs[0]);
+ await expect(page.getByTestId('packet-summary')).toContainText('NOT_ASSIGNED');
+ await expect(page.getByTestId('packet-summary')).toContainText('DENIED_BY_DEFAULT');
+ await expect(page.getByTestId('packet-candidates').locator('p')).toHaveCount(expected);
+ await page.getByLabel('وابستگی بیرونی برای ردیابی قابلیت‌ها').selectOption('ALL');
+ await expect(page.getByTestId('handoff-packet')).toHaveCount(0);
+ await expect(page.locator('[data-engineering-candidate]')).toHaveCount(39);
+});
+
+test('HANDOFF160-03 forged packet approval refuses display and clears previous packet',async({page})=>{
+ await page.goto('/operations/dependencies');
+ await page.getByLabel('وابستگی بیرونی برای ردیابی قابلیت‌ها').selectOption('LEGAL_OPERATOR_IDENTITY');
+ await expect(page.getByTestId('packet-status')).toContainText('شواهد و مسئول هنوز تأیید نشده');
+ await page.route('**/internal/ops/v1/dependencies/packet?**',async route=>{
+  const r=await route.fetch();const x=await r.json();
+  x.formalApprovalObserved=true;x.sourceFingerprint='a'.repeat(64);
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+ });
+ await page.getByLabel('وابستگی بیرونی برای ردیابی قابلیت‌ها').selectOption('ALL');
+ await page.getByLabel('وابستگی بیرونی برای ردیابی قابلیت‌ها').selectOption('LEGAL_OPERATOR_IDENTITY');
+ await expect(page.getByTestId('packet-status')).toContainText('قابل تطبیق نیست');
+ await expect(page.getByTestId('packet-summary')).toHaveCount(0);
+ await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
+});
+
+test('HANDOFF160-04 parent source refresh failure clears packet and candidate rows',async({page})=>{
+ await page.goto('/operations/dependencies');
+ await page.getByLabel('وابستگی بیرونی برای ردیابی قابلیت‌ها').selectOption('LEGAL_OPERATOR_IDENTITY');
+ await expect(page.getByTestId('packet-summary')).toBeVisible();
+ await page.route('**/internal/ops/v1/dependencies',r=>r.abort());
+ await page.getByRole('button',{name:'بازخوانی وابستگی‌ها'}).click();
+ await expect(page.getByTestId('dependencies-status')).toContainText('قابل تأیید نیست');
+ await expect(page.getByTestId('handoff-packet')).toHaveCount(0);
+ await expect(page.locator('[data-dependency]')).toHaveCount(0);
+ expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
+});

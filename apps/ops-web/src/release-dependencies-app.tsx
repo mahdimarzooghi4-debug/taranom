@@ -24,6 +24,16 @@ type Source={
  engineeringCandidates:EngineeringCandidate[];
  technicalReferencesPresent:26;technicalReferencesMissing:13;
 };
+type ReviewPacket={
+ contract:'TRN-TECH-169';status:'DRAFT_UNVERIFIED_REVIEW_PACKET';
+ sourceFingerprint:string;requirement:string;
+ blockedDomainIds:string[];affectedEpicIds:string[];affectedMarketOrNationalIds:string[];
+ policyRefs:string[];candidates:EngineeringCandidate[];
+ decisionOwner:'NOT_ASSIGNED';humanDecisionStatus:'NOT_OBSERVED';
+ independentEvidenceVerified:false;formalApprovalObserved:false;
+ productionReady:false;nationalReleaseAllowed:false;releaseAdmission:'DENIED_BY_DEFAULT';
+};
+type PacketState={kind:'IDLE'|'LOADING'|'UNAVAILABLE'}|{kind:'READY';packet:ReviewPacket};
 type State={kind:'LOADING'|'UNAVAILABLE'}|{kind:'READY';snapshot:Source};
 const domains=[...Array.from({length:13},(_,i)=>'TRN-EP-'+String(i+1).padStart(2,'0')),
  'MARKET-PUBLIC','MARKET-SUPPORT','MARKET-CORPORATE','NATIONAL-COVERAGE'];
@@ -129,6 +139,24 @@ function valid(x:unknown):x is Source{
  return candidates.size===39&&epicCounts.size===13&&
   [...epicCounts.values()].every(n=>n===3)&&nonProduction===26&&missing===13;
 }
+function validPacket(x:unknown,source:Source,requirement:string):x is ReviewPacket{
+ if(!x||typeof x!=='object')return false;
+ const packet=x as Partial<ReviewPacket>;
+ const row=source.workItems.find(w=>w.requirement===requirement);
+ if(!row||packet.contract!=='TRN-TECH-169'||packet.status!=='DRAFT_UNVERIFIED_REVIEW_PACKET'||
+  packet.sourceFingerprint!==source.sourceFingerprint||packet.requirement!==requirement||
+  packet.decisionOwner!=='NOT_ASSIGNED'||packet.humanDecisionStatus!=='NOT_OBSERVED'||
+  packet.independentEvidenceVerified!==false||packet.formalApprovalObserved!==false||
+  packet.productionReady!==false||packet.nationalReleaseAllowed!==false||
+  packet.releaseAdmission!=='DENIED_BY_DEFAULT')return false;
+ const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
+ const expected=source.engineeringCandidates.filter(c=>
+  c.relatedUnverifiedRequirements.includes(requirement));
+ return same(packet.blockedDomainIds,row.blockedDomainIds)&&
+  same(packet.affectedEpicIds,row.affectedEpicIds)&&
+  same(packet.affectedMarketOrNationalIds,row.affectedMarketOrNationalIds)&&
+  same(packet.policyRefs,row.policyRefs)&&same(packet.candidates,expected);
+}
 export function ReleaseDependenciesApp(){
  const [state,setState]=useState<State>({kind:'LOADING'});
  const [cycle,setCycle]=useState(0);
@@ -137,6 +165,7 @@ export function ReleaseDependenciesApp(){
  const [engineeringEpic,setEngineeringEpic]=useState('ALL');
  const [lane,setLane]=useState('ALL');
  const [selectedRequirement,setSelectedRequirement]=useState('ALL');
+ const [packetState,setPacketState]=useState<PacketState>({kind:'IDLE'});
  useEffect(()=>{
   const abort=new AbortController();setState({kind:'LOADING'});
   const read=async()=>{
@@ -152,6 +181,29 @@ export function ReleaseDependenciesApp(){
   void read();return ()=>abort.abort();
  },[cycle]);
  const source=state.kind==='READY'?state.snapshot:null;
+ useEffect(()=>{
+  const abort=new AbortController();
+  if(!source||selectedRequirement==='ALL'){
+   setPacketState({kind:'IDLE'});
+   return ()=>abort.abort();
+  }
+  setPacketState({kind:'LOADING'});
+  const load=async()=>{
+   try{
+    const response=await fetch('/internal/ops/v1/dependencies/packet?requirement='+
+     encodeURIComponent(selectedRequirement),
+     {method:'GET',credentials:'omit',cache:'no-store',signal:abort.signal});
+    if(!response.ok)throw Error('PACKET_UNAVAILABLE');
+    const data:unknown=await response.json();
+    if(!validPacket(data,source,selectedRequirement))throw Error('PACKET_INVALID');
+    if(!abort.signal.aborted)setPacketState({kind:'READY',packet:data});
+   }catch{
+    if(!abort.signal.aborted)setPacketState({kind:'UNAVAILABLE'});
+   }
+  };
+  void load();
+  return ()=>abort.abort();
+ },[selectedRequirement,source]);
  const shown=useMemo(()=>source?.workItems.filter(x=>
   (domain==='ALL'||x.blockedDomainIds.includes(domain))&&
   (!query.trim()||(x.requirement+' '+x.blockedDomainIds.join(' ')+
@@ -212,6 +264,29 @@ export function ReleaseDependenciesApp(){
      <p><strong>مدرک: {item.evidenceStatus} | تصمیم انسانی: {item.humanDecisionStatus} | مسئول: {item.decisionOwner}</strong></p>
      <button type="button" onClick={()=>{setEngineeringEpic('ALL');setLane('ALL');setSelectedRequirement(item.requirement);}}>نمایش قابلیت‌های مرتبط</button>
     </article>)}</div>
+   </section>}
+   {source&&selectedRequirement!=='ALL'&&<section className="panel"
+    aria-labelledby="packet-title" data-testid="handoff-packet">
+    <h2 id="packet-title">بسته ارجاع مستند — فقط پیش‌نویس</h2>
+    <p role="status" data-testid="packet-status">
+     {packetState.kind==='LOADING'?'در حال خواندن بسته از سرویس محلی':
+      packetState.kind==='UNAVAILABLE'?'بسته قابل تطبیق نیست؛ هیچ مدرکی تأیید نشده است.':
+      packetState.kind==='READY'?'ارجاع‌های موجود خوانده شد؛ شواهد و مسئول هنوز تأیید نشده‌اند.':
+      'بسته‌ای انتخاب نشده است.'}</p>
+    {packetState.kind==='READY'&&<div data-testid="packet-summary">
+     <p>نیاز باز: <strong>{packetState.packet.requirement}</strong></p>
+     <p>اسناد Business مرتبط: {packetState.packet.policyRefs.join('، ')}</p>
+     <p>حوزه‌های مسدود: {packetState.packet.blockedDomainIds.join('، ')}</p>
+     <p>متولی: NOT_ASSIGNED | شواهد مستقل: NOT_VERIFIED | تصمیم انسانی: NOT_OBSERVED</p>
+     <p>اثر انگشت منابع محلی: <code>{packetState.packet.sourceFingerprint}</code></p>
+     <p>قابلیت‌های پیشنهادی مرتبط: {packetState.packet.candidates.length}</p>
+     <div data-testid="packet-candidates">
+      {packetState.packet.candidates.map(c=><p key={c.id}>
+       {c.id} — {c.title} | {c.evidenceLane} | آمادگی: NOT_ESTABLISHED
+      </p>)}
+     </div>
+     <strong>DENIED_BY_DEFAULT — این بسته هیچ تصمیم یا مجوزی ایجاد نمی‌کند.</strong>
+    </div>}
    </section>}
    {source&&<section className="panel" aria-labelledby="engineering-title">
     <h2 id="engineering-title">ماتریس مهندسی و وابستگی بیرونی هر Epic</h2>
