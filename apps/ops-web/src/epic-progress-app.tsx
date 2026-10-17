@@ -114,7 +114,7 @@ export function EpicProgressApp(){
   <header><h1>میز عملیاتی شواهد پیشرفت ترنم</h1>
    <p>نمای زنده از فهرست پیشنهادی و منبع انتشار مسدود؛ نه درصد پیشرفت و نه مجوز عرضه</p></header>
   <main id="progress-main">
-   <a href="/operations">بازگشت به عملیات فنی</a>
+   <a href="/operations">بازگشت به عملیات فنی</a> | <a href="/operations/dependencies">مشاهده وابستگی‌های باز</a>
    <section role="note" className="alert">
     <strong>تکمیل واقعی محصول قابل‌محاسبه نیست — DENIED_BY_DEFAULT</strong>
     <p>۳۹ معیار، تقسیم‌بندی پیشنهادی‌اند. وجود فایل یا CI سبز به‌معنای پذیرش رسمی نیست.</p>
