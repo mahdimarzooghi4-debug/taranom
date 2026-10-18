@@ -44,9 +44,17 @@ test('TOPIC172-01 center topic filter reads only exact matching canonical Postgr
  for(const v of s.medical.slice(0,4))await expect(rows).toContainText(v);
  for(const v of s.insurance)await expect(rows).not.toContainText(v);
  await panel.getByRole('button',{name:'صفحه بعد پرونده‌ها'}).click();
- await expect(rows.locator('li')).toHaveCount(2);
- for(const v of s.medical.slice(4))await expect(rows).toContainText(v);
+ // Other independently created CI fixtures may sort after our marker:
+ // verify the exact two expected cases at the start of the next page,
+ // not a fabricated claim that the entire PostgreSQL worklist has ended.
+ await expect(rows.locator('li').nth(0)).toContainText(s.medical[4]);
+ await expect(rows.locator('li').nth(1)).toContainText(s.medical[5]);
  for(const v of s.insurance)await expect(rows).not.toContainText(v);
+ const bounded=await request.get('/internal/demo/v1/support-worklist?afterCaseRef='+
+  encodeURIComponent(s.medical[3])+'&limit=2&topic=MedicalServiceComplaint');
+ expect(bounded.status()).toBe(200);
+ expect((await bounded.json()).cases.map((r:{caseRef:string})=>r.caseRef))
+  .toEqual(s.medical.slice(4));
  const chosen=s.medical[5];
  await rows.locator('li').filter({hasText:chosen})
   .getByRole('button',{name:'انتخاب این پرونده'}).click();
