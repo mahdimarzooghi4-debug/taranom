@@ -98,3 +98,23 @@ test('CARE106-04 Persian Chromium verified 3-step UI and lost ACK manual same-UU
  await expect(history).toContainText('ارجاع پزشکی، تماس واقعی، نوبت و دسترسی به پرونده:');
  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
 });
+
+test('CARE161-01 forged successful ACK cannot clear uncertain original command; exact replay recovers',async({page})=>{
+ await page.goto('/member-demo/coordination');
+ await page.getByRole('button',{name:'خواندن پرونده هماهنگی'}).click();
+ let sent='';
+ await page.route('**/internal/demo/v1/care-coordination/**/commands',async route=>{
+  sent=route.request().postData()??'';
+  const r=await route.fetch();const payload=await r.json();
+  payload.events[0].originalMemberRequestRef='test:forged-other-reason';
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(payload)});
+ });
+ await page.getByRole('button',{name:'ثبت درخواست ادعایی هماهنگی'}).click();
+ await expect(page.getByRole('alert')).toContainText('ممکن است رویداد');
+ await expect(page.getByRole('region',{name:'تاریخچه هماهنگی ادعایی'})).toHaveCount(0);
+ await page.unrouteAll({behavior:'wait'});
+ await page.getByRole('button',{name:'بازپخش دستی دقیق فرمان قبلی'}).click();
+ await expect(page.getByTestId('care-status')).toContainText('بازپخش شد');
+ await expect(page.getByRole('region',{name:'تاریخچه هماهنگی ادعایی'})).toContainText('نسخه پرونده: 1');
+ expect(JSON.parse(sent).requestId).toBeTruthy();
+});

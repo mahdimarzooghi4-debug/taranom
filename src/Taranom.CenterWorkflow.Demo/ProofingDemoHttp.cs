@@ -194,6 +194,7 @@ internal static class ProofingDemoHttp
             review=snap?.Review.ToString(),
             events=snap?.History.Select(e=>new {
                 caseRevision=e.CaseRevision, identityRevision=e.IdentityRevision,
+                requestId=e.Command.RequestId,
                 action=e.Command.Action.ToString(), review=e.ResultingReview.ToString()
             }).ToArray() ?? Array.Empty<object>(),
             realMemberAuthenticated=false,realIdentityVerified=false,

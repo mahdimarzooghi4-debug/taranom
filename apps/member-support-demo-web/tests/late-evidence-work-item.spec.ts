@@ -109,3 +109,23 @@ test('LATE105-05 ACK lost after PG commit only exact manual UUID replay allowed'
  await expect(page.getByRole('region',{name:'تاریخچه رویدادهای آزمایشی'})).toContainText('نسخه پرونده: 1');
  expect(JSON.parse(previous).requestId).toBeTruthy();
 });
+
+test('LATE161-01 forged ACK evidence fields cannot complete uncertain write',async({page})=>{
+ await page.goto('/member-demo/late-evidence');
+ await page.getByRole('button',{name:'خواندن پرونده از PostgreSQL'}).click();
+ let sent='';
+ await page.route('**/internal/demo/v1/late-evidence/**/commands',async route=>{
+  sent=route.request().postData()??'';
+  const r=await route.fetch();const payload=await r.json();
+  payload.events[0].evidenceRef='test:forged-evidence-ref';
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(payload)});
+ });
+ await page.getByRole('button',{name:'ثبت مدرک تأییدنشده',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('ACK ثبت نامعلوم');
+ await expect(page.getByRole('region',{name:'تاریخچه رویدادهای آزمایشی'})).toHaveCount(0);
+ await page.unrouteAll({behavior:'wait'});
+ await page.getByRole('button',{name:'بازپخش دستی دقیق فرمان اولیه'}).click();
+ await expect(page.getByTestId('late-status')).toContainText('همان درخواست قبلی');
+ await expect(page.getByRole('region',{name:'تاریخچه رویدادهای آزمایشی'})).toContainText('نسخه پرونده: 1');
+ expect(JSON.parse(sent).requestId).toBeTruthy();
+});

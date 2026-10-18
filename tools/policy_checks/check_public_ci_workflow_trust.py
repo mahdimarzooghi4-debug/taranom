@@ -387,6 +387,10 @@ DISPATCHER_BRANCHES = {
         "sprint-160-unverified-evidence-review-packets",
         "main",
     ),
+    "sprint-161-synthetic-command-ack-lineage.yml": (
+        "sprint-161-synthetic-command-ack-lineage",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

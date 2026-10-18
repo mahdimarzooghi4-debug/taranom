@@ -34,6 +34,22 @@ function valid(x:unknown,caseRef:string):x is Snapshot{
        'AttachUnverifiedClinicalSourceReference'].includes(e.action)))return false;
  return denialKeys.every(k=>s[k]===false);
 }
+function acknowledged(s:Snapshot,c:Command):boolean{
+ const actions:Record<Action,string>={
+  REQUEST_NONCLINICAL_COORDINATION:'RequestNonclinicalCoordination',
+  RECORD_UNVERIFIED_COORDINATOR_CONTACT:'RecordUnverifiedCoordinatorContact',
+  ATTACH_UNVERIFIED_CLINICAL_SOURCE:'AttachUnverifiedClinicalSourceReference'};
+ const match=s.events.filter(e=>e.requestId===c.requestId);
+ if(match.length!==1)return false;
+ const e=match[0],rev=c.expectedRevision+1;
+ return e.revision===rev&&e.action===actions[c.action]&&
+  e.memberRef===c.memberRef&&
+  e.originalMemberRequestRef===c.originalMemberRequestRef&&
+  e.originalSubmissionRequestId===c.originalSubmissionRequestId&&
+  e.claimedActorRef===c.claimedActorRef&&
+  e.unverifiedNoteOrDocumentRef===c.unverifiedNoteOrDocumentRef&&
+  (s.outcome==='Replayed'||(s.outcome==='RecordedUnverified'&&s.revision===rev));
+}
 export function CareCoordinationDemo(){
  const [caseRef,setCaseRef]=useState(newRef);
  const [memberRef,setMemberRef]=useState('test:member-claim');
@@ -72,7 +88,7 @@ export function CareCoordinationDemo(){
    if(!valid(x,original.ref)||!['RecordedUnverified','Replayed'].includes(x.outcome))
       throw Error('INVALID_ACK');
    const cmd=JSON.parse(original.body) as Command;
-   if(x.revision<cmd.expectedRevision+1)throw Error('STALE_ACK');
+   if(!acknowledged(x,cmd))throw Error('UNBOUND_ACK');
    setSnapshot(x);setUncertain(null);setStatus(x.outcome==='Replayed'?
     'همان درخواست، بدون رویداد اضافی بازپخش شد.':
     'رویداد ادعایی ثبت شد؛ ارجاع، تماس واقعی یا نوبت تأیید نشده است.');

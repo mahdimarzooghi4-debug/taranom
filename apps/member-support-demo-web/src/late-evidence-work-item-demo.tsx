@@ -38,6 +38,23 @@ function validated(v:unknown,id:string):v is Snapshot{
  x.financialLedgerMutated===false&&x.clinicalAccessGranted===false&&
  x.nationalReleaseAllowed===false;
 }
+function acknowledged(s:Snapshot,c:WorkCommand):boolean{
+ const actions:Record<Action,string>={
+  SUBMIT_UNVERIFIED_EVIDENCE:'SubmitUnverifiedEvidence',
+  RECORD_UNVERIFIED_HUMAN_NOTE:'RecordUnverifiedHumanNote'};
+ const match=s.events.filter(e=>e.requestId===c.requestId);
+ if(match.length!==1)return false;
+ const e=match[0],rev=c.expectedRevision+1;
+ return e.revision===rev&&e.action===actions[c.action]&&
+  e.memberRef===c.memberRef&&e.evidenceRef===c.evidenceRef&&
+  e.submittedByClaimRef===c.submittedByClaimRef&&
+  e.originalSubmissionRequestId===c.originalSubmissionRequestId&&
+  e.reviewerClaimRef===c.reviewerClaimRef&&
+  e.reviewNoteEvidenceRef===c.reviewNoteEvidenceRef&&
+  e.periodStartInclusive===c.periodStartInclusive&&
+  e.periodEndExclusive===c.periodEndExclusive&&
+  (s.outcome==='Replayed'||(s.outcome==='RecordedUnverified'&&s.revision===rev));
+}
 export function LateEvidenceWorkItemDemo(){
  const [caseRef,setCaseRef]=useState(newId);
  const [memberRef,setMemberRef]=useState('test:member-claim');
@@ -75,7 +92,7 @@ export function LateEvidenceWorkItemDemo(){
    if(!validated(value,pending.ref)||!['RecordedUnverified','Replayed'].includes(value.outcome))
     throw Error('INVALID_RESPONSE');
    const command=JSON.parse(pending.original) as WorkCommand;
-   if(value.revision<command.expectedRevision+1)throw Error('VERSION_INVALID');
+   if(!acknowledged(value,command))throw Error('UNBOUND_ACK');
    setSnapshot(value);setUnknown(null);
    setMessage(value.outcome==='Replayed'?
     'همان درخواست قبلی بدون ثبت رویداد تازه بازیابی شد.':

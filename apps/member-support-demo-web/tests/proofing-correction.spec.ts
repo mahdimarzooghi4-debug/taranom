@@ -106,3 +106,25 @@ test('PROOF104-04 Chromium lost ACK preserves exact requestId for manual replay'
  expect(JSON.parse(captured).requestId).toBeTruthy();
  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
 });
+
+test('PROOF161-01 stored request UUID anchors ACK and forged response stays uncertain',async({page,request})=>{
+ await page.goto('/member-demo/proofing');
+ const caseRef=await page.getByLabel('شناسه تصادفی پرونده آزمایشی').inputValue();
+ await page.getByRole('button',{name:'خواندن پرونده آزمایشی از PostgreSQL'}).click();
+ let sent='';
+ await page.route('**/internal/demo/v1/proofing/**/commands',async route=>{
+  sent=route.request().postData()??'';
+  const r=await route.fetch();const payload=await r.json();
+  payload.events[0].requestId=crypto.randomUUID();
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(payload)});
+ });
+ await page.getByRole('button',{name:'ثبت فرضی عدم تطابق قطعی'}).click();
+ await expect(page.getByRole('alert')).toContainText('نتیجه قبلی نامطمئن');
+ await expect(page.getByRole('region',{name:'تاریخچه ممیزی آزمایشی'})).toHaveCount(0);
+ await page.unrouteAll({behavior:'wait'});
+ await page.getByRole('button',{name:'بازپخش دستی دقیق همان درخواست'}).click();
+ await expect(page.getByTestId('proofing-status')).toContainText('درخواست اصلی بدون ثبت مجدد');
+ await expect(page.getByRole('region',{name:'تاریخچه ممیزی آزمایشی'})).toContainText('نسخه پرونده: 1');
+ const body=await (await request.get(root+caseRef)).json();
+ expect(body.events[0].requestId).toBe(JSON.parse(sent).requestId);
+});

@@ -15,7 +15,7 @@ type Command={
 type Snapshot={
  contract:'TRN-TECH-113';syntheticOnly:true;claimsNotVerified:true;
  caseRef:string;outcome:string;caseRevision:number;identityRevision:number;
- review:Review;events:{caseRevision:number;identityRevision:number;
+ review:Review;events:{caseRevision:number;identityRevision:number;requestId:string;
  action:string;review:Review}[];
  realMemberAuthenticated:false;realIdentityVerified:false;nationalIdStored:false;
  realIdpContacted:false;officialMembershipActivated:false;waitingPeriodStarted:false;
@@ -44,7 +44,21 @@ function valid(x:unknown,ref:string):x is Snapshot{
  return false;
  return s.events.every((e,i)=>e.caseRevision===i+1&&
  Number.isSafeInteger(e.identityRevision)&&e.identityRevision>=0&&
+ typeof e.requestId==='string'&&
+ /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(e.requestId)&&
  (e.action==='ObserveProofing'||e.action==='ApplicantCorrectedIdentity'));
+}
+function acknowledged(s:Snapshot,c:Command):boolean{
+ const rev=c.expectedCaseRevision+1;
+ const e=s.events.find(x=>x.caseRevision===rev);
+ const action=c.action==='OBSERVE_PROOFING'
+  ?'ObserveProofing':'ApplicantCorrectedIdentity';
+ return !!e&&e.requestId===c.requestId&&e.action===action&&
+  e.identityRevision===(c.expectedIdentityRevision+
+   (c.action==='APPLICANT_CORRECTED_IDENTITY'?1:0))&&
+  s.events.filter(x=>x.requestId===c.requestId).length===1&&
+  (s.outcome==='Replayed'||(s.outcome==='Applied'&&s.caseRevision===rev))&&
+  s.events[s.events.length-1]?.review===s.review;
 }
 export function ProofingCorrectionDemo(){
  const [caseRef,setCaseRef]=useState(id);
@@ -77,9 +91,7 @@ export function ProofingCorrectionDemo(){
    if(!valid(x,command.caseRef) || (x.outcome!=='Applied'&&x.outcome!=='Replayed'))
     throw Error('UNVERIFIABLE_ACK');
    const original=JSON.parse(command.body) as Command;
-   if(x.caseRevision!<original.expectedCaseRevision+1||
-      x.identityRevision!<original.expectedIdentityRevision)
-    throw Error('INCONSISTENT_ACK');
+   if(!acknowledged(x,original))throw Error('UNBOUND_ACK');
    setState(x);setPending(null);
    setMessage(x.outcome==='Replayed'?'درخواست اصلی بدون ثبت مجدد بازیابی شد.':
     'رویداد آزمایشی ثبت و ممیزی شد؛ هیچ هویت واقعی تأیید نشده است.');
