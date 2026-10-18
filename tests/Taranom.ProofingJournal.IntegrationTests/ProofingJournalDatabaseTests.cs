@@ -1,4 +1,5 @@
 using Npgsql;
+using System.Security.Cryptography;
 using Taranom.MemberGovernance;
 using Taranom.ProofingJournal.Postgres;
 using Xunit;
@@ -14,6 +15,8 @@ public sealed class ProofingJournalDatabaseTests
 {
     private static readonly Lazy<Task> Ready = new(BootstrapAsync);
     private const string RuntimeUser = "taranom_sprint03_journal_test";
+    private const string ReaderUser = "taranom_sprint164_proof_reader_integration_test";
+    private static string? ReaderSecret;
     private const string RuntimePassword = "only_ephemeral_proofing_journal_test";
 
     private static string AdminConnection => Environment.GetEnvironmentVariable("TARANOM_TEST_PG")
@@ -45,9 +48,36 @@ public sealed class ProofingJournalDatabaseTests
                 internal_test_proofing_denial TO taranom_sprint03_journal_test;
             """, cn);
         await grant.ExecuteNonQueryAsync(ct);
+        // Exercise the production-style two-source constructor in the standalone
+        // integration suite, without reusing its writer privilege for reads.
+        ReaderSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        await using var readerRole = new NpgsqlCommand("""
+            DO $role$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles
+                    WHERE rolname='taranom_sprint164_proof_reader_integration_test') THEN
+                    CREATE ROLE taranom_sprint164_proof_reader_integration_test
+                        LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+                END IF;
+            END;
+            $role$;
+            REVOKE ALL ON TABLE internal_test_proofing_case,
+                internal_test_proofing_event,internal_test_proofing_audit,
+                internal_test_proofing_denial
+                FROM taranom_sprint164_proof_reader_integration_test;
+            GRANT USAGE ON SCHEMA public TO taranom_sprint164_proof_reader_integration_test;
+            GRANT SELECT ON internal_test_proofing_case,internal_test_proofing_event,
+                internal_test_proofing_audit
+                TO taranom_sprint164_proof_reader_integration_test;
+            """, cn);
+        await readerRole.ExecuteNonQueryAsync(ct);
+        await using var password = new NpgsqlCommand(
+            "ALTER ROLE "+ReaderUser+" PASSWORD '"+ReaderSecret+"'",cn);
+        await password.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task<(NpgsqlDataSource Db, PgProofingCaseJournal Store)> ConnectAsync()
+    private static async Task<(NpgsqlDataSource Db,NpgsqlDataSource Reader,
+        PgProofingCaseJournal Store)> ConnectAsync()
     {
         await Ready.Value.WaitAsync(TestContext.Current.CancellationToken);
         var cs = new NpgsqlConnectionStringBuilder(AdminConnection)
@@ -56,7 +86,15 @@ public sealed class ProofingJournalDatabaseTests
             Password = RuntimePassword
         };
         var db = NpgsqlDataSource.Create(cs.ConnectionString);
-        return (db, new PgProofingCaseJournal(db));
+        var readConfig = new NpgsqlConnectionStringBuilder(AdminConnection)
+        {
+            Username = ReaderUser,
+            Password = ReaderSecret ?? throw new InvalidOperationException(
+                "PROOFING_READER_SECRET_NOT_INITIALIZED"),
+            Pooling = false
+        };
+        var reader = NpgsqlDataSource.Create(readConfig.ConnectionString);
+        return (db, reader, new PgProofingCaseJournal(db, reader));
     }
 
     private static string NewCase(string prefix = "case") =>
@@ -100,8 +138,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task DurableWriteRebuildsFromEventAndMatchingAudit()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var first = await ApplyAsync(store, key, Observe(Guid.NewGuid(), 0, 0,
             ProofingObservation.VerifiedMatch));
@@ -116,8 +155,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task ExactHistoricalReplayDoesNotDuplicateAudit()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var original = Observe(Guid.NewGuid(), 0, 0, ProofingObservation.DefinitiveMismatch);
         var first = await ApplyAsync(store, key, original);
@@ -134,8 +174,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task SameRequestChangedPayloadFailsWithoutMutatingHistory()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var original = Observe(Guid.NewGuid(), 0, 0, ProofingObservation.ProviderUnavailable);
         Assert.Equal(ProofingJournalOutcome.Applied,
@@ -150,8 +191,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task ConcurrentDifferentRequestsHaveOnlyOneAppliedChange()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var operations = new[]
         {
@@ -168,8 +210,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task ConcurrentSameRequestSerializesToOneAcceptedOneReplay()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var request = Observe(Guid.NewGuid(), 0, 0, ProofingObservation.Inconclusive);
         var outputs = await Task.WhenAll(ApplyAsync(store, key, request),
@@ -182,8 +225,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task IdentityRevisionRemainsIsolatedAfterCorrection()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         await ApplyAsync(store, key, Observe(Guid.NewGuid(), 0, 0,
             ProofingObservation.DefinitiveMismatch));
@@ -201,8 +245,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task AuditWriteFailureRollsBackStateAndEventTogether()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase("abort");
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
             ApplyAsync(store, key, Observe(Guid.NewGuid(), 0, 0,
@@ -217,8 +262,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task RuntimeCannotUpdateOrDeleteEventHistory()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         await ApplyAsync(store, key, Observe(Guid.NewGuid(), 0, 0,
             ProofingObservation.VerifiedMatch));
@@ -246,8 +292,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task SchemaOwnerCannotSilentlyRewriteHistoryThroughNormalDml()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         await ApplyAsync(store, key, Observe(Guid.NewGuid(), 0, 0,
             ProofingObservation.VerifiedMatch));
@@ -266,8 +313,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task ProjectionCorruptionFailsClosedOnReadAndWrite()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         await ApplyAsync(store, key, Observe(Guid.NewGuid(), 0, 0,
             ProofingObservation.VerifiedMatch));
@@ -292,8 +340,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task InvalidRequestAuditsDenialWithoutCreatingCase()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var denied = await ApplyAsync(store, key,
             Observe(Guid.Empty, 0, 0, ProofingObservation.Inconclusive));
@@ -306,8 +355,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task FailedDenialAuditThrowsAndDoesNotCreateCase()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase("abort-deny");
         var error = await Assert.ThrowsAsync<PostgresException>(() =>
             ApplyAsync(store, key, Observe(Guid.Empty, 0, 0,
@@ -321,8 +371,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task ExactReplayDoesNotGenerateDenial()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var request = Observe(Guid.NewGuid(), 0, 0, ProofingObservation.VerifiedMatch);
         Assert.Equal(ProofingJournalOutcome.Applied,
@@ -335,8 +386,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task ConflictingReplayIsDenialAuditedWithoutNewAcceptedEvent()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var original = Observe(Guid.NewGuid(), 0, 0, ProofingObservation.Inconclusive);
         await ApplyAsync(store, key, original);
@@ -363,8 +415,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task CompetingWritersAuditTheirStaleDenial()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         var results = await Task.WhenAll(
             ApplyAsync(store, key,
@@ -380,8 +433,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task InapplicableCorrectionIsDeniedWithoutCreatingCase()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         Assert.Equal(ProofingJournalOutcome.NotApplicable,
             (await ApplyAsync(store, key, Correct(Guid.NewGuid(), 0, 0))).Outcome);
@@ -392,8 +446,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task RuntimeCannotModifyDenialAuditByUpdateOrDelete()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         await ApplyAsync(store, key,
             Observe(Guid.Empty, 0, 0, ProofingObservation.Inconclusive));
@@ -422,8 +477,9 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task SchemaOwnerOrdinaryDmlCannotEraseDenialAudit()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var key = NewCase();
         await ApplyAsync(store, key,
             Observe(Guid.Empty, 0, 0, ProofingObservation.Inconclusive));
@@ -443,12 +499,46 @@ public sealed class ProofingJournalDatabaseTests
     [Fact]
     public async Task UnconnectedOrPersonalDataReferencesAreRejected()
     {
-        var (db, store) = await ConnectAsync();
+        var (db, reader, store) = await ConnectAsync();
         await using var _ = db;
+        await using var _proofReader = reader;
         var cmd = Observe(Guid.NewGuid(), 0, 0, ProofingObservation.VerifiedMatch);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             ApplyAsync(store, "actual-person-identifier", cmd));
         Assert.Equal("TEST_PROOFING_CASE_REF_REQUIRED", error.Message);
         Assert.Equal(0L, (await ReadAsync(store, NewCase())).CaseRevision);
     }
+    [Fact]
+    public async Task DedicatedReaderCanRehydrateButCannotMutateOrReadDenialAudit()
+    {
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db;
+        await using var _proofReader = reader;
+        var key = NewCase("readonly");
+        Assert.Equal(ProofingJournalOutcome.Applied,
+            (await ApplyAsync(store,key,Observe(Guid.NewGuid(),0,0,
+                ProofingObservation.Inconclusive))).Outcome);
+        Assert.Equal(1L,(await ReadAsync(store,key)).CaseRevision);
+        await using var connection = await reader.OpenConnectionAsync(
+            TestContext.Current.CancellationToken);
+        foreach (var sql in new[]
+        {
+            "UPDATE internal_test_proofing_case SET case_revision=0 WHERE false",
+            "DELETE FROM internal_test_proofing_event WHERE false",
+            "INSERT INTO internal_test_proofing_denial "+
+                "(attempt_ref,case_ref,request_ref,reason_code,observed_case_revision) "+
+                "VALUES ('00000000-0000-0000-0000-000000000001', 'test:none', "+
+                "'00000000-0000-0000-0000-000000000002', 3, 0)",
+            "SELECT attempt_ref FROM internal_test_proofing_denial LIMIT 1"
+        })
+        {
+            await using var command = new NpgsqlCommand(sql,connection);
+            var error = await Assert.ThrowsAsync<PostgresException>(
+                async () => await command.ExecuteNonQueryAsync(
+                    TestContext.Current.CancellationToken));
+            Assert.Equal("42501",error.SqlState);
+        }
+        Assert.Equal(1L,await CountAsync(db,"internal_test_proofing_event",key));
+    }
+
 }
