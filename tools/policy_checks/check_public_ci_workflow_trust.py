@@ -419,6 +419,10 @@ DISPATCHER_BRANCHES = {
         "sprint-168-org-activity-ack-reconciliation",
         "main",
     ),
+    "sprint-169-cost-followup-journal-reconciliation.yml": (
+        "sprint-169-cost-followup-journal-reconciliation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

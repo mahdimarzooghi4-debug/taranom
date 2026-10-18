@@ -91,6 +91,7 @@ internal static class SupportHttp
             followUps = state.History.Skip(1).Select(x => new
             {
                 revision = x.Revision,
+                requestId = x.Command.RequestId,
                 noteRef = x.Command.UnverifiedFollowUpNoteRef,
                 claimedActorRef = x.Command.ClaimedFollowUpActorRef
             }).ToArray()

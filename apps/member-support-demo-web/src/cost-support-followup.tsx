@@ -61,6 +61,54 @@ export function CostSupportFollowUp({source,caseRef,link,onPending,onRecorded}:{
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('پیگیری هنوز ثبت نشده است.');
   const endpoint='/internal/demo/v1/support/'+encodeURIComponent(caseRef)+'/commands';
+  const journal='/internal/demo/v1/support/'+encodeURIComponent(caseRef);
+  // Only the exact stored command event can resolve an uncertain write.
+  // A global revision or a successful HTTP ACK is insufficient.
+  function exactJournal(raw:unknown,command:Command):boolean{
+    if(!raw||typeof raw!=='object')return false;
+    const x=raw as Record<string,unknown>;
+    if(x.contract!=='TRN-TECH-075'||x.syntheticOnly!==true||
+       x.memberAuthenticated!==false||x.insurerContacted!==false||
+       x.complaintLegallySubmitted!==false||x.clinicalReviewCompleted!==false||
+       x.nationalReleaseAllowed!==false||
+       x.caseRef!==caseRef||x.topic!=='InsuranceCoverageDispute'||
+       x.memberRef!==command.memberRef||
+       x.evidenceRef!==command.unverifiedEvidenceRef||
+       x.originalRequestId!==command.originalSubmissionRequestId||
+       !Number.isSafeInteger(x.revision)||
+       (x.revision as number)<command.expectedRevision+1||
+       x.followUpCount!==(x.revision as number)-1||
+       !Array.isArray(x.followUps)||
+       x.followUps.length!==x.followUpCount)return false;
+    const event=x.followUps[command.expectedRevision-1] as
+      Record<string,unknown>|undefined;
+    return !!event&&event.revision===command.expectedRevision+1&&
+      event.requestId===command.requestId&&
+      event.noteRef===command.unverifiedFollowUpNoteRef&&
+      event.claimedActorRef===command.claimedFollowUpActorRef&&
+      x.followUps.filter((e:unknown)=>e&&typeof e==='object'&&
+         (e as Record<string,unknown>).requestId===command.requestId).length===1;
+  }
+  async function verifyByRead(command:Command):Promise<boolean>{
+    const r=await fetch(journal,{credentials:'omit',cache:'no-store'});
+    if(!r.ok)return false;
+    const value:unknown=await r.json();
+    return !!value&&typeof value==='object'&&
+      (value as Record<string,unknown>).outcome==='READ'&&
+      exactJournal(value,command);
+  }
+  async function inspectUncertain(){
+    if(busy||!pending)return;
+    const original=pending;
+    setBusy(true);
+    try{
+      if(!await verifyByRead(original))throw Error('UNVERIFIED_EVENT');
+      setPending(null);onPending(false);
+      onRecorded('همان پیگیری آزمایشی از ژورنال PostgreSQL بدون POST مجدد تأیید شد؛ رابطه دو Journal باید بازخوانی شود.');
+    }catch{
+      setMessage('همان UUID و یادداشت در ژورنال تأیید نشد؛ قفل و بازپخش دستی حفظ شد.');
+    }finally{setBusy(false);}
+  }
   async function exactSend(command:Command){
     if(busy)return;
     setBusy(true);setPending(command);onPending(true);
@@ -75,23 +123,10 @@ export function CostSupportFollowUp({source,caseRef,link,onPending,onRecorded}:{
       }
       if(!r.ok||!value||typeof value!=='object')throw Error('NOT_VERIFIED');
       const x=value as Record<string,unknown>;
-      const follow=x.followUps;
-      if(x.contract!=='TRN-TECH-075'||x.syntheticOnly!==true||
-         x.memberAuthenticated!==false||x.insurerContacted!==false||
-         x.complaintLegallySubmitted!==false||x.clinicalReviewCompleted!==false||
-         x.nationalReleaseAllowed!==false||
-         !['RecordedUnverified','Replayed'].includes(String(x.outcome))||
-         x.caseRef!==caseRef||x.memberRef!==source.memberRef||
-         x.topic!=='InsuranceCoverageDispute'||
-         x.evidenceRef!=='test:cost-preview:'+source.previewId||
-         x.originalRequestId!==command.originalSubmissionRequestId||
-         x.revision!==command.expectedRevision+1||
-         x.followUpCount!==command.expectedRevision||
-         !Array.isArray(follow)||follow.length!==command.expectedRevision||
-         !follow.some(v=>v&&typeof v==='object'&&
-            (v as Record<string,unknown>).revision===command.expectedRevision+1&&
-            (v as Record<string,unknown>).noteRef===command.unverifiedFollowUpNoteRef&&
-            (v as Record<string,unknown>).claimedActorRef===command.claimedFollowUpActorRef))
+      if(!['RecordedUnverified','Replayed'].includes(String(x.outcome))||
+         !exactJournal(x,command)||
+         (x.outcome==='RecordedUnverified'&&x.revision!==command.expectedRevision+1)||
+         !await verifyByRead(command))
         throw Error('RECEIPT_UNVERIFIABLE');
       setPending(null);onPending(false);
       onRecorded(x.outcome==='Replayed'
@@ -140,8 +175,12 @@ export function CostSupportFollowUp({source,caseRef,link,onPending,onRecorded}:{
     </label>
     <button type="button" disabled={busy||pending!==null||!testRef(note)}
       onClick={()=>void prepare()}>ثبت دستی پیگیری آزمایشی بیمه</button>
-    {pending?<button type="button" disabled={busy}
-      onClick={()=>void exactSend(pending)}>تکرار دقیق UUID پیگیری نامطمئن</button>:null}
+    {pending?<div className="actions" data-testid="cost-followup-uncertain">
+      <button type="button" disabled={busy}
+        onClick={()=>void inspectUncertain()}>بررسی فقط‌خواندنی پیگیری ثبت‌شده</button>
+      <button type="button" disabled={busy}
+        onClick={()=>void exactSend(pending)}>تکرار دقیق UUID پیگیری نامطمئن</button>
+    </div>:null}
     <p role="status" data-testid="cost-followup-message">{message}</p>
   </section>;
 }
