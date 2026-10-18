@@ -411,6 +411,10 @@ DISPATCHER_BRANCHES = {
         "sprint-166-center-manual-department-adjustment",
         "main",
     ),
+    "sprint-167-guided-nonclinical-coordination.yml": (
+        "sprint-167-guided-nonclinical-coordination",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

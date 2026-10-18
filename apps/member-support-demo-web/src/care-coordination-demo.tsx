@@ -51,6 +51,28 @@ function acknowledged(s:Snapshot,c:Command,viaRead=false):boolean{
   (s.outcome==='Replayed'||(viaRead&&s.outcome==='READ')||
    (s.outcome==='RecordedUnverified'&&s.revision===rev));
 }
+type SuggestedStep={
+ action:Action|null;label:string;contactClaims:number;sourceClaims:number
+};
+// A navigational guide over source-backed, unverified *claims*. The two
+// follow-up types have no clinical prerequisite order; they are suggestions,
+// not authorization, clinical outcomes, SLAs, or business approvals.
+function nextClaimStep(s:Snapshot|null,caseRef:string):SuggestedStep{
+ if(!s||s.caseRef!==caseRef)
+  return {action:null,label:'ابتدا پرونده را از PostgreSQL بخوانید.',
+    contactClaims:0,sourceClaims:0};
+ const contacts=s.events.filter(e=>e.action==='RecordUnverifiedCoordinatorContact').length;
+ const sources=s.events.filter(e=>e.action==='AttachUnverifiedClinicalSourceReference').length;
+ if(s.revision===0)return {action:'REQUEST_NONCLINICAL_COORDINATION',
+    label:'گام ۱: ثبت درخواست هماهنگی صرفاً ادعایی',contactClaims:0,sourceClaims:0};
+ if(contacts===0)return {action:'RECORD_UNVERIFIED_COORDINATOR_CONTACT',
+    label:'گام پیشنهادی: ثبت ادعای تماس هماهنگ‌کننده',contactClaims:contacts,sourceClaims:sources};
+ if(sources===0)return {action:'ATTACH_UNVERIFIED_CLINICAL_SOURCE',
+    label:'گام پیشنهادی: پیوست ارجاع منبع تأییدنشده',contactClaims:contacts,sourceClaims:sources};
+ return {action:null,
+   label:'هر دو نوع ادعای پیگیری ثبت شده‌اند؛ هیچ خدمت یا تماس واقعی احراز نشده است.',
+   contactClaims:contacts,sourceClaims:sources};
+}
 export function CareCoordinationDemo(){
  const [caseRef,setCaseRef]=useState(newRef);
  const [memberRef,setMemberRef]=useState('test:member-claim');
@@ -129,6 +151,8 @@ export function CareCoordinationDemo(){
    unverifiedNoteOrDocumentRef:first?null:source};
   void send({ref:caseRef,body:JSON.stringify(cmd)});
  }
+ const suggestion=nextClaimStep(snapshot,caseRef);
+ const guideAction=uncertain?null:suggestion.action;
  return <section className="care-demo" dir="rtl">
   <h1>هماهنگی غیرتشخیصی و پیگیری ادعایی عضو</h1>
   <p className="risk">فقط محیط آزمایشی: بدون احراز هویت، تماس واقعی، تعیین تیم درمان،
@@ -164,6 +188,29 @@ export function CareCoordinationDemo(){
     onClick={()=>issue('ATTACH_UNVERIFIED_CLINICAL_SOURCE')}>
     پیوست ارجاع به منبع بالینیِ تأییدنشده</button>
   </fieldset>
+  <section role="region" aria-label="راهنمای پیگیری غیرتشخیصی آزمایشی"
+    data-testid="care-guided-workflow">
+   <h2>راهنمای پیگیری ادعایی عضو — بدون تصمیم بالینی</h2>
+   <p>گام پیشنهادی تنها از رویدادهای خوانده‌شده PostgreSQL به دست می‌آید.
+      ادعای تماس و ارجاع منبع الزاماً ترتیب حقوقی یا درمانی ندارند؛
+      هیچ فرمانی به‌صورت خودکار اجرا نمی‌شود.</p>
+   <p data-testid="care-guided-step" aria-live="polite">
+    {busy?'در حال بررسی؛ فرمان تازه مجاز نیست.':
+     uncertain?'پاسخ فرمان قبلی نامعلوم است؛ قبل از هر گام جدید همان درخواست را بازیابی کنید.':
+     suggestion.label}
+   </p>
+   {snapshot&&<p data-testid="care-guided-counts">
+     نسخه ژورنال: {snapshot.revision} |
+     ادعاهای تماس: {suggestion.contactClaims} |
+     ارجاعات تأییدنشده: {suggestion.sourceClaims}
+   </p>}
+   {guideAction&&<button type="button"
+     disabled={busy||!!uncertain||!snapshot}
+     onClick={()=>issue(guideAction)}>ثبت گام پیشنهادی با کلیک مستقل</button>}
+   <p>این راهنما مسئولیت پزشکی، تماس واقعی، ارجاع، درمان، نوبت،
+      رضایت یا دسترسی به پرونده ایجاد نمی‌کند. در موارد اضطراری
+      از مسیر خدمات اورژانس رسمی استفاده شود.</p>
+  </section>
   {uncertain&&<section role="alert"><p>ممکن است رویداد در سرور ثبت شده باشد.
    فرمان جدید قفل است؛ همان متن اصلی و UUID فقط با کلیک جداگانه تکرار می‌شود.</p>
    <button disabled={busy} onClick={()=>void inspectUncertain()}>
