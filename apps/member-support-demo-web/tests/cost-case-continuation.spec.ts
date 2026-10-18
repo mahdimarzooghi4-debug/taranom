@@ -12,7 +12,7 @@ async function newCase(page:import('@playwright/test').Page){
  await expect(panel.getByTestId('cost-support-message')).toContainText('فقط درخواست ساختگی');
  await panel.getByRole('button',{name:'راستی‌آزمایی مستقل رابطه دو Journal'}).click();
  await expect(panel.getByTestId('cost-support-linked-result')).toContainText('نسخه اعتراض: 1');
- const ticket=await panel.getByLabel('رسید ادامه پرونده آزمایشی').inputValue();
+ const ticket=await panel.getByLabel('رسید ادامه پرونده آزمایشی',{exact:true}).inputValue();
  return {id,caseRef,ticket,panel};
 }
 async function loadPreview(page:import('@playwright/test').Page,id:string){
@@ -30,7 +30,7 @@ test('CONT170-01 manually resume two-journal existing case after reload without 
  await expect(panel.getByTestId('cost-support-message')).toContainText('یک پیگیری ساختگی');
  await panel.getByRole('button',{name:'راستی‌آزمایی مستقل رابطه دو Journal'}).click();
  await expect(panel.getByTestId('cost-support-linked-result')).toContainText('نسخه اعتراض: 2');
- const ticket=await panel.getByLabel('رسید ادامه پرونده آزمایشی').inputValue();
+ const ticket=await panel.getByLabel('رسید ادامه پرونده آزمایشی',{exact:true}).inputValue();
  const parsed=JSON.parse(ticket);
  expect(parsed.previewId).toBe(id);
  expect(parsed.caseRef).toBe(caseRef);
