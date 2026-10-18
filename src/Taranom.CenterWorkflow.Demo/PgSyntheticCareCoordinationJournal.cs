@@ -9,8 +9,132 @@ namespace Taranom.CenterWorkflow.Demo;
 
 // Synthetic-only, local PostgreSQL event source. No appointments, clinical
 // orders, verified provider identity or actual member/patient data.
-internal sealed class PgSyntheticCareCoordinationJournal(NpgsqlDataSource source)
+internal sealed class PgSyntheticCareCoordinationJournal(NpgsqlDataSource writer,NpgsqlDataSource reader)
 {
+    // TRN-TECH-172: isolated synthetic PostgreSQL principals, never schema owner.
+    private const string WriterRole="taranom_sprint163_care_writer_test";
+    private const string ReaderRole="taranom_sprint163_care_reader_test";
+
+    internal static async Task<(NpgsqlDataSource Writer,NpgsqlDataSource Reader)>
+        RestrictedSourcesAsync(NpgsqlDataSource owner,NpgsqlConnectionStringBuilder admin)
+    {
+        if(Environment.GetEnvironmentVariable("TARANOM_CENTER_DEMO_TEST_ONLY")!="CI_EPHEMERAL_ONLY"||
+           admin.Database!="taranom_sprint64_center"||
+           admin.Host is not ("localhost" or "127.0.0.1")||admin.Port!=5432)
+            throw new InvalidOperationException("CARE_ROLES_CI_ONLY");
+        var writerSecret=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var readerSecret=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        const string sql="""
+            DO $roles$
+            BEGIN
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='taranom_sprint163_care_writer_test') THEN
+                CREATE ROLE taranom_sprint163_care_writer_test LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+              END IF;
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='taranom_sprint163_care_reader_test') THEN
+                CREATE ROLE taranom_sprint163_care_reader_test LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+              END IF;
+            END;
+            $roles$;
+            REVOKE ALL ON TABLE internal_test_care_case,internal_test_care_event,
+                internal_test_care_audit FROM PUBLIC;
+            REVOKE ALL ON TABLE internal_test_care_case,internal_test_care_event,
+                internal_test_care_audit FROM taranom_sprint163_care_writer_test,
+                taranom_sprint163_care_reader_test;
+            REVOKE ALL ON SCHEMA public FROM taranom_sprint163_care_writer_test,
+                taranom_sprint163_care_reader_test;
+            GRANT USAGE ON SCHEMA public TO taranom_sprint163_care_writer_test,
+                taranom_sprint163_care_reader_test;
+            GRANT SELECT,INSERT,UPDATE ON internal_test_care_case TO taranom_sprint163_care_writer_test;
+            GRANT SELECT,INSERT ON internal_test_care_event,internal_test_care_audit
+                TO taranom_sprint163_care_writer_test;
+            GRANT SELECT ON internal_test_care_case,internal_test_care_event,internal_test_care_audit
+                TO taranom_sprint163_care_reader_test;
+            """;
+        await using(var cn=await owner.OpenConnectionAsync())
+        {
+            await using(var cmd=new NpgsqlCommand(sql,cn)) await cmd.ExecuteNonQueryAsync();
+            // Both credentials are fresh random uppercase hex, never user text.
+            await using var pwd=new NpgsqlCommand(
+                "ALTER ROLE "+WriterRole+" LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '"+writerSecret+"';"+
+                "ALTER ROLE "+ReaderRole+" LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '"+readerSecret+"';",cn);
+            await pwd.ExecuteNonQueryAsync();
+        }
+        NpgsqlDataSource? writer=null,reader=null;
+        try
+        {
+            var w=new NpgsqlConnectionStringBuilder(admin.ConnectionString)
+                {Username=WriterRole,Password=writerSecret,Pooling=false};
+            var r=new NpgsqlConnectionStringBuilder(admin.ConnectionString)
+                {Username=ReaderRole,Password=readerSecret,Pooling=false};
+            writer=NpgsqlDataSource.Create(w.ConnectionString);
+            reader=NpgsqlDataSource.Create(r.ConnectionString);
+            await AttestAsync(writer,WriterRole,true);
+            await AttestAsync(reader,ReaderRole,false);
+            return (writer,reader);
+        }
+        catch
+        {
+            if(writer is not null)await writer.DisposeAsync();
+            if(reader is not null)await reader.DisposeAsync();
+            throw;
+        }
+    }
+
+    private static async Task AttestAsync(NpgsqlDataSource source,string role,bool write)
+    {
+        await using var cn=await source.OpenConnectionAsync();
+        const string sql="""
+            SELECT current_user,session_user,rolsuper,rolcreatedb,rolcreaterole,
+                rolreplication,rolinherit,has_schema_privilege(current_user,'public','CREATE'),
+                has_table_privilege(current_user,'internal_test_care_case','SELECT'),
+                has_table_privilege(current_user,'internal_test_care_case','INSERT'),
+                has_table_privilege(current_user,'internal_test_care_case','UPDATE'),
+                has_table_privilege(current_user,'internal_test_care_case','DELETE'),
+                has_table_privilege(current_user,'internal_test_care_event','SELECT'),
+                has_table_privilege(current_user,'internal_test_care_event','INSERT'),
+                has_table_privilege(current_user,'internal_test_care_event','UPDATE'),
+                has_table_privilege(current_user,'internal_test_care_event','DELETE'),
+                has_table_privilege(current_user,'internal_test_care_audit','SELECT'),
+                has_table_privilege(current_user,'internal_test_care_audit','INSERT'),
+                has_table_privilege(current_user,'internal_test_care_audit','UPDATE'),
+                has_table_privilege(current_user,'internal_test_care_audit','DELETE'),
+                has_table_privilege(current_user,'internal_test_support_case','SELECT'),
+                has_table_privilege(current_user,'internal_test_proofing_case','SELECT')
+            FROM pg_roles WHERE rolname=current_user
+            """;
+        await using(var cmd=new NpgsqlCommand(sql,cn))
+        await using(var row=await cmd.ExecuteReaderAsync())
+        {
+            if(!await row.ReadAsync()||row.GetString(0)!=role||row.GetString(1)!=role||
+               Enumerable.Range(2,6).Any(i=>row.GetBoolean(i))||
+               !row.GetBoolean(8)||row.GetBoolean(9)!=write||
+               row.GetBoolean(10)!=write||row.GetBoolean(11)||
+               !row.GetBoolean(12)||row.GetBoolean(13)!=write||
+               row.GetBoolean(14)||row.GetBoolean(15)||
+               !row.GetBoolean(16)||row.GetBoolean(17)!=write||
+               row.GetBoolean(18)||row.GetBoolean(19)||
+               row.GetBoolean(20)||row.GetBoolean(21))
+                throw new InvalidOperationException("CARE_DATABASE_ROLE_PRIVILEGES_UNVERIFIABLE");
+        }
+        // Test real denied SQL, not just grants-table metadata.
+        await DeniedAsync(cn,write?
+            "DELETE FROM internal_test_care_event WHERE false":
+            "UPDATE internal_test_care_case SET current_revision=0 WHERE false");
+        await DeniedAsync(cn,"SELECT case_ref FROM internal_test_support_case LIMIT 1");
+        await DeniedAsync(cn,"SELECT case_ref FROM internal_test_proofing_case LIMIT 1");
+    }
+
+    private static async Task DeniedAsync(NpgsqlConnection cn,string sql)
+    {
+        try
+        {
+            await using var cmd=new NpgsqlCommand(sql,cn);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch(PostgresException ex)when(ex.SqlState=="42501"){return;}
+        throw new InvalidOperationException("CARE_FORBIDDEN_SQL_ACCEPTED");
+    }
+
     internal static async Task InitializeAsync(NpgsqlDataSource owner)
     {
         const string ddl = """
@@ -61,7 +185,7 @@ internal sealed class PgSyntheticCareCoordinationJournal(NpgsqlDataSource source
     {
         var invalid = SyntheticCareCoordinationTrail.Apply(SyntheticCareTrailSnapshot.Empty,input);
         if(invalid.Outcome==SyntheticCareTrailOutcome.Invalid)return invalid;
-        await using var cn = await source.OpenConnectionAsync();
+        await using var cn = await writer.OpenConnectionAsync();
         await using var tx = await cn.BeginTransactionAsync();
         await using(var create=new NpgsqlCommand("""
             INSERT INTO internal_test_care_case(case_ref) VALUES(@case)
@@ -124,7 +248,7 @@ internal sealed class PgSyntheticCareCoordinationJournal(NpgsqlDataSource source
     internal async Task<SyntheticCareTrailSnapshot> ReadAsync(string caseRef)
     {
         if(!Synthetic(caseRef))throw new InvalidOperationException("INVALID_CARE_CASE");
-        await using var cn=await source.OpenConnectionAsync();
+        await using var cn=await reader.OpenConnectionAsync();
         await using var tx=await cn.BeginTransactionAsync(
             System.Data.IsolationLevel.RepeatableRead);
         await using(var ro=new NpgsqlCommand("SET TRANSACTION READ ONLY",cn,tx))

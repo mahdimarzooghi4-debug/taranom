@@ -395,6 +395,10 @@ DISPATCHER_BRANCHES = {
         "sprint-162-read-only-uncertain-command-reconciliation",
         "main",
     ),
+    "sprint-163-care-postgres-least-privilege.yml": (
+        "sprint-163-care-postgres-least-privilege",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -28,6 +28,11 @@ await PgLateEvidenceWorkItemJournal.InitializeIsolatedTestSchemaAsync(dataSource
 await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
     .InitializeAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
+// TRN-TECH-172: care journal HTTP no longer receives owner-level access.
+var careSources=await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
+    .RestrictedSourcesAsync(dataSource,connection);
+await using var careWriter=careSources.Writer;
+await using var careReader=careSources.Reader;
 // TRN-TECH-110: support HTTP must never inherit the schema-owner connection;
 // the support journal gets only bounded DML on its three synthetic tables.
 await using var supportRuntime = await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal
@@ -44,7 +49,7 @@ Taranom.CenterWorkflow.Demo.ProofingDemoHttp.Store =
 Taranom.CenterWorkflow.Demo.LateEvidenceHttp.Store =
     new PgLateEvidenceWorkItemJournal(dataSource);
 Taranom.CenterWorkflow.Demo.CareCoordinationHttp.Store =
-    new Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal(dataSource);
+    new Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal(careWriter,careReader);
 
 // TRN-TECH-135: opt-in localhost technical QA only; the HTTP endpoint has
 // precisely ONE support-scoped restricted PostgreSQL login. No browser tenant
