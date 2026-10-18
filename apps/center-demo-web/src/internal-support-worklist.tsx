@@ -7,12 +7,15 @@ type Page={
  complaintLegallySubmitted:false;insurerContacted:false;
  clinicalReviewCompleted:false;nationalReleaseAllowed:false;
  source:'VERIFIED_ISOLATED_POSTGRES_SUPPORT_JOURNAL';
- afterCaseRef:string;limit:number;hasMore:boolean;
+ afterCaseRef:string;topic:'ALL'|'MedicalServiceComplaint'|'InsuranceCoverageDispute';
+ limit:number;hasMore:boolean;
  nextAfterCaseRef:string|null;cases:Row[]
 };
 const testRef=(v:string)=>v.length<=128&&/^test:[A-Za-z0-9_:-]{1,123}$/.test(v);
 const PAGE_SIZE=4;
-function validPage(input:unknown,after:string):input is Page{
+type Topic=Page['topic'];
+const TOPICS:Topic[]=['ALL','MedicalServiceComplaint','InsuranceCoverageDispute'];
+function validPage(input:unknown,after:string,topic:Topic):input is Page{
  if(!input||typeof input!=='object'||Array.isArray(input))return false;
  const v=input as Partial<Page>;
  if(v.contract!=='TRN-TECH-129'||v.syntheticOnly!==true||
@@ -20,7 +23,7 @@ function validPage(input:unknown,after:string):input is Page{
   v.insurerContacted!==false||v.clinicalReviewCompleted!==false||
   v.nationalReleaseAllowed!==false||
   v.source!=='VERIFIED_ISOLATED_POSTGRES_SUPPORT_JOURNAL'||
-  v.afterCaseRef!==after||v.limit!==PAGE_SIZE||
+  v.afterCaseRef!==after||v.topic!==topic||v.limit!==PAGE_SIZE||
   typeof v.hasMore!=='boolean'||!Array.isArray(v.cases)||
   v.cases.length>PAGE_SIZE)return false;
  let previous=after;
@@ -39,10 +42,15 @@ export function InternalSupportWorklist({onSelect,disabled}:{
  onSelect:(ref:string)=>void;disabled:boolean
 }){
  const [afterInput,setAfterInput]=useState('');
+ const [topic,setTopic]=useState<Topic>('ALL');
  const [rows,setRows]=useState<Row[]>([]);
  const [next,setNext]=useState<string|null>(null);
  const [phase,setPhase]=useState<'IDLE'|'LOADING'|'READY'|'DENIED'>('IDLE');
  const epoch=useRef(0);
+ function changeTopic(next:Topic){
+  epoch.current++;setTopic(next);setAfterInput('');setRows([]);setNext(null);
+  setPhase('IDLE');
+ }
  function changeInput(value:string){
   epoch.current++;setAfterInput(value);setRows([]);setNext(null);setPhase('IDLE');
  }
@@ -51,12 +59,13 @@ export function InternalSupportWorklist({onSelect,disabled}:{
   const current=++epoch.current;
   setPhase('LOADING');setRows([]);setNext(null);
   try{
+   const selected=topic;
    const url='/internal/demo/v1/support-worklist?afterCaseRef='+
-    encodeURIComponent(after)+'&limit='+PAGE_SIZE;
+    encodeURIComponent(after)+'&limit='+PAGE_SIZE+'&topic='+encodeURIComponent(selected);
    const res=await fetch(url,{credentials:'omit',cache:'no-store'});
    if(!res.ok)throw Error('UNAVAILABLE');
    const body:unknown=await res.json();
-   if(!validPage(body,after))throw Error('UNVERIFIED');
+   if(!validPage(body,after,selected))throw Error('UNVERIFIED');
    if(epoch.current!==current)return;
    setRows(body.cases);setNext(body.nextAfterCaseRef);setPhase('READY');
   }catch{
@@ -68,6 +77,17 @@ export function InternalSupportWorklist({onSelect,disabled}:{
   <h3>فهرست پرونده‌های پیگیری ثبت‌شده — فقط محیط آزمایشی</h3>
   <p>فقط شناسه test: و شماره نسخه از ژورنال تأییدشده PostgreSQL؛
    فهرست نه هویت اشخاص را ثابت می‌کند و نه اجازه دسترسی عملیاتی ایجاد می‌کند.</p>
+  <label>موضوع ادعای ثبت‌شده در ژورنال
+   <select aria-label="فیلتر موضوع پرونده پشتیبانی" value={topic}
+    disabled={disabled||phase==='LOADING'}
+    onChange={e=>changeTopic(e.target.value as Topic)}>
+    {TOPICS.map(t=><option key={t} value={t}>{t==='ALL'?'همه موضوع‌ها':
+      t==='MedicalServiceComplaint'?'نارضایتی خدمت پزشکی (ادعایی)':
+      'اختلاف پوشش بیمه (ادعایی)'}</option>)}
+   </select>
+  </label>
+  <p>فیلتر صرفاً برچسب رویداد اولیه آزمایشی است؛
+   اولویت درمانی، وضعیت رسیدگی یا استحقاق بیمه محسوب نمی‌شود.</p>
   <label>شروع پس از شناسه آزمایشی (اختیاری)
    <input aria-label="شروع فهرست پس از پرونده" value={afterInput}
     disabled={disabled||phase==='LOADING'} maxLength={128} autoComplete="off"

@@ -220,9 +220,13 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
     // Reuse the reader's distinct SELECT-only PostgreSQL principal and verify
     // each listed case using its canonical event + paired audit lineage.
     internal async Task<(IReadOnlyList<(string CaseRef, long Revision, int FollowUps)> Rows,
-        bool HasMore)> ReadWorklistAsync(string? afterCaseRef, int limit)
+        bool HasMore)> ReadWorklistAsync(string? afterCaseRef, int limit,
+            SyntheticSupportTopic? topic = null)
     {
         if (limit is < 1 or > 10 ||
+            (topic is not null && topic is not
+                (SyntheticSupportTopic.MedicalServiceComplaint or
+                 SyntheticSupportTopic.InsuranceCoverageDispute)) ||
             (afterCaseRef is not null && !IsSynthetic(afterCaseRef)))
             throw new InvalidOperationException("INVALID_TEST_WORKLIST_CURSOR");
 
@@ -234,14 +238,20 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
 
         var refs = new List<string>();
         await using (var cmd = new NpgsqlCommand("""
-            SELECT case_ref FROM internal_test_support_case
-            WHERE current_revision > 0
-              AND (@after = '' OR case_ref COLLATE "C" > @after COLLATE "C")
-            ORDER BY case_ref COLLATE "C"
+            SELECT c.case_ref FROM internal_test_support_case c
+            JOIN internal_test_support_event first_event
+              ON first_event.case_ref = c.case_ref AND first_event.revision = 1
+            WHERE c.current_revision > 0
+              AND (@after = '' OR c.case_ref COLLATE "C" > @after COLLATE "C")
+              AND (@topic = 'ALL' OR
+                   first_event.command_json::jsonb ->> 'Topic' = @topic)
+            ORDER BY c.case_ref COLLATE "C"
             LIMIT @count
             """, conn, tx))
         {
             cmd.Parameters.AddWithValue("after", afterCaseRef ?? string.Empty);
+            cmd.Parameters.AddWithValue("topic", topic is null ? "ALL" :
+                ((int)topic.Value).ToString(CultureInfo.InvariantCulture));
             cmd.Parameters.AddWithValue("count", limit + 1);
             await using var rows = await cmd.ExecuteReaderAsync();
             while (await rows.ReadAsync())
@@ -260,6 +270,7 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
         {
             var state = await RehydrateAsync(conn, tx, reference, lockCaseRow: false);
             if (state.Revision <= 0 ||
+                (topic is not null && state.History[0].Command.Topic != topic) ||
                 state.History.Length != state.Revision ||
                 state.History.Length - 1 > int.MaxValue)
                 throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIABLE");
