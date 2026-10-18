@@ -1,0 +1,12 @@
+name: Sprint 165 Late Evidence PostgreSQL Role Isolation Full Regression
+on:
+  push:
+    branches: [sprint-165-late-evidence-role-isolation]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

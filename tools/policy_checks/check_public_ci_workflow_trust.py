@@ -403,6 +403,10 @@ DISPATCHER_BRANCHES = {
         "sprint-164-proofing-postgres-role-isolation",
         "main",
     ),
+    "sprint-165-late-evidence-role-isolation.yml": (
+        "sprint-165-late-evidence-role-isolation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

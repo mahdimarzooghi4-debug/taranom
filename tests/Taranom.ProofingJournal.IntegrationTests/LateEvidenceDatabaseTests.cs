@@ -1,4 +1,5 @@
 using Npgsql;
+using System.Security.Cryptography;
 using Taranom.MemberGovernance;
 using Taranom.ProofingJournal.Postgres;
 using Xunit;
@@ -13,6 +14,8 @@ namespace Taranom.ProofingJournal.IntegrationTests;
 public sealed class LateEvidenceDatabaseTests
 {
     private static readonly Lazy<Task> Ready = new(PrepareAsync);
+    private const string ReaderRole = "taranom_sprint165_late_reader_integration_test";
+    private static string? ReaderSecret;
 
     private static string AdminConnection =>
         Environment.GetEnvironmentVariable("TARANOM_TEST_PG")
@@ -43,10 +46,38 @@ public sealed class LateEvidenceDatabaseTests
                 TO taranom_sprint27_late_evidence_test;
             """, cn);
         await command.ExecuteNonQueryAsync(ct);
+        ReaderSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        await using(var role = new NpgsqlCommand("""
+            DO $late_reader$
+            BEGIN
+                IF NOT EXISTS(SELECT 1 FROM pg_roles
+                    WHERE rolname='taranom_sprint165_late_reader_integration_test') THEN
+                    CREATE ROLE taranom_sprint165_late_reader_integration_test
+                        LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+                END IF;
+            END;
+            $late_reader$;
+            REVOKE ALL ON TABLE internal_test_late_evidence_case,
+                internal_test_late_evidence_event,internal_test_late_evidence_audit
+                FROM taranom_sprint165_late_reader_integration_test;
+            REVOKE ALL ON SCHEMA public
+                FROM taranom_sprint165_late_reader_integration_test;
+            GRANT USAGE ON SCHEMA public
+                TO taranom_sprint165_late_reader_integration_test;
+            GRANT SELECT ON internal_test_late_evidence_case,
+                internal_test_late_evidence_event,internal_test_late_evidence_audit
+                TO taranom_sprint165_late_reader_integration_test;
+            """,cn))
+            await role.ExecuteNonQueryAsync(ct);
+        await using var password = new NpgsqlCommand(
+            "ALTER ROLE "+ReaderRole+" LOGIN NOINHERIT NOSUPERUSER "+
+            "NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '"+
+            ReaderSecret+"'",cn);
+        await password.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task<(NpgsqlDataSource Db, PgLateEvidenceWorkItemJournal Store)>
-        ConnectAsync()
+    private static async Task<(NpgsqlDataSource Db,NpgsqlDataSource Reader,
+        PgLateEvidenceWorkItemJournal Store)> ConnectAsync()
     {
         await Ready.Value.WaitAsync(TestContext.Current.CancellationToken);
         var config = new NpgsqlConnectionStringBuilder(AdminConnection)
@@ -55,7 +86,15 @@ public sealed class LateEvidenceDatabaseTests
             Password = "only_ephemeral_late_evidence_test"
         };
         var source = NpgsqlDataSource.Create(config.ConnectionString);
-        return (source, new PgLateEvidenceWorkItemJournal(source));
+        var readConfig = new NpgsqlConnectionStringBuilder(AdminConnection)
+        {
+            Username = ReaderRole,
+            Password = ReaderSecret ?? throw new InvalidOperationException(
+                "LATE_READER_NOT_INITIALIZED"),
+            Pooling = false
+        };
+        var reader = NpgsqlDataSource.Create(readConfig.ConnectionString);
+        return (source,reader,new PgLateEvidenceWorkItemJournal(source,reader));
     }
 
     private static LateEvidenceCommand Submit(string caseRef,
@@ -109,7 +148,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task SubmittedCaseAndHumanNotePersistWithPairedAppendOnlyAudit()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase();
         var source = Submit(id);
         Assert.Equal(LateEvidenceOutcome.RecordedUnverified,
@@ -128,7 +168,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task ReplayAfterNoteKeepsCurrentHistoryAndDoesNotDuplicateAudit()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase();
         var source = Submit(id);
         await Apply(store, source);
@@ -143,7 +184,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task ChangedReplayIsRejectedWithoutWritingNewEvent()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase();
         var first = Submit(id);
         await Apply(store, first);
@@ -155,7 +197,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task ConcurrentDifferentRequestsSerializeToOneAcceptedCase()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase();
         var a = Submit(id);
         var b = Submit(id);
@@ -168,7 +211,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task ConcurrentExactRequestAllowsOnlyOneAcceptedAndOneReplay()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase();
         var command = Submit(id);
         var outputs = await Task.WhenAll(Apply(store, command), Apply(store, command));
@@ -180,7 +224,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task ReviewerCannotRewriteSubmittedMemberOrPeriod()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase();
         var original = Submit(id);
         await Apply(store, original);
@@ -193,7 +238,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task AuditInsertFailureRollsBackCaseAndSubmission()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase("abort-note-audit");
         var error = await Assert.ThrowsAsync<PostgresException>(
             () => Apply(store, Submit(id)));
@@ -206,7 +252,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task RuntimeRoleCannotEditHistoryOrReadRestrictedCatalog()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase();
         await Apply(store, Submit(id));
         await using var cn = await db.OpenConnectionAsync(TestContext.Current.CancellationToken);
@@ -229,7 +276,8 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task CorruptedHistoricalDigestFailsBeforeAnExactReplayIsReturned()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var id = NewCase();
         var source = Submit(id);
         await Apply(store, source);
@@ -258,10 +306,41 @@ public sealed class LateEvidenceDatabaseTests
     [Fact]
     public async Task RealIdentifierNeverCreatesCaseOrEvidenceRow()
     {
-        var (db, store) = await ConnectAsync(); await using var _ = db;
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
         var input = Submit("real:medical-membership");
         Assert.Equal(LateEvidenceOutcome.Invalid, (await Apply(store, input)).Outcome);
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => Read(store, input.CaseRef));
     }
+    [Fact]
+    public async Task ReaderCanRehydrateButCannotWriteOrCrossRead()
+    {
+        var (db, reader, store) = await ConnectAsync();
+        await using var _ = db; await using var _reader = reader;
+        var key = NewCase("restricted-reader");
+        Assert.Equal(LateEvidenceOutcome.RecordedUnverified,
+            (await Apply(store,Submit(key))).Outcome);
+        Assert.Equal(1,(await Read(store,key)).Revision);
+        await using var cn = await reader.OpenConnectionAsync(
+            TestContext.Current.CancellationToken);
+        foreach(var sql in new[]
+        {
+            "UPDATE internal_test_late_evidence_case "+
+                "SET current_revision=0 WHERE false",
+            "DELETE FROM internal_test_late_evidence_event WHERE false",
+            "INSERT INTO internal_test_late_evidence_case(case_ref) "+
+                "VALUES('test:forbidden-reader-insert')",
+            "SELECT count(*) FROM pg_catalog.pg_authid"
+        })
+        {
+            await using var cmd=new NpgsqlCommand(sql,cn);
+            var e=await Assert.ThrowsAsync<PostgresException>(
+                async()=>await cmd.ExecuteNonQueryAsync(
+                    TestContext.Current.CancellationToken));
+            Assert.Equal("42501",e.SqlState);
+        }
+        Assert.Equal(1,await Count(key,"internal_test_late_evidence_event"));
+    }
+
 }

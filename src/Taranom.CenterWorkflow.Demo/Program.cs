@@ -28,6 +28,11 @@ await PgLateEvidenceWorkItemJournal.InitializeIsolatedTestSchemaAsync(dataSource
 await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
     .InitializeAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
+// TRN-TECH-174: late-evidence HTTP may use only isolated writer/reader.
+var lateSources=await PgLateEvidenceWorkItemJournal.RestrictedTestSourcesAsync(
+    dataSource,connection);
+await using var lateWriter=lateSources.Writer;
+await using var lateReader=lateSources.Reader;
 // TRN-TECH-173: separate reader/writer from schema owner and all other journals.
 var proofingSources=await PgProofingCaseJournal.RestrictedTestSourcesAsync(
     dataSource,connection);
@@ -52,7 +57,7 @@ var store = new PgClinicalCenterJournal(dataSource);
 Taranom.CenterWorkflow.Demo.ProofingDemoHttp.Store =
     new PgProofingCaseJournal(proofingWriter,proofingReader);
 Taranom.CenterWorkflow.Demo.LateEvidenceHttp.Store =
-    new PgLateEvidenceWorkItemJournal(dataSource);
+    new PgLateEvidenceWorkItemJournal(lateWriter,lateReader);
 Taranom.CenterWorkflow.Demo.CareCoordinationHttp.Store =
     new Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal(careWriter,careReader);
 
