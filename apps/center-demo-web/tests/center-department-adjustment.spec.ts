@@ -92,7 +92,7 @@ test('ADJUST166-03 invalid target and lost ACK never trigger an automatic second
  });
  await ui.getByRole('button',{name:'ثبت مستقل انتساب به بخش مقصد'}).click();
  await expect(page.getByRole('alert',{name:'بازیابی دستور با نتیجه نامعلوم'})).toBeVisible();
- await expect(ui.getByTestId('center-adjustment-step')).toContainText('نتیجه دستور قبلی نامعلوم');
+ await expect(ui.getByTestId('center-adjustment-step')).toContainText('پاسخ ثبت قبلی نامعلوم');
  await expect(ui.getByRole('button',{name:'برداشتن مستقل انتساب از بخش مبدأ'})).toHaveCount(0);
  expect(count).toBe(1);
  await page.unrouteAll({behavior:'wait'});
