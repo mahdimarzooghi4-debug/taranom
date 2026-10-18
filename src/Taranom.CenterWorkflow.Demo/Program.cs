@@ -28,6 +28,11 @@ await PgLateEvidenceWorkItemJournal.InitializeIsolatedTestSchemaAsync(dataSource
 await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
     .InitializeAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
+// TRN-TECH-173: separate reader/writer from schema owner and all other journals.
+var proofingSources=await PgProofingCaseJournal.RestrictedTestSourcesAsync(
+    dataSource,connection);
+await using var proofingWriter=proofingSources.Writer;
+await using var proofingReader=proofingSources.Reader;
 // TRN-TECH-172: care journal HTTP no longer receives owner-level access.
 var careSources=await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
     .RestrictedSourcesAsync(dataSource,connection);
@@ -45,7 +50,7 @@ if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEM
     await PgSyntheticCostAwarenessJournal.InitializeIsolatedTestSchemaAsync(dataSource);
 var store = new PgClinicalCenterJournal(dataSource);
 Taranom.CenterWorkflow.Demo.ProofingDemoHttp.Store =
-    new PgProofingCaseJournal(dataSource);
+    new PgProofingCaseJournal(proofingWriter,proofingReader);
 Taranom.CenterWorkflow.Demo.LateEvidenceHttp.Store =
     new PgLateEvidenceWorkItemJournal(dataSource);
 Taranom.CenterWorkflow.Demo.CareCoordinationHttp.Store =

@@ -399,6 +399,10 @@ DISPATCHER_BRANCHES = {
         "sprint-163-care-postgres-least-privilege",
         "main",
     ),
+    "sprint-164-proofing-postgres-role-isolation.yml": (
+        "sprint-164-proofing-postgres-role-isolation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
