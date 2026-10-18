@@ -435,6 +435,10 @@ DISPATCHER_BRANCHES = {
         "sprint-172-support-topic-worklist",
         "main",
     ),
+    "sprint-173-member-followup-return.yml": (
+        "sprint-173-member-followup-return",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

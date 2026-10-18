@@ -5,7 +5,7 @@ import {InternalSupportWorklist} from './internal-support-worklist';
 
 // Local test-only UI over the EXISTING .NET + PostgreSQL support journal.
 // A readable response is not authentication, complaint submission or approval.
-type FollowUp={revision:number;noteRef:string;claimedActorRef:string};
+type FollowUp={revision:number;requestId:string;noteRef:string;claimedActorRef:string};
 type Snapshot={
  contract:'TRN-TECH-075';syntheticOnly:true;memberAuthenticated:false;
  complaintLegallySubmitted:false;insurerContacted:false;
@@ -37,6 +37,8 @@ function valid(value:unknown,ref:string):value is Snapshot{
   typeof x.originalRequestId!=='string'||!/^[0-9a-f-]{36}$/i.test(x.originalRequestId)||
   x.followUpCount!==x.revision!-1)return false;
  return x.followUps.every((f,i)=>f&&f.revision===i+2&&
+  typeof f.requestId==='string'&&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(f.requestId)&&
   validRef(f.noteRef)&&validRef(f.claimedActorRef));
 }
 export function InternalSupportRead(){
@@ -139,6 +141,26 @@ export function InternalSupportRead(){
    phase==='LOADING'?'در حال خواندن':
    phase==='DENIED'?'پاسخ یا منبع قابل تأیید نیست؛ اطلاعات قبلی پاک شد.':
    'وضعیت آزمایشی از پایگاه داده دریافت شد؛ فاقد اعتبار رسمی است.'}</p>
+  {snapshot&&snapshot.revision>1&&snapshot.followUpCount>0&&!pendingWrite&&
+    snapshot.caseRef===ref&&<section className="panel"
+      data-testid="center-member-followup-ticket"
+      aria-label="بازگشت رسید پیگیری آزمایشی به عضو">
+      <h3>رسید دستی آخرین پیگیری ثبت‌شده برای عضو آزمایشی</h3>
+      <p>فقط رویداد تأییدنشده همان ژورنال؛ نه پاسخ درمانی، بیمه‌ای،
+        احراز هویت یا تأیید رسیدگی. این متن مجوز دسترسی یا انتشار نیست.</p>
+      <textarea readOnly dir="ltr" rows={10}
+        aria-label="رسید خروجی آخرین پیگیری مرکز" spellCheck={false}
+        value={JSON.stringify({
+          format:'TRN-TECH-182-TEST-FOLLOWUP-RETURN',version:1,
+          caseRef:snapshot.caseRef,memberRef:snapshot.memberRef,
+          topic:snapshot.topic,evidenceRef:snapshot.evidenceRef,
+          originalRequestId:snapshot.originalRequestId,
+          revision:snapshot.revision,
+          followUpRequestId:snapshot.followUps[snapshot.followUps.length-1].requestId,
+          noteRef:snapshot.followUps[snapshot.followUps.length-1].noteRef,
+          claimedActorRef:snapshot.followUps[snapshot.followUps.length-1].claimedActorRef
+        },null,2)}/>
+    </section>}
   {snapshot&&<div data-testid="support-read-result">
    <p>پرونده: <code>{snapshot.caseRef}</code> — نسخه {snapshot.revision}</p>
    <p>موضوع: {snapshot.topic??'ثبت نشده'} | پیگیری‌ها: {snapshot.followUpCount}</p>

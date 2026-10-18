@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {exportRecovery,importRecovery,type SupportCommand,type PendingWrite} from './manual-recovery';
 
-type FollowUp = { revision: number; noteRef: string; claimedActorRef: string };
+type FollowUp = { revision: number; requestId: string; noteRef: string; claimedActorRef: string };
 type Support = {
   contract: 'TRN-TECH-075'; syntheticOnly: true;
   memberAuthenticated: false; complaintLegallySubmitted: false;
@@ -84,7 +84,9 @@ function verified(value: unknown, caseRef: string): value is Support {
     typeof x.memberRef === 'string' && testRef(x.memberRef) &&
     typeof x.evidenceRef === 'string' && testRef(x.evidenceRef) &&
     typeof x.claimedSubmitterRef === 'string' && testRef(x.claimedSubmitterRef) &&
-    x.followUps.every(v => v && Number.isSafeInteger(v.revision) && v.revision >= 2 &&
+    x.followUps.every((v,i) => v && Number.isSafeInteger(v.revision) && v.revision===i+2 &&
+      typeof v.requestId==='string'&&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.requestId) &&
       testRef(v.noteRef) && testRef(v.claimedActorRef));
 }
 
@@ -102,6 +104,9 @@ export function MemberSupportDemo() {
   // create a fresh requestId for its retry; no browser storage or real actor.
   const [pendingWrite, setPendingWrite] = useState<PendingWrite|null>(null);
   const [manualRecoveryText, setManualRecoveryText] = useState('');
+  const [returnedFollowUp, setReturnedFollowUp] = useState('');
+  const [returnStatus, setReturnStatus] = useState('رسید پیگیری مرکز هنوز بررسی نشده است.');
+  const [confirmedReturn, setConfirmedReturn] = useState<{caseRef:string;revision:number;noteRef:string}|null>(null);
   const [message, setMessage] = useState('این فرم فقط درخواست‌ها و ارجاعات آزمایشی را ذخیره می‌کند.');
   const [timeline, setTimeline] = useState<SupportHistory|null>(null);
   const [past, setPast] = useState<SupportHistorical|null>(null);
@@ -110,6 +115,7 @@ export function MemberSupportDemo() {
 
   async function read() {
     setBusy(true); setCurrent(null); setTimeline(null); setPast(null);
+    setConfirmedReturn(null);
     if (!testRef(caseRef)) {
       setMessage('فقط شناسه پرونده آزمایشی با پیشوند test: مجاز است.');
       setBusy(false); return;
@@ -125,6 +131,57 @@ export function MemberSupportDemo() {
     } catch {
       setMessage('خواندن پرونده آزمایشی ممکن نیست؛ هیچ وضعیت قبلی معتبر فرض نمی‌شود.');
     } finally { setBusy(false); }
+  }
+
+  // Untrusted versioned locator, not authentication, delivery or clinical advice.
+  async function inspectReturnedFollowUp(){
+    if(busy||pendingWrite||returnedFollowUp.length===0||
+       returnedFollowUp.length>1300)return;
+    setBusy(true);setCurrent(null);setTimeline(null);setPast(null);
+    setConfirmedReturn(null);
+    try{
+      const raw:unknown=JSON.parse(returnedFollowUp);
+      if(!raw||typeof raw!=='object'||Array.isArray(raw))throw Error('INVALID_RECEIPT');
+      const v=raw as Record<string,unknown>;
+      const keys=['format','version','caseRef','memberRef','topic','evidenceRef',
+        'originalRequestId','revision','followUpRequestId','noteRef','claimedActorRef'];
+      if(Object.keys(v).length!==keys.length||
+         Object.keys(v).some(k=>!keys.includes(k))||
+         v.format!=='TRN-TECH-182-TEST-FOLLOWUP-RETURN'||v.version!==1||
+         v.caseRef!==caseRef||v.memberRef!==memberRef||
+         typeof v.caseRef!=='string'||!testRef(v.caseRef)||
+         typeof v.memberRef!=='string'||!testRef(v.memberRef)||
+         typeof v.evidenceRef!=='string'||!testRef(v.evidenceRef)||
+         !['MedicalServiceComplaint','InsuranceCoverageDispute'].includes(String(v.topic))||
+         typeof v.originalRequestId!=='string'||
+         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.originalRequestId)||
+         typeof v.followUpRequestId!=='string'||
+         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.followUpRequestId)||
+         typeof v.noteRef!=='string'||!testRef(v.noteRef)||
+         typeof v.claimedActorRef!=='string'||!testRef(v.claimedActorRef)||
+         !Number.isSafeInteger(v.revision)||Number(v.revision)<2)
+        throw Error('INVALID_FIELDS');
+      const response=await fetch('/internal/demo/v1/support/'+encodeURIComponent(caseRef),
+        {cache:'no-store',credentials:'omit'});
+      if(!response.ok)throw Error('READ_UNAVAILABLE');
+      const source:unknown=await response.json();
+      if(!verified(source,caseRef)||source.outcome!=='READ'||
+         source.revision!==v.revision||source.memberRef!==v.memberRef||
+         source.topic!==v.topic||source.evidenceRef!==v.evidenceRef||
+         source.originalRequestId!==v.originalRequestId||
+         source.followUpCount<1)throw Error('SOURCE_MISMATCH');
+      const last=source.followUps[source.followUps.length-1];
+      if(last.revision!==v.revision||last.requestId!==v.followUpRequestId||
+         last.noteRef!==v.noteRef||last.claimedActorRef!==v.claimedActorRef)
+        throw Error('FOLLOWUP_MISMATCH');
+      setCurrent(source);
+      setConfirmedReturn({caseRef,revision:source.revision,noteRef:last.noteRef});
+      setReturnStatus('آخرین یادداشت ادعایی دقیقاً از PostgreSQL بازخوانی شد؛ هیچ پاسخ رسمی تأیید نشده است.');
+      setReturnedFollowUp('');
+    }catch{
+      setCurrent(null);setConfirmedReturn(null);
+      setReturnStatus('رسید پیگیری تأیید نشد؛ هیچ پرونده یا پاسخ رسمی بازیابی نشده است.');
+    }finally{setBusy(false);}
   }
 
   // An unknown network result is NOT a failed database transaction.
@@ -267,11 +324,11 @@ export function MemberSupportDemo() {
     <fieldset className="fields" disabled={busy || pendingWrite!==null}>
       <label htmlFor="sup-case">پرونده آزمایشی
         <input id="sup-case" dir="ltr" value={caseRef}
-          onChange={e => { setCaseRef(e.target.value); setCurrent(null); setTimeline(null); setPast(null); }} autoComplete="off" />
+          onChange={e => { setCaseRef(e.target.value); setCurrent(null); setTimeline(null); setPast(null); setConfirmedReturn(null); }} autoComplete="off" />
       </label>
       <label htmlFor="sup-member">شناسه عضو فرضی
         <input id="sup-member" dir="ltr" value={memberRef}
-          onChange={e => setMemberRef(e.target.value)} autoComplete="off" />
+          onChange={e => {setMemberRef(e.target.value);setConfirmedReturn(null);}} autoComplete="off" />
       </label>
       <label htmlFor="sup-evidence">ارجاع مدرک تأییدنشده
         <input id="sup-evidence" dir="ltr" value={evidenceRef}
@@ -322,6 +379,27 @@ export function MemberSupportDemo() {
         onChange={e=>setManualRecoveryText(e.target.value)}/>
       <button type="button" disabled={busy || pendingWrite!==null}
         onClick={importManualRecovery}>بارگذاری رسید بازیابی بدون ارسال</button>
+    </section>
+    <section data-testid="member-return-followup" aria-label="بازخوانی رسید پیگیری از مرکز">
+      <h3>پیگیری ادعایی ثبت‌شده در مرکز — بازخوانی توسط عضو آزمایشی</h3>
+      <p>ابتدا شناسه پرونده و عضو فرضی را وارد کنید؛ سپس رسید
+        آزمایشی را از مرکز کپی کنید. فقط رویداد PostgreSQL بررسی می‌شود،
+        نه صلاحیت مرکز، پاسخ بیمه، تشخیص یا اقدام درمانی.</p>
+      <textarea dir="ltr" rows={5} maxLength={1300}
+        aria-label="ورود رسید پیگیری آزمایشی مرکز"
+        value={returnedFollowUp} spellCheck={false}
+        disabled={busy||pendingWrite!==null}
+        onChange={e=>{setReturnedFollowUp(e.target.value);setConfirmedReturn(null);}}/>
+      <button type="button" disabled={busy||pendingWrite!==null||
+          returnedFollowUp.length===0||returnedFollowUp.length>1300}
+        onClick={()=>void inspectReturnedFollowUp()}>
+        بررسی مستقل پیگیری مرکز از PostgreSQL
+      </button>
+      <p role="status" data-testid="member-return-followup-status">{returnStatus}</p>
+      {confirmedReturn&&<p data-testid="member-return-followup-confirmed">
+        پرونده آزمایشی {confirmedReturn.caseRef} | نسخه {confirmedReturn.revision} |
+        یادداشت تأییدنشده: <code>{confirmedReturn.noteRef}</code>
+      </p>}
     </section>
     <div className="actions">
       <button disabled={busy || pendingWrite!==null} type="button" onClick={() => void read()}>بازخوانی پرونده پشتیبانی آزمایشی</button>
