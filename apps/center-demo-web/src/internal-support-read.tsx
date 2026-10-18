@@ -44,9 +44,58 @@ export function InternalSupportRead(){
  const [phase,setPhase]=useState<'IDLE'|'LOADING'|'DENIED'|'READ'>('IDLE');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
  const [pendingWrite,setPendingWrite]=useState(false);
+ const [receipt,setReceipt]=useState('');
+ const [handoffStatus,setHandoffStatus]=useState(
+   'رسیدی وارد نشده است؛ ورود رسید مجوز پرونده یا درمان نیست.');
  const epoch=useRef(0);
- useEffect(()=>{epoch.current++;setSnapshot(null);setPhase('IDLE');
-  return ()=>{epoch.current++;};},[ref]);
+ useEffect(()=>()=>{epoch.current++;},[]);
+ function changeRef(value:string){
+  epoch.current++;setRef(value);setSnapshot(null);setPhase('IDLE');
+  setHandoffStatus('انتخاب پرونده تغییر کرد؛ رسید پیشین دیگر اثبات هیچ تطبیقی نیست.');
+ }
+ async function acceptHandoff(){
+  if(pendingWrite||phase==='LOADING'||receipt.length===0||
+     receipt.length>1100)return;
+  const generation=++epoch.current;
+  setSnapshot(null);setPhase('LOADING');
+  try{
+   const data:unknown=JSON.parse(receipt);
+   if(!data||typeof data!=='object'||Array.isArray(data))
+     throw Error('INVALID_RECEIPT');
+   const x=data as Record<string,unknown>;
+   const keys=['format','version','caseRef','memberRef','topic',
+     'evidenceRef','originalRequestId','revision'];
+   if(Object.keys(x).length!==keys.length||
+      Object.keys(x).some(k=>!keys.includes(k))||
+      x.format!=='TRN-TECH-180-TEST-SUPPORT-HANDOFF'||x.version!==1||
+      typeof x.caseRef!=='string'||!validRef(x.caseRef)||
+      typeof x.memberRef!=='string'||!validRef(x.memberRef)||
+      typeof x.evidenceRef!=='string'||!validRef(x.evidenceRef)||
+      !['MedicalServiceComplaint','InsuranceCoverageDispute'].includes(String(x.topic))||
+      typeof x.originalRequestId!=='string'||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x.originalRequestId)||
+      !Number.isSafeInteger(x.revision)||Number(x.revision)<1)
+        throw Error('INVALID_FIELDS');
+   // This is the original canonical, restricted, read-only support source;
+   // the untrusted receipt cannot authorize this GET or any future writes.
+   const res=await fetch('/internal/demo/v1/support/'+encodeURIComponent(x.caseRef),
+     {cache:'no-store',credentials:'omit'});
+   if(!res.ok)throw Error('SOURCE_UNAVAILABLE');
+   const raw:unknown=await res.json();
+   if(!valid(raw,x.caseRef)||raw.revision!==x.revision||
+      raw.memberRef!==x.memberRef||raw.topic!==x.topic||
+      raw.evidenceRef!==x.evidenceRef||
+      raw.originalRequestId!==x.originalRequestId)
+      throw Error('SOURCE_MISMATCH');
+   if(epoch.current!==generation)return;
+   setRef(x.caseRef);setSnapshot(raw);setPhase('READ');setReceipt('');
+   setHandoffStatus('همان پرونده و نسخه دقیق از PostgreSQL مستقل خوانده شد؛ هیچ انتقال اختیار رخ نداد.');
+  }catch{
+   if(epoch.current!==generation)return;
+   setSnapshot(null);setPhase('DENIED');
+   setHandoffStatus('رسید یا نسخه با ژورنال تطبیق نداشت؛ هیچ پرونده‌ای انتخاب یا تأیید نشد.');
+  }
+ }
  async function read(){
   if(!validRef(ref))return;
   const requestGeneration=++epoch.current;
@@ -64,9 +113,24 @@ export function InternalSupportRead(){
   <h2>خواندن پرونده پیگیری داخلی — محیط آزمایشی</h2>
   <p>این نما از همان سرویس .NET و ژورنال PostgreSQL می‌خواند. هیچ هویت،
     شکایت قانونی، پوشش بیمه یا صلاحیت درمانی از این داده‌ها تأیید نمی‌شود.</p>
-  <InternalSupportWorklist disabled={pendingWrite} onSelect={setRef}/>
+  <InternalSupportWorklist disabled={pendingWrite} onSelect={changeRef}/>
+  <section data-testid="center-support-handoff" aria-label="پذیرش دستی مرجع پرونده آزمایشی عضو">
+   <h3>دریافت دستی مرجع پشتیبانی از محیط عضو</h3>
+   <p>تنها برای تست مشترک دو رابط است؛ هیچ احراز هویت، ارجاع درمانی،
+     اجازه اشتراک‌گذاری سلامت، شکایت رسمی یا اختیار سازمانی ایجاد نمی‌شود.
+     تطبیق باید دوباره از ژورنال PostgreSQL انجام شود.</p>
+   <label>رسید آزمایشی عضو
+    <textarea aria-label="ورود رسید آزمایشی عضو" dir="ltr" rows={5}
+      value={receipt} maxLength={1100} disabled={pendingWrite||phase==='LOADING'}
+      onChange={e=>setReceipt(e.target.value)} spellCheck={false}/>
+   </label>
+   <button type="button" disabled={pendingWrite||phase==='LOADING'||
+       receipt.length===0||receipt.length>1100}
+     onClick={()=>void acceptHandoff()}>راستی‌آزمایی دستی رسید از ژورنال</button>
+   <p data-testid="center-support-handoff-status" role="status">{handoffStatus}</p>
+  </section>
   <label>شناسه پرونده آزمایشی
-   <input value={ref} disabled={pendingWrite} onChange={e=>setRef(e.target.value)}
+   <input value={ref} disabled={pendingWrite} onChange={e=>changeRef(e.target.value)}
     maxLength={128} autoComplete="off" aria-label="شناسه پرونده پیگیری آزمایشی"/>
   </label>
   <button type="button" disabled={!validRef(ref)||phase==='LOADING'||pendingWrite}

@@ -333,6 +333,24 @@ export function MemberSupportDemo() {
     <p data-testid="support-status" aria-live="polite" className="status">
       {busy ? 'در حال ثبت یا خواندن از پایگاه آزمایشی...' : message}
     </p>
+    {current && current.revision>0 && !pendingWrite &&
+      current.caseRef===caseRef && current.memberRef===memberRef &&
+      <section aria-label="رسید دستی تحویل پرونده به محیط مرکز"
+        data-testid="member-support-handoff">
+       <h3>تحویل دستی مرجع پرونده آزمایشی به محیط مرکز</h3>
+       <p>این فقط نشانی نسخه‌دار پرونده و ادعاهای ثبت‌شده است؛
+         هیچ دسترسی به پرونده شخصی، مجوز حرفه‌ای، ارجاع درمانی،
+         ثبت شکایت قانونی یا اختیار مرکز ایجاد نمی‌کند.
+         در محیط آزمایشی مرکز باید همین پرونده مستقلاً از PostgreSQL خوانده شود.</p>
+       <textarea aria-label="رسید خروجی تحویل آزمایشی پرونده"
+        dir="ltr" readOnly rows={8} spellCheck={false}
+        value={JSON.stringify({
+         format:'TRN-TECH-180-TEST-SUPPORT-HANDOFF',version:1,
+         caseRef:current.caseRef,memberRef:current.memberRef,
+         topic:current.topic,evidenceRef:current.evidenceRef,
+         originalRequestId:current.originalRequestId,revision:current.revision
+        },null,2)}/>
+      </section>}
     {current && <section aria-label="وضعیت پرونده پشتیبانی آزمایشی">
       <p><strong>نسخه:</strong> {current.revision} | <strong>پیگیری‌های تأییدنشده:</strong> {current.followUpCount}</p>
       <p>{current.topic === 'MedicalServiceComplaint' ? 'موضوع: نارضایتی از خدمت پزشکی' :

@@ -427,6 +427,10 @@ DISPATCHER_BRANCHES = {
         "sprint-170-member-case-continuation",
         "main",
     ),
+    "sprint-171-member-center-support-handoff.yml": (
+        "sprint-171-member-center-support-handoff",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
