@@ -423,6 +423,10 @@ DISPATCHER_BRANCHES = {
         "sprint-169-cost-followup-journal-reconciliation",
         "main",
     ),
+    "sprint-170-member-case-continuation.yml": (
+        "sprint-170-member-case-continuation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
