@@ -1,0 +1,12 @@
+name: Sprint 166 Manual Center Department Adjustment Full Regression
+on:
+  push:
+    branches: [sprint-166-center-manual-department-adjustment]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

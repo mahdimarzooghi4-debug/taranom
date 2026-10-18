@@ -407,6 +407,10 @@ DISPATCHER_BRANCHES = {
         "sprint-165-late-evidence-role-isolation",
         "main",
     ),
+    "sprint-166-center-manual-department-adjustment.yml": (
+        "sprint-166-center-manual-department-adjustment",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

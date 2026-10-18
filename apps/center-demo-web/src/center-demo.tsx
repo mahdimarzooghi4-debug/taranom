@@ -123,10 +123,42 @@ const texts: Record<Kind, string> = {
   END_DOCTOR: 'پایان وابستگی آزمایشی پزشک',
   UNASSIGN_DOCTOR: 'حذف انتساب پزشک فقط از بخش انتخابی (آزمایشی)'
 };
+type AdjustmentStep = {
+  code:'READ_FIRST'|'INPUT_DENIED'|'MISSING_DEPARTMENT'|'NO_ACTIVE_DOCTOR'|
+       'SOURCE_NOT_ASSIGNED'|'ADD_TARGET'|'REMOVE_SOURCE'|'TARGET_ONLY';
+  kind:Kind|null; departmentRef:string|null; label:string;
+};
+// Two independent, human-triggered existing journal commands. No atomic
+// transfer, clinical assignment, medical or managerial authority.
+function nextDepartmentAdjustment(
+  source:Snapshot|null, center:string, from:string, to:string, doctor:string
+):AdjustmentStep{
+  const stop=(code:AdjustmentStep['code'],label:string):AdjustmentStep=>
+    ({code,kind:null,departmentRef:null,label});
+  if(!validRef(center)||!validRef(from)||!validRef(to)||!validRef(doctor)||
+     from===to)return stop('INPUT_DENIED','مبدأ و مقصد باید دو بخش متفاوت با شناسه معتبر test: باشند.');
+  if(!source||source.centerRef!==center)
+    return stop('READ_FIRST','ابتدا نسخه جاری مرکز را از PostgreSQL بخوانید.');
+  if(!source.departments.includes(from)||!source.departments.includes(to))
+    return stop('MISSING_DEPARTMENT','هر دو بخش باید قبلاً در همین مرکز ثبت شده باشند.');
+  const affiliation=source.doctors.find(d=>d.doctorRef===doctor);
+  if(!affiliation||affiliation.affiliation!=='PendingIndependentVerification')
+    return stop('NO_ACTIVE_DOCTOR','وابستگی فعال آزمایشی برای پزشک مشاهده نشد.');
+  const inSource=affiliation.departmentRefs.includes(from);
+  const inTarget=affiliation.departmentRefs.includes(to);
+  if(!inSource)return stop(inTarget?'TARGET_ONLY':'SOURCE_NOT_ASSIGNED',
+    inTarget?'در نسخه جاری فقط بخش مقصد منتسب است؛ اقدام تازه لازم نیست.':
+      'پزشک در بخش مبدأ انتسابی ندارد؛ دستور جدید مجاز نیست.');
+  if(!inTarget)return {code:'ADD_TARGET',kind:'ASSIGN_DOCTOR',
+    departmentRef:to,label:'گام ۱: ثبت مستقل انتساب آزمایشی به بخش مقصد'};
+  return {code:'REMOVE_SOURCE',kind:'UNASSIGN_DOCTOR',
+    departmentRef:from,label:'گام ۲: مقصد ثبت است؛ برداشتن مستقل انتساب بخش مبدأ'};
+}
 export function CenterDemo() {
   const [center, setCenter] = useState('test:center-demo');
   const [department, setDepartment] = useState('test:department-demo');
   const [doctor, setDoctor] = useState('test:doctor-demo');
+  const [targetDepartment, setTargetDepartment] = useState('test:department-target');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState<UncertainCenterCommand | null>(null);
@@ -244,6 +276,19 @@ export function CenterDemo() {
     await sendCommand(receipt);
   }
 
+  async function adjustDepartment(kind:Kind,ward:string){
+    const step=nextDepartmentAdjustment(
+      snapshot,center,department,targetDepartment,doctor);
+    if(pending||uncertain||!snapshot||
+       step.kind!==kind||step.departmentRef!==ward)return;
+    // Fresh request ID and exact current event version. Existing CAS journal
+    // decides conflicts, idempotency and uncertain HTTP acknowledgment.
+    await sendCommand({center,expectedVersion:snapshot.currentVersion,kind,
+      body:JSON.stringify({requestId:crypto.randomUUID(),
+        expectedVersion:snapshot.currentVersion,kind,
+        departmentRef:ward,doctorRef:doctor})});
+  }
+
   async function retryUncertain() {
     if (pending || !uncertain || uncertain.center !== center) return;
     await sendCommand(uncertain);
@@ -323,6 +368,8 @@ export function CenterDemo() {
     }
   }
 
+  const adjustment=nextDepartmentAdjustment(
+    snapshot,center,department,targetDepartment,doctor);
   const guidedStep=uncertain
     ? {code:'READ_FIRST', action:null, label:'نتیجه دستور پیشین نامعلوم است؛ ثبت مرحله تازه تا بازیابی همان درخواست ممنوع است.'} as NextCenterStep
     : nextCenterStep(snapshot,center,department,doctor);
@@ -413,6 +460,30 @@ export function CenterDemo() {
           </button>}
           <p>وضعیت مدیر، صلاحیت حرفه‌ای و انتشار ملی همواره تأییدنشده باقی می‌ماند.
             این راهنما جایگزین مجوز، قرارداد یا نظارت بالینی نیست.</p>
+        </section>
+        <section className="guided-workflow" aria-label="تنظیم دستی انتساب پزشک میان دو بخش"
+          data-testid="center-department-adjustment">
+          <h3>تنظیم انتساب آزمایشی پزشک بین بخش‌های همین مرکز</h3>
+          <p>مبدأ همان «شناسه بخش آزمایشی» بالاست. مقصد جداگانه وارد می‌شود.
+            این مسیر دو فرمان مستقل است؛ هیچ تغییر خودکار یا انتقال اتمیک ندارد.</p>
+          <label htmlFor="target-ward">شناسه بخش مقصد آزمایشی
+            <input id="target-ward" dir="ltr" value={targetDepartment}
+              disabled={pending||!!uncertain} autoComplete="off"
+              onChange={e=>setTargetDepartment(e.target.value)}/>
+          </label>
+          <p data-testid="center-adjustment-step" aria-live="polite">
+            {pending?'در حال ثبت؛ اقدام تازه ممنوع است.':
+             uncertain?'پاسخ ثبت قبلی نامعلوم است؛ ابتدا همان درخواست را بازیابی کنید.':
+             adjustment.label}
+          </p>
+          <p>بین دو فرمان ممکن است پزشک در هر دو بخش منتسب باشد.
+            این داده صرفاً آزمایشی است و نه مجوز خدمت بالینی یا تأیید مدیر.</p>
+          {adjustment.kind&&<button type="button" disabled={pending||!!uncertain||!snapshot}
+            onClick={()=>void adjustDepartment(adjustment.kind!,adjustment.departmentRef!)}>
+            {adjustment.code==='ADD_TARGET'?'ثبت مستقل انتساب به بخش مقصد':
+             'برداشتن مستقل انتساب از بخش مبدأ'}
+          </button>}
+          <p>مدیر: احرازنشده | پزشک: تأییدنشده | انتشار: DENIED_BY_DEFAULT</p>
         </section>
         <p role="status" aria-live="polite" className="status">{pending ? 'در حال ارتباط با پایگاه آزمایشی...' : status}</p>
         {snapshot && <section aria-label="وضعیت ذخیره‌شده آزمایشی">
