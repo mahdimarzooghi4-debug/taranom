@@ -415,6 +415,10 @@ DISPATCHER_BRANCHES = {
         "sprint-167-guided-nonclinical-coordination",
         "main",
     ),
+    "sprint-168-org-activity-ack-reconciliation.yml": (
+        "sprint-168-org-activity-ack-reconciliation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

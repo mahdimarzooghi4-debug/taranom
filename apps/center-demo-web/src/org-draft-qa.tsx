@@ -105,6 +105,36 @@ export function OrgDraftQa(){
   }catch{setStatus('تاریخچه قابل تأیید نیست؛ ثبت تازه ممنوع است.');}
   finally{setBusy(false);}
  }
+ // Only an exact immutable journal event at expected+1 proves this
+ // specific write, not a 200 response or an overall currentNo alone.
+ async function readExactActivity(command:Pending):Promise<History>{
+  const x=await ask(path(command.item)+'/activity');
+  if(x.res.status!==200||x.data.outcome!=='Read'||
+     !validHistory(x.data.data,command.item))throw Error('JOURNAL_INVALID');
+  const body=JSON.parse(command.body) as {
+   requestRef?:unknown;noteRef?:unknown;expectedPreviousNo?:unknown};
+  if(body.requestRef!==command.requestRef||
+     body.expectedPreviousNo!==command.expected||
+     typeof body.noteRef!=='string'||!refOk(body.noteRef)||
+     x.data.data.currentNo<command.expected+1)
+    throw Error('COMMAND_NOT_MATCHED');
+  const matching=x.data.data.events.filter(e=>e.requestRef===command.requestRef);
+  if(matching.length!==1||matching[0].activityNo!==command.expected+1||
+     matching[0].noteRef!==body.noteRef)throw Error('JOURNAL_EVENT_MISMATCH');
+  return x.data.data;
+ }
+ async function inspectPending(){
+  if(busy||!pending)return;
+  setBusy(true);setHistory(null);
+  const original=pending;
+  try{
+   const history=await readExactActivity(original);
+   setHistory(history);setPending(null);
+   setStatus('همان فعالیت از ژورنال PostgreSQL بدون ارسال POST بازیابی شد.');
+  }catch{
+   setStatus('رویداد همان درخواست تأیید نشد؛ قفل و بازپخش دستی حفظ شد.');
+  }finally{setBusy(false);}
+ }
  async function send(command:Pending){
   if(busy)return;
   setPending(command);setBusy(true);
@@ -118,10 +148,18 @@ export function OrgDraftQa(){
     (x.data.outcome!=='Recorded'||val.currentNo===command.expected+1);
    const denied=x.res.status===409&&['StaleRevision','ConflictingReplay'].includes(x.data.outcome);
    if(!accepted&&!denied)throw Error('UNCERTAIN');
-   setPending(null);setHistory(null);
-   setStatus(denied?'نسخه یا درخواست ناسازگار است؛ تاریخچه را دوباره بخوانید.':
-    x.data.outcome==='Recorded'?'فعالیت فنی ثبت شد؛ تاریخچه را دوباره بخوانید.':
-    'دقیقاً همان درخواست بازپخش شد؛ تاریخچه را دوباره بخوانید.');
+   if(denied){
+    setPending(null);setHistory(null);
+    setStatus('نسخه یا درخواست ناسازگار است؛ تاریخچه را دوباره بخوانید.');
+   }else{
+    // The read comes from the existing owner-scoped PostgreSQL journal.
+    // Do not clear uncertainty before exact UUID-like requestRef+note match.
+    const verified=await readExactActivity(command);
+    setHistory(verified);setPending(null);
+    setStatus(x.data.outcome==='Recorded'?
+      'فعالیت فنی ثبت شد؛ رویداد دقیق از PostgreSQL تأیید شد.':
+      'همان درخواست قبلی بازپخش شد؛ یادداشت دقیق در ژورنال تأیید شد.');
+   }
   }catch{
    setHistory(null);
    setStatus('نتیجه ثبت نامعلوم است؛ فقط بازپخش همان درخواست مجاز است.');
@@ -184,6 +222,8 @@ export function OrgDraftQa(){
     {pending&&<section role="alert" data-testid="org-draft-uncertain">
      <p>نتیجه ثبت نامعلوم است. تنها همان payload و requestRef بازپخش می‌شود.</p>
      <code>{pending.requestRef}</code>
+     <button disabled={busy} onClick={()=>void inspectPending()}>
+       بررسی فقط‌خواندنی ثبت قبلی</button>
      <button disabled={busy} onClick={()=>void send(pending)}>بازپخش دقیق درخواست قبلی</button>
     </section>}
     {history&&<div data-testid="org-activity-history">

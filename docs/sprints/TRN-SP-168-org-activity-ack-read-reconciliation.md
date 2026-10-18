@@ -1,0 +1,5 @@
+# TRN-SP-168 — DRAFT / organization activity exact ACK and safe read reconciliation
+- Parent: Sprint 167 Draft/Open PR #181, HEAD `052729f0c338888218ee326b45b15f8c417615f0`. This Sprint is a focused real reliability fix to an existing organizational workflow, **not** another status dashboard.
+- [TRN-TECH-177](../technical/TRN-TECH-177-org-activity-ack-read-reconciliation.md) is the technical source. One audited PostgreSQL/RLS organizational fixture remains the only source of event history.
+- Deliver exact activity ownership verification of ACK and independent GET-only recovery while retaining the original uncertain requestRef and payload, with no new server endpoints. Add 3 adversarial Chromium scenarios: lost ACK, forged ACK, forged journal read; preserve existing suite and denial flags. Full 14-job regression and exact-head Code Review COMMENT required.
+- Real sponsor identity, legally delegated authorization, member clinical records, finance/wallet/eligibility, AI Production routing or public launch are forbidden. All Sprint PRs remain Draft/Open/Unmerged. Stage/QA Gate/Release/Production blocked; national launch DENIED_BY_DEFAULT.
