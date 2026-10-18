@@ -81,17 +81,31 @@ test('ORG168-03 tampered activity GET cannot clear uncertain command, genuine GE
   await route.abort();
  });
  await ui.getByRole('button',{name:'ثبت فعالیت نسخه‌دار'}).click();
+ // The pending control appears before the simulated network failure is
+ // fully handled. Wait for the original POST to finish and be frozen.
  await expect(ui.getByTestId('org-draft-uncertain')).toBeVisible();
+ await expect(ui.getByRole('status').first()).toContainText('نتیجه ثبت نامعلوم');
  await page.unrouteAll({behavior:'wait'});
- await page.route('**/internal/demo/v1/org-drafts/*/activity',async route=>{
-  if(route.request().method()!=='GET')return route.continue();
-  const upstream=await route.fetch();const response=await upstream.json();
-  response.data.events[0].noteRef='test:forged-different-note';
-  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(response)});
+ const actual=await request.get(base+'/'+encodeURIComponent(item)+'/activity');
+ expect(actual.status()).toBe(200);
+ const forged=await actual.json();
+ expect(forged.data.events[0].noteRef).toBe(note);
+ forged.data.events[0].noteRef='test:forged-different-note';
+ let forgedReads=0;
+ // Fulfill with a pinned forged response instead of route.fetch(), which
+ // could race the original ACK setup and accidentally serve a real GET.
+ await page.route('**/internal/demo/v1/org-drafts/**',async route=>{
+  if(route.request().method()!=='GET'||
+     !new URL(route.request().url()).pathname.endsWith('/activity'))
+     return route.continue();
+  forgedReads++;
+  await route.fulfill({status:200,contentType:'application/json',
+    body:JSON.stringify(forged)});
  });
  await ui.getByRole('button',{name:'بررسی فقط‌خواندنی ثبت قبلی'}).click();
  await expect(ui.getByTestId('org-draft-uncertain')).toBeVisible();
  await expect(ui.getByRole('status').first()).toContainText('قفل و بازپخش دستی حفظ شد');
+ expect(forgedReads).toBe(1);
  await expect(ui.getByRole('button',{name:'ثبت فعالیت نسخه‌دار'})).toBeDisabled();
  await expect(ui.getByTestId('org-activity-history')).toHaveCount(0);
  await page.unrouteAll({behavior:'wait'});
