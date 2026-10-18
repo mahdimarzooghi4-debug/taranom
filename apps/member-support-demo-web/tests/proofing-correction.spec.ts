@@ -128,3 +128,49 @@ test('PROOF161-01 stored request UUID anchors ACK and forged response stays unce
  const body=await (await request.get(root+caseRef)).json();
  expect(body.events[0].requestId).toBe(JSON.parse(sent).requestId);
 });
+
+test('PROOF162-01 manual GET reconciles lost command ACK without another POST',async({page,request})=>{
+ await page.goto('/member-demo/proofing');
+ const ref=await page.getByLabel('شناسه تصادفی پرونده آزمایشی').inputValue();
+ await page.getByRole('button',{name:'خواندن پرونده آزمایشی از PostgreSQL'}).click();
+ let original='';
+ await page.route('**/internal/demo/v1/proofing/**/commands',async route=>{
+  original=route.request().postData()??'';
+  await route.fetch();await route.abort();
+ });
+ await page.getByRole('button',{name:'ثبت فرضی عدم تطابق قطعی'}).click();
+ await expect(page.getByRole('alert')).toContainText('نتیجه قبلی نامطمئن');
+ await page.unrouteAll({behavior:'wait'});
+ let posts=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/proofing/'))posts++;});
+ await page.getByRole('button',{name:'بررسی فقط‌خواندنی فرمان قبلی'}).click();
+ await expect(page.getByTestId('proofing-status')).toContainText('بدون بازپخش یا ثبت جدید');
+ await expect(page.getByRole('alert')).toHaveCount(0);
+ await expect(page.getByRole('region',{name:'تاریخچه ممیزی آزمایشی'})).toContainText('نسخه پرونده: 1');
+ expect(posts).toBe(0);
+ const x=await (await request.get('/internal/demo/v1/proofing/'+ref)).json();
+ expect(x.events).toHaveLength(1);
+ expect(x.events[0].requestId).toBe(JSON.parse(original).requestId);
+ expect(x.realIdentityVerified).toBe(false);
+});
+test('PROOF162-02 forged READ event UUID keeps uncertain state and blocks writes',async({page})=>{
+ await page.goto('/member-demo/proofing');
+ await page.getByRole('button',{name:'خواندن پرونده آزمایشی از PostgreSQL'}).click();
+ await page.route('**/internal/demo/v1/proofing/**/commands',async route=>{
+  await route.fetch();await route.abort();
+ });
+ await page.getByRole('button',{name:'ثبت فرضی عدم تطابق قطعی'}).click();
+ await expect(page.getByRole('alert')).toContainText('نتیجه قبلی نامطمئن');
+ await page.unrouteAll({behavior:'wait'});
+ await page.route('**/internal/demo/v1/proofing/*',async route=>{
+  const r=await route.fetch();const x=await r.json();
+  x.events[0].requestId=crypto.randomUUID();
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+ });
+ await page.getByRole('button',{name:'بررسی فقط‌خواندنی فرمان قبلی'}).click();
+ await expect(page.getByTestId('proofing-status')).toContainText('قفل و بازپخش دستی حفظ شد');
+ await expect(page.getByRole('alert')).toBeVisible();
+ await expect(page.getByRole('button',{name:'ثبت فرضی عدم تطابق قطعی'})).toBeDisabled();
+ await page.unrouteAll({behavior:'wait'});
+ await page.getByRole('button',{name:'بازپخش دستی دقیق همان درخواست'}).click();
+ await expect(page.getByTestId('proofing-status')).toContainText('درخواست اصلی بدون ثبت مجدد');
+});

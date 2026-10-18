@@ -118,3 +118,50 @@ test('CARE161-01 forged successful ACK cannot clear uncertain original command; 
  await expect(page.getByRole('region',{name:'تاریخچه هماهنگی ادعایی'})).toContainText('نسخه پرونده: 1');
  expect(JSON.parse(sent).requestId).toBeTruthy();
 });
+
+test('CARE162-01 lost ACK is reconciled by GET without sending another command',async({page,request})=>{
+ await page.goto('/member-demo/coordination');
+ const ref=await page.getByLabel('شناسه آزمایشی پرونده').inputValue();
+ await page.getByRole('button',{name:'خواندن پرونده هماهنگی'}).click();
+ let original='';
+ await page.route('**/internal/demo/v1/care-coordination/**/commands',async route=>{
+  original=route.request().postData()??'';
+  await route.fetch();await route.abort();
+ });
+ await page.getByRole('button',{name:'ثبت درخواست ادعایی هماهنگی'}).click();
+ await expect(page.getByRole('alert')).toContainText('ممکن است رویداد');
+ await page.unrouteAll({behavior:'wait'});
+ let newPosts=0;
+ page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/care-coordination/'))newPosts++;});
+ await page.getByRole('button',{name:'بررسی فقط‌خواندنی فرمان قبلی'}).click();
+ await expect(page.getByTestId('care-status')).toContainText('بدون بازپخش یا ثبت جدید');
+ await expect(page.getByRole('alert')).toHaveCount(0);
+ await expect(page.getByRole('region',{name:'تاریخچه هماهنگی ادعایی'})).toContainText('نسخه پرونده: 1');
+ expect(newPosts).toBe(0);
+ const journal=await (await request.get('/internal/demo/v1/care-coordination/'+ref)).json();
+ expect(journal.events).toHaveLength(1);
+ expect(journal.events[0].requestId).toBe(JSON.parse(original).requestId);
+ expect(journal.nationalReleaseAllowed).toBe(false);
+});
+test('CARE162-02 forged journal GET retains uncertain lock until exact manual replay',async({page})=>{
+ await page.goto('/member-demo/coordination');
+ await page.getByRole('button',{name:'خواندن پرونده هماهنگی'}).click();
+ await page.route('**/internal/demo/v1/care-coordination/**/commands',async route=>{
+  await route.fetch();await route.abort();
+ });
+ await page.getByRole('button',{name:'ثبت درخواست ادعایی هماهنگی'}).click();
+ await expect(page.getByRole('alert')).toContainText('ممکن است رویداد');
+ await page.unrouteAll({behavior:'wait'});
+ await page.route('**/internal/demo/v1/care-coordination/*',async route=>{
+  const response=await route.fetch();const x=await response.json();
+  x.events[0].requestId=crypto.randomUUID();
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+ });
+ await page.getByRole('button',{name:'بررسی فقط‌خواندنی فرمان قبلی'}).click();
+ await expect(page.getByTestId('care-status')).toContainText('قفل و بازپخش دستی حفظ شد');
+ await expect(page.getByRole('alert')).toBeVisible();
+ await expect(page.getByRole('button',{name:'ثبت درخواست ادعایی هماهنگی'})).toBeDisabled();
+ await page.unrouteAll({behavior:'wait'});
+ await page.getByRole('button',{name:'بازپخش دستی دقیق فرمان قبلی'}).click();
+ await expect(page.getByTestId('care-status')).toContainText('بازپخش شد');
+});

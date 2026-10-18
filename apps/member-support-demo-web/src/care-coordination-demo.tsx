@@ -34,7 +34,7 @@ function valid(x:unknown,caseRef:string):x is Snapshot{
        'AttachUnverifiedClinicalSourceReference'].includes(e.action)))return false;
  return denialKeys.every(k=>s[k]===false);
 }
-function acknowledged(s:Snapshot,c:Command):boolean{
+function acknowledged(s:Snapshot,c:Command,viaRead=false):boolean{
  const actions:Record<Action,string>={
   REQUEST_NONCLINICAL_COORDINATION:'RequestNonclinicalCoordination',
   RECORD_UNVERIFIED_COORDINATOR_CONTACT:'RecordUnverifiedCoordinatorContact',
@@ -48,7 +48,8 @@ function acknowledged(s:Snapshot,c:Command):boolean{
   e.originalSubmissionRequestId===c.originalSubmissionRequestId&&
   e.claimedActorRef===c.claimedActorRef&&
   e.unverifiedNoteOrDocumentRef===c.unverifiedNoteOrDocumentRef&&
-  (s.outcome==='Replayed'||(s.outcome==='RecordedUnverified'&&s.revision===rev));
+  (s.outcome==='Replayed'||(viaRead&&s.outcome==='READ')||
+   (s.outcome==='RecordedUnverified'&&s.revision===rev));
 }
 export function CareCoordinationDemo(){
  const [caseRef,setCaseRef]=useState(newRef);
@@ -94,6 +95,24 @@ export function CareCoordinationDemo(){
     'رویداد ادعایی ثبت شد؛ ارجاع، تماس واقعی یا نوبت تأیید نشده است.');
   }catch{
    setUncertain(original);setStatus('نتیجه ارسال نامشخص است؛ فقط بازپخش دستی دقیق مجاز است.');
+  }finally{setBusy(false);}
+ }
+ async function inspectUncertain(){
+  if(busy||!uncertain)return;
+  const original=uncertain;
+  setBusy(true);setSnapshot(null);
+  try{
+   const res=await fetch('/internal/demo/v1/care-coordination/'+
+     encodeURIComponent(original.ref),{credentials:'omit',cache:'no-store'});
+   if(!res.ok)throw Error('READ_DENIED');
+   const x:unknown=await res.json();
+   const c=JSON.parse(original.body) as Command;
+   if(!valid(x,original.ref)||x.outcome!=='READ'||!acknowledged(x,c,true))
+    throw Error('UNBOUND_JOURNAL_READ');
+   setSnapshot(x);setUncertain(null);
+   setStatus('همان فرمان در ژورنال آزمایشی پیدا شد؛ بدون بازپخش یا ثبت جدید بازیابی شد.');
+  }catch{
+   setStatus('ثبت همان فرمان با خواندن تأیید نشد؛ قفل و بازپخش دستی حفظ شد.');
   }finally{setBusy(false);}
  }
  function issue(action:Action){
@@ -147,6 +166,8 @@ export function CareCoordinationDemo(){
   </fieldset>
   {uncertain&&<section role="alert"><p>ممکن است رویداد در سرور ثبت شده باشد.
    فرمان جدید قفل است؛ همان متن اصلی و UUID فقط با کلیک جداگانه تکرار می‌شود.</p>
+   <button disabled={busy} onClick={()=>void inspectUncertain()}>
+    بررسی فقط‌خواندنی فرمان قبلی</button>
    <button disabled={busy} onClick={()=>void send(uncertain)}>
     بازپخش دستی دقیق فرمان قبلی</button></section>}
   <p role="status" data-testid="care-status">{status}</p>

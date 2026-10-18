@@ -48,7 +48,7 @@ function valid(x:unknown,ref:string):x is Snapshot{
  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(e.requestId)&&
  (e.action==='ObserveProofing'||e.action==='ApplicantCorrectedIdentity'));
 }
-function acknowledged(s:Snapshot,c:Command):boolean{
+function acknowledged(s:Snapshot,c:Command,viaRead=false):boolean{
  const rev=c.expectedCaseRevision+1;
  const e=s.events.find(x=>x.caseRevision===rev);
  const action=c.action==='OBSERVE_PROOFING'
@@ -57,7 +57,8 @@ function acknowledged(s:Snapshot,c:Command):boolean{
   e.identityRevision===(c.expectedIdentityRevision+
    (c.action==='APPLICANT_CORRECTED_IDENTITY'?1:0))&&
   s.events.filter(x=>x.requestId===c.requestId).length===1&&
-  (s.outcome==='Replayed'||(s.outcome==='Applied'&&s.caseRevision===rev))&&
+  (s.outcome==='Replayed'||(viaRead&&s.outcome==='READ')||
+   (s.outcome==='Applied'&&s.caseRevision===rev))&&
   s.events[s.events.length-1]?.review===s.review;
 }
 export function ProofingCorrectionDemo(){
@@ -67,7 +68,7 @@ export function ProofingCorrectionDemo(){
  const [pending,setPending]=useState<{caseRef:string;body:string}|null>(null);
  const [busy,setBusy]=useState(false);
  async function read(){
-  if(busy)return;
+  if(busy||pending)return;
   setBusy(true);setState(null);
   try{
     const res=await fetch('/internal/demo/v1/proofing/'+encodeURIComponent(caseRef),
@@ -100,6 +101,24 @@ export function ProofingCorrectionDemo(){
    setMessage('نتیجه فرمان نامطمئن است؛ احتمال ثبت در سرور وجود دارد. فقط همان درخواست اصلی را دستی بازپخش کنید.');
   }finally{setBusy(false);}
  }
+ async function inspectPending(){
+  if(busy||!pending)return;
+  const original=pending;
+  setBusy(true);setState(null);
+  try{
+   const res=await fetch('/internal/demo/v1/proofing/'+
+     encodeURIComponent(original.caseRef),{cache:'no-store',credentials:'omit'});
+   if(!res.ok)throw Error('READ_DENIED');
+   const x:unknown=await res.json();
+   const c=JSON.parse(original.body) as Command;
+   if(!valid(x,original.caseRef)||x.outcome!=='READ'||!acknowledged(x,c,true))
+    throw Error('UNBOUND_JOURNAL_READ');
+   setState(x);setPending(null);
+   setMessage('همان فرمان در ژورنال آزمایشی پیدا شد؛ بدون بازپخش یا ثبت جدید بازیابی شد.');
+  }catch{
+   setMessage('ثبت همان فرمان با خواندن تأیید نشد؛ قفل و بازپخش دستی حفظ شد.');
+  }finally{setBusy(false);}
+ }
  function emit(action:Action,observation:string){
   if(!state||busy||pending)return;
   const correct=action==='APPLICANT_CORRECTED_IDENTITY';
@@ -123,7 +142,7 @@ export function ProofingCorrectionDemo(){
    <input dir="ltr" value={caseRef} disabled={busy||!!pending}
     onChange={e=>{setCaseRef(e.target.value);setState(null);}}/>
   </label>
-  <button type="button" disabled={busy} onClick={()=>void read()}>
+  <button type="button" disabled={busy||!!pending} onClick={()=>void read()}>
    خواندن پرونده آزمایشی از PostgreSQL
   </button>
   <div className="actions">
@@ -143,6 +162,7 @@ export function ProofingCorrectionDemo(){
   </div>
   {pending&&<section role="alert" className="panel">
    <p>نتیجه قبلی نامطمئن است؛ شناسه درخواست و متن JSON اولیه تا تعیین تکلیف در حافظه صفحه نگهداری می‌شود.</p>
+   <button disabled={busy} onClick={()=>void inspectPending()}>بررسی فقط‌خواندنی فرمان قبلی</button>
    <button disabled={busy} onClick={()=>void send(pending)}>بازپخش دستی دقیق همان درخواست</button>
   </section>}
   <p data-testid="proofing-status" role="status">{message}</p>

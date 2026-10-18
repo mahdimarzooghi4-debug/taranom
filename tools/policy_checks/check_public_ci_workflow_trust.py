@@ -391,6 +391,10 @@ DISPATCHER_BRANCHES = {
         "sprint-161-synthetic-command-ack-lineage",
         "main",
     ),
+    "sprint-162-read-only-uncertain-command-reconciliation.yml": (
+        "sprint-162-read-only-uncertain-command-reconciliation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
