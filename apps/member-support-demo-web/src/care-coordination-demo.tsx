@@ -21,18 +21,46 @@ const denialKeys=['realMemberAuthenticated','realCoordinatorVerified',
  'referralDelivered','appointmentBooked','treatmentStarted',
  'medicalRecordAccessGranted','emergencyServiceDispatched','consentGranted',
  'walletMutated','nationalReleaseAllowed'] as const;
+// The client must recheck exact event lineage before displaying a source
+// snapshot, suggesting next steps or accepting a successful command ACK.
+// This validation is not authorization or a replacement for the PG digest/audit.
+const testRef=(v:unknown):v is string=>typeof v==='string'&&v.length<=100&&
+ /^test:[A-Za-z0-9_:-]+$/.test(v);
+const uuid=(v:unknown):v is string=>typeof v==='string'&&
+ /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 function valid(x:unknown,caseRef:string):x is Snapshot{
- if(!x||typeof x!=='object')return false;
+ if(!x||typeof x!=='object'||Array.isArray(x)||!testRef(caseRef))return false;
  const s=x as Partial<Snapshot>;
  if(s.contract!=='TRN-TECH-115'||s.syntheticOnly!==true||
     s.unverifiedClaimsOnly!==true||s.caseRef!==caseRef||
     !['READ','RecordedUnverified','Replayed'].includes(String(s.outcome))||
     !Number.isSafeInteger(s.revision)||s.revision!<0||
     !Array.isArray(s.events)||s.events.length!==s.revision||
-    !s.events.every((e,i)=>e.revision===i+1&&
-      ['RequestNonclinicalCoordination','RecordUnverifiedCoordinatorContact',
-       'AttachUnverifiedClinicalSourceReference'].includes(e.action)))return false;
- return denialKeys.every(k=>s[k]===false);
+    !denialKeys.every(k=>s[k]===false))return false;
+ let root:Event|undefined;
+ const requestIds=new Set<string>();
+ for(const [i,event] of s.events.entries()){
+  if(!event||event.revision!==i+1||!uuid(event.requestId)||
+     requestIds.has(event.requestId.toLowerCase())||
+     !testRef(event.memberRef)||!testRef(event.originalMemberRequestRef))
+    return false;
+  requestIds.add(event.requestId.toLowerCase());
+  if(i===0){
+   if(event.action!=='RequestNonclinicalCoordination'||
+      event.originalSubmissionRequestId!==zero||
+      event.claimedActorRef!==null||
+      event.unverifiedNoteOrDocumentRef!==null)return false;
+   root=event;
+  }else if(!root||
+      !['RecordUnverifiedCoordinatorContact',
+        'AttachUnverifiedClinicalSourceReference'].includes(event.action)||
+      event.memberRef!==root.memberRef||
+      event.originalMemberRequestRef!==root.originalMemberRequestRef||
+      event.originalSubmissionRequestId!==root.requestId||
+      !testRef(event.claimedActorRef)||
+      !testRef(event.unverifiedNoteOrDocumentRef))return false;
+ }
+ return true;
 }
 function acknowledged(s:Snapshot,c:Command,viaRead=false):boolean{
  const actions:Record<Action,string>={
@@ -112,7 +140,16 @@ export function CareCoordinationDemo(){
       throw Error('INVALID_ACK');
    const cmd=JSON.parse(original.body) as Command;
    if(!acknowledged(x,cmd))throw Error('UNBOUND_ACK');
-   setSnapshot(x);setUncertain(null);setStatus(x.outcome==='Replayed'?
+   // A forged 200 response can describe a valid-looking event that has
+   // never been committed. Do not release the UUID latch until the exact
+   // event is seen in a separate independently validated PostgreSQL GET.
+   const check=await fetch('/internal/demo/v1/care-coordination/'+
+     encodeURIComponent(original.ref),{credentials:'omit',cache:'no-store'});
+   if(!check.ok)throw Error('SOURCE_READ_DENIED');
+   const persisted:unknown=await check.json();
+   if(!valid(persisted,original.ref)||persisted.outcome!=='READ'||
+      !acknowledged(persisted,cmd,true))throw Error('UNBOUND_SOURCE');
+   setSnapshot(persisted);setUncertain(null);setStatus(x.outcome==='Replayed'?
     'همان درخواست، بدون رویداد اضافی بازپخش شد.':
     'رویداد ادعایی ثبت شد؛ ارجاع، تماس واقعی یا نوبت تأیید نشده است.');
   }catch{

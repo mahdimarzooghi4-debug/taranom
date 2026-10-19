@@ -447,6 +447,10 @@ DISPATCHER_BRANCHES = {
         "sprint-175-center-care-coordination",
         "main",
     ),
+    "sprint-176-member-care-journal-attestation.yml": (
+        "sprint-176-member-care-journal-attestation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

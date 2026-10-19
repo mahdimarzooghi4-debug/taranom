@@ -1,0 +1,22 @@
+# TRN-TECH-185 — DRAFT / Member care coordination journal provenance and ACK attestation parity
+
+Date: 2026-10-19. Exact base Sprint 175 PR #189 (`646069362fc422dcd0a53414f39991b16e16c56d`). Existing Business TRN-BIZ-046, Technical TRN-TECH-115/184. This is a CI-only security correctness fix, **not** a real healthcare data, clinical consent or patient authentication workflow.
+
+## Source inconsistency / threat
+After Sprint 175, the separate Center browser independently validates each nonclinical care-coordination event's original request UUID, ordered revisions, unchanged member and original reference, real-type action and denied authority flags. The *older Member* workbench checked only event order and broad action strings, allowing a forged GET with first event pretending to be a follow-up, duplicate historical request IDs, invented/mismatched follow-up scope or different original member request to appear in the Member timeline and to inform subsequent action buttons even with all denials false. Furthermore, a well-formed forged success POST response could unlock the Member even if no event was ever written: the source-verification-after-ACK introduced for Center in Sprint 175 had not been applied to Member.
+
+## Exact technical change
+- Keep the existing `GET/POST /internal/demo/v1/care-coordination/{caseRef}` endpoints, PostgreSQL schema, event/audit hashes and human-controlled domain reducer entirely unchanged. No new surface of records or permissions.
+- Member source validator now strictly requires a synthetically scoped `test:` case; exact known `TRN-TECH-115` contract, outcomes and all 13 real-authority flags false; safe revision and exact event count; for every event strictly increasing 1..revision; unique nonzero canonical UUIDv4; synthetically scoped memberRef/originalMemberRequestRef; the **first event must be RequestNonclinicalCoordination** with Guid.Empty root and null actor/note; every further event must be one of the **two unverified follow-up actions**, preserve exact root member/request/original UUID and contain valid synthetic claimed actor and note. Forged cross-member, cross-root, action mutation and duplicate UUID all fail closed, remove timeline and disable action commands. This is the client-side semantic check, not a cryptographic validator replacing the original PostgreSQL audit replay.
+- A plausible successful 200 POST or Replayed ACK is **never sufficient**. It must bind uniquely to the exact in-flight command's UUID, action, expected revision, member, original root, claimed actor and note. BEFORE clearing the pending latch, issue a separate read-only GET and require strict source semantics, outcome READ and existence of the exact original command. Only then show success and allow further writes.
+- A dropped ACK, forged success, forged read or unavailable source retains the original pending command (case ref, exact byte-for-byte JSON/UUID) in volatile memory. The original two user-operated recovery paths remain: GET-only exact-event reconciliation (zero POST) or manual same-UUID replay, no automatic retry. No browser storage or fabricated delivery.
+- This eliminates a trust asymmetry between Member and Center, but does **not** prove actual member identity, consent, coordinator employment/license, data sharing, service delivery or compliance for a deployed product.
+
+## Real end-to-end acceptance
+1. Real Kestrel/isolated PostgreSQL root read: forged original action and forged original submission UUID fail closed even when response is 200 and all denial flags false; authentic root read remains usable.
+2. Real two-event journal: forged follower memberRef, originalMemberRequestRef or duplicated requestId fail and clear Member workbench; authentic source passes.
+3. Artificial 200 ACK with a well-formed self-consistent invented root but **no PostgreSQL commit** remains uncertain; GET-only refuses to clear; explicit human same-payload/UUID replay creates exactly one source event.
+4. Real accepted POST with forged subsequent GET remains uncertain despite authentic commit; later authentic GET-only reconciliation clears latch with **zero extra POSTs** and identical UUID.
+5. Full canonical 14-job reusable CI with all Chromium/browser/PostgreSQL/dump-restore regressions; technical Code Review COMMENT on exact green SHA, no independent human APPROVE.
+
+Keep all PRs Draft/Open/Unmerged. No Ready for Review, Merge, Stage, QA Gate, Release Approval or Production. Comprehensive nationwide three-market launch stays `DENIED_BY_DEFAULT`.
