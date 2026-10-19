@@ -236,45 +236,57 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
         await using (var readOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", conn, tx))
             await readOnly.ExecuteNonQueryAsync();
 
-        var refs = new List<string>();
-        await using (var cmd = new NpgsqlCommand("""
-            SELECT c.case_ref FROM internal_test_support_case c
-            JOIN internal_test_support_event first_event
-              ON first_event.case_ref = c.case_ref AND first_event.revision = 1
-            WHERE c.current_revision > 0
-              AND (@after = '' OR c.case_ref COLLATE "C" > @after COLLATE "C")
-              AND (@topic = 'ALL' OR
-                   first_event.command_json::jsonb ->> 'Topic' = @topic)
-            ORDER BY c.case_ref COLLATE "C"
-            LIMIT @count
-            """, conn, tx))
-        {
-            cmd.Parameters.AddWithValue("after", afterCaseRef ?? string.Empty);
-            cmd.Parameters.AddWithValue("topic", topic is null ? "ALL" :
-                ((int)topic.Value).ToString(CultureInfo.InvariantCulture));
-            cmd.Parameters.AddWithValue("count", limit + 1);
-            await using var rows = await cmd.ExecuteReaderAsync();
-            while (await rows.ReadAsync())
-            {
-                var reference = rows.GetString(0);
-                if (!IsSynthetic(reference))
-                    throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIED_REFERENCE");
-                refs.Add(reference);
-            }
-        }
-
+        // TRN-TECH-183: never make a visibility / pagination decision using
+        // unverified command_json. A damaged first event could change its
+        // apparent Topic and silently disappear from the WHERE predicate.
+        // Scan ordered, small bounded SQL batches, fully rehydrate + verify
+        // each scanned row (including nonmatching topics), and only then
+        // apply the domain Topic filter and logical keyset page limit.
+        // All batches and event/audit reads share ONE read-only MVCC snapshot.
+        const int batchSize = 64; // transport batch, not a business threshold
+        var after = afterCaseRef ?? string.Empty;
         var verified = new List<(string CaseRef, long Revision, int FollowUps)>();
-        // Verify the lookahead row too: corrupt data must fail the *whole*
-        // response, rather than skip a damaged item and silently repaginate.
-        foreach (var reference in refs)
+        while (verified.Count <= limit)
         {
-            var state = await RehydrateAsync(conn, tx, reference, lockCaseRow: false);
-            if (state.Revision <= 0 ||
-                (topic is not null && state.History[0].Command.Topic != topic) ||
-                state.History.Length != state.Revision ||
-                state.History.Length - 1 > int.MaxValue)
-                throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIABLE");
-            verified.Add((reference, state.Revision, state.History.Length - 1));
+            var refs = new List<string>(batchSize);
+            await using (var cmd = new NpgsqlCommand("""
+                SELECT c.case_ref FROM internal_test_support_case c
+                WHERE c.current_revision > 0
+                  AND (@after = '' OR c.case_ref COLLATE "C" > @after COLLATE "C")
+                ORDER BY c.case_ref COLLATE "C"
+                LIMIT @count
+                """, conn, tx))
+            {
+                cmd.Parameters.AddWithValue("after", after);
+                cmd.Parameters.AddWithValue("count", batchSize);
+                await using var rows = await cmd.ExecuteReaderAsync();
+                while (await rows.ReadAsync())
+                {
+                    var reference = rows.GetString(0);
+                    if (!IsSynthetic(reference))
+                        throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIED_REFERENCE");
+                    refs.Add(reference);
+                }
+            }
+            if (refs.Count == 0) break;
+            foreach (var reference in refs)
+            {
+                // Rehydrate performs SHA-256 digest verification, original
+                // requestRef match and independent paired-audit validation.
+                // Even excluded topic rows must pass these checks.
+                var state = await RehydrateAsync(conn, tx, reference, lockCaseRow: false);
+                if (state.Revision <= 0 ||
+                    state.History.Length != state.Revision ||
+                    state.History.Length - 1 > int.MaxValue)
+                    throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIABLE");
+                if (topic is null || state.History[0].Command.Topic == topic)
+                {
+                    verified.Add((reference, state.Revision, state.History.Length - 1));
+                    if (verified.Count > limit) break;
+                }
+            }
+            after = refs[^1];
+            if (refs.Count < batchSize) break;
         }
         await tx.CommitAsync();
         return (verified.Take(limit).ToArray(), verified.Count > limit);

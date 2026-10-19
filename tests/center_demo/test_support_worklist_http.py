@@ -91,6 +91,28 @@ def main():
                           extra={"Host": "outside.invalid:4320"})
     assert status == 403 and denied["nationalReleaseAllowed"] is False
 
+    # TRN-TECH-183: sparse verified matches must advance over more than
+    # one SQL scan batch. Do not filter a pre-limited JSON candidate set.
+    sparse = "test:sparse174-" + uuid4().hex
+    for i in range(66):
+        case = sparse + "-" + str(i).zfill(2)
+        payload = command(case, 0, None)
+        payload["topic"] = (
+            "MEDICAL_SERVICE_COMPLAINT" if i >= 64 else
+            "INSURANCE_COVERAGE_DISPUTE"
+        )
+        status, saved = send("/internal/demo/v1/support/" + case + "/commands", payload)
+        assert status == 200 and saved["revision"] == 1, (status, saved)
+    filtered = base + sparse + "&limit=1&topic=MedicalServiceComplaint"
+    status, page = send(filtered)
+    assert status == 200 and page["topic"] == "MedicalServiceComplaint", (status, page)
+    assert [x["caseRef"] for x in page["cases"]] == [sparse + "-64"]
+    assert page["hasMore"] is True and page["nextAfterCaseRef"] == sparse + "-64"
+    status, page = send(base + sparse + "-64&limit=1&topic=MedicalServiceComplaint")
+    assert status == 200 and page["cases"][0]["caseRef"] == sparse + "-65"
+    assert page["nationalReleaseAllowed"] is False
+    print("PASS: verified-first sparse-topic worklist crosses SQL batches without gaps")
+
     print("PASS: bounded MVCC+audit-verified support worklist, real PostgreSQL reader, safe pagination")
 
 
