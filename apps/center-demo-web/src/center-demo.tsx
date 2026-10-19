@@ -3,6 +3,7 @@ import {DepartmentRoster} from './department-roster';
 import {DoctorAffiliationHistory} from './doctor-affiliation-history';
 import {CenterAuditWorkspace} from './center-audit-workspace';
 import {InternalSupportRead} from './internal-support-read';
+import {InternalCareCoordination} from './internal-care-coordination';
 import {makeCenterRecoveryReceipt, parseCenterRecoveryReceipt} from './center-command-receipt';
 import type {RecoveryKind, UncertainCenterCommand} from './center-command-receipt';
 
@@ -561,6 +562,7 @@ export function CenterDemo() {
         </section>}
       </section>
       <InternalSupportRead />
+      <InternalCareCoordination />
       <footer>TRN-TECH-073/074 | پایگاه‌داده موقت | فقط محیط localhost | بدون احراز هویت یا پذیرش واقعی</footer>
     </main>
   </>;
