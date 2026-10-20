@@ -459,6 +459,10 @@ DISPATCHER_BRANCHES = {
         "sprint-178-center-clinical-source-claim",
         "main",
     ),
+    "sprint-179-member-distinct-care-claims.yml": (
+        "sprint-179-member-distinct-care-claims",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

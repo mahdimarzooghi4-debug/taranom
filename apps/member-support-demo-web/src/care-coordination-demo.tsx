@@ -106,7 +106,8 @@ export function CareCoordinationDemo(){
  const [memberRef,setMemberRef]=useState('test:member-claim');
  const [requestRef,setRequestRef]=useState('test:coordination-reason');
  const [coordinator,setCoordinator]=useState('test:claimed-coordinator');
- const [source,setSource]=useState('test:opaque-clinical-source');
+ const [contactNote,setContactNote]=useState('test:claimed-contact-note');
+ const [clinicalSource,setClinicalSource]=useState('test:opaque-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
  const [uncertain,setUncertain]=useState<{ref:string;body:string}|null>(null);
  const [busy,setBusy]=useState(false);
@@ -174,8 +175,15 @@ export function CareCoordinationDemo(){
    setStatus('ثبت همان فرمان با خواندن تأیید نشد؛ قفل و بازپخش دستی حفظ شد.');
   }finally{setBusy(false);}
  }
+ function canIssue(action:Action|null):boolean{
+  if(!snapshot||!action||snapshot.caseRef!==caseRef||busy||uncertain)return false;
+  if(action==='REQUEST_NONCLINICAL_COORDINATION')
+   return snapshot.revision===0&&testRef(memberRef)&&testRef(requestRef);
+  const value=action==='RECORD_UNVERIFIED_COORDINATOR_CONTACT'?contactNote:clinicalSource;
+  return snapshot.revision>0&&testRef(coordinator)&&testRef(value);
+ }
  function issue(action:Action){
-  if(!snapshot||busy||uncertain)return;
+  if(!canIssue(action)||!snapshot)return;
   const origin=snapshot.events[0];
   if(action!=='REQUEST_NONCLINICAL_COORDINATION'&&!origin)return;
   const first=action==='REQUEST_NONCLINICAL_COORDINATION';
@@ -185,11 +193,15 @@ export function CareCoordinationDemo(){
    originalMemberRequestRef:first?requestRef:origin.originalMemberRequestRef,
    originalSubmissionRequestId:first?zero:origin.requestId,
    claimedActorRef:first?null:coordinator,
-   unverifiedNoteOrDocumentRef:first?null:source};
+   unverifiedNoteOrDocumentRef:first?null:
+    action==='RECORD_UNVERIFIED_COORDINATOR_CONTACT'?contactNote:clinicalSource};
   void send({ref:caseRef,body:JSON.stringify(cmd)});
  }
  const suggestion=nextClaimStep(snapshot,caseRef);
  const guideAction=uncertain?null:suggestion.action;
+ const eventLabel=(action:string)=>action==='RecordUnverifiedCoordinatorContact'
+  ?'ادعای تماس تأییدنشده':action==='AttachUnverifiedClinicalSourceReference'
+  ?'مرجع بالینی ادعایی تأییدنشده':'درخواست هماهنگی غیرتشخیصی';
  return <section className="care-demo" dir="rtl">
   <h1>هماهنگی غیرتشخیصی و پیگیری ادعایی عضو</h1>
   <p className="risk">فقط محیط آزمایشی: بدون احراز هویت، تماس واقعی، تعیین تیم درمان،
@@ -207,7 +219,7 @@ export function CareCoordinationDemo(){
       onChange={e=>change(setRequestRef,e.target.value)}/></label>
    <button disabled={busy||!!uncertain} onClick={()=>void read()}>
     خواندن پرونده هماهنگی</button>
-   <button disabled={busy||!!uncertain||!snapshot||snapshot.revision!==0}
+   <button disabled={!canIssue('REQUEST_NONCLINICAL_COORDINATION')}
     onClick={()=>issue('REQUEST_NONCLINICAL_COORDINATION')}>
     ثبت درخواست ادعایی هماهنگی</button>
   </fieldset>
@@ -215,15 +227,19 @@ export function CareCoordinationDemo(){
    <label>شناسه مدعی هماهنگ‌کننده
     <input dir="ltr" value={coordinator} disabled={busy||!!uncertain}
       onChange={e=>change(setCoordinator,e.target.value)}/></label>
-   <label>ارجاع یادداشت یا منبع بالینیِ تأییدنشده
-    <input dir="ltr" value={source} disabled={busy||!!uncertain}
-      onChange={e=>change(setSource,e.target.value)}/></label>
-   <button disabled={busy||!!uncertain||!snapshot||snapshot.revision===0}
+   <label>مرجع یادداشت تماس ادعایی، تأییدنشده
+    <input dir="ltr" value={contactNote} disabled={busy||!!uncertain}
+      onChange={e=>change(setContactNote,e.target.value)}/></label>
+   <button disabled={!canIssue('RECORD_UNVERIFIED_COORDINATOR_CONTACT')}
     onClick={()=>issue('RECORD_UNVERIFIED_COORDINATOR_CONTACT')}>
     ثبت ادعای تماس هماهنگ‌کننده</button>
-   <button disabled={busy||!!uncertain||!snapshot||snapshot.revision===0}
+   <label>مرجع منبع بالینی ادعایی، تأییدنشده
+    <input dir="ltr" value={clinicalSource} disabled={busy||!!uncertain}
+      onChange={e=>change(setClinicalSource,e.target.value)}/></label>
+   <button disabled={!canIssue('ATTACH_UNVERIFIED_CLINICAL_SOURCE')}
     onClick={()=>issue('ATTACH_UNVERIFIED_CLINICAL_SOURCE')}>
     پیوست ارجاع به منبع بالینیِ تأییدنشده</button>
+   <p>این دو ورودی صرفاً ادعاهای مجزا هستند؛ هیچ سند، اجازه درمان یا رضایت واقعی ایجاد نمی‌شود.</p>
   </fieldset>
   <section role="region" aria-label="راهنمای پیگیری غیرتشخیصی آزمایشی"
     data-testid="care-guided-workflow">
@@ -242,7 +258,7 @@ export function CareCoordinationDemo(){
      ارجاعات تأییدنشده: {suggestion.sourceClaims}
    </p>}
    {guideAction&&<button type="button"
-     disabled={busy||!!uncertain||!snapshot}
+     disabled={!canIssue(guideAction)}
      onClick={()=>issue(guideAction)}>ثبت گام پیشنهادی با کلیک مستقل</button>}
    <p>این راهنما مسئولیت پزشکی، تماس واقعی، ارجاع، درمان، نوبت،
       رضایت یا دسترسی به پرونده ایجاد نمی‌کند. در موارد اضطراری
@@ -259,7 +275,7 @@ export function CareCoordinationDemo(){
    <p>نسخه پرونده: <strong>{snapshot.revision}</strong></p>
    <p>ارجاع پزشکی، تماس واقعی، نوبت و دسترسی به پرونده: <strong>هیچ‌کدام</strong></p>
    <ol>{snapshot.events.map(e=><li key={e.revision}>
-    نسخه {e.revision}: {e.action} — {e.unverifiedNoteOrDocumentRef??'بدون سند'}
+    نسخه {e.revision}: {eventLabel(e.action)} ({e.action}) — {e.unverifiedNoteOrDocumentRef??'بدون سند'}
    </li>)}</ol>
   </section>}
  </section>;
