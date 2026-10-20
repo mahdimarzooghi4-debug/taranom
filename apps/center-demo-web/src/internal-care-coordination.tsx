@@ -17,7 +17,9 @@ type Snapshot={contract:'TRN-TECH-115';syntheticOnly:true;unverifiedClaimsOnly:t
  treatmentStarted:false;medicalRecordAccessGranted:false;
  emergencyServiceDispatched:false;consentGranted:false;
  walletMutated:false;nationalReleaseAllowed:false};
-type Original={ref:string;body:string;requestId:string;
+type FollowUpAction='RecordUnverifiedCoordinatorContact'|
+ 'AttachUnverifiedClinicalSourceReference';
+type Original={ref:string;body:string;requestId:string;action:FollowUpAction;
  expectedRevision:number;memberRef:string;originRef:string;
  originalId:string;actor:string;note:string};
 const deny=['realMemberAuthenticated','realCoordinatorVerified',
@@ -65,7 +67,7 @@ function acknowledged(source:Snapshot,original:Original){
  const matches=source.events.filter(e=>e.requestId===original.requestId);
  return matches.length===1&&
  matches[0].revision===original.expectedRevision+1&&
- matches[0].action==='RecordUnverifiedCoordinatorContact'&&
+ matches[0].action===original.action&&
  matches[0].memberRef===original.memberRef&&
  matches[0].originalMemberRequestRef===original.originRef&&
  matches[0].originalSubmissionRequestId===original.originalId&&
@@ -76,6 +78,7 @@ export function InternalCareCoordination(){
  const [ref,setRef]=useState('test:care-center-qa');
  const [actor,setActor]=useState('test:claimed-coordinator');
  const [note,setNote]=useState('test:claimed-contact-note');
+ const [sourceRef,setSourceRef]=useState('test:unverified-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
  const [pending,setPending]=useState<Original|null>(null);
  const [busy,setBusy]=useState(false);
@@ -115,7 +118,9 @@ export function InternalCareCoordination(){
    if(!acknowledged(fresh,original))throw Error('ORIGINAL_NOT_COMMITTED');
    if(epoch.current!==generation)return;
    setPending(null);setSnapshot(fresh);
-   setStatus('دقیقاً همان ادعای تماس بدون POST تازه از PostgreSQL بازیابی شد.');
+   setStatus(original.action==='RecordUnverifiedCoordinatorContact'?
+    'دقیقاً همان ادعای تماس بدون POST تازه از PostgreSQL بازیابی شد.':
+    'دقیقاً همان مرجع بالینی تأییدنشده بدون POST تازه از PostgreSQL بازیابی شد؛ هیچ مجوزی ایجاد نشده است.');
   }catch{
    if(epoch.current===generation)setStatus('رویداد دقیق تأیید نشد؛ همان UUID برای بازپخش دستی محفوظ است.');
   }finally{setBusy(false);}
@@ -136,31 +141,37 @@ export function InternalCareCoordination(){
    if(!acknowledged(source,original))throw Error('SOURCE_MISMATCH');
    if(epoch.current!==generation)return;
    setPending(null);setSnapshot(source);
-   setStatus('ادعای تماس دقیقاً در ژورنال ثبت و جداگانه تأیید شد؛ تماس واقعی احراز نشده است.');
+   setStatus(original.action==='RecordUnverifiedCoordinatorContact'?
+    'ادعای تماس دقیقاً در ژورنال ثبت و جداگانه تأیید شد؛ تماس واقعی احراز نشده است.':
+    'مرجع بالینی تأییدنشده دقیقاً ثبت و جداگانه تأیید شد؛ هیچ اعتبار بالینی یا مجوز دسترسی صادر نشده است.');
   }catch{
    if(epoch.current===generation){
     setPending(original);setStatus('نتیجه ثبت نامعلوم است؛ فرمان جدید قفل شد.');
    }
   }finally{setBusy(false);}
  }
- function submit(){
+ function submit(action:FollowUpAction){
+  // Separate human-selected domain actions with separately entered refs.
+  // Neither creates verification, clinical approval or patient access.
+  const documentRef=action==='RecordUnverifiedCoordinatorContact'?note:sourceRef;
   if(!snapshot||snapshot.caseRef!==ref||pending||busy||
-    !testRef(ref)||!testRef(actor)||!testRef(note))return;
+    !testRef(ref)||!testRef(actor)||!testRef(documentRef))return;
   const root=snapshot.events[0];
   if(!root||!uuid(root.requestId))return;
   const requestId=crypto.randomUUID();
   const body=JSON.stringify({
    requestId,expectedRevision:snapshot.revision,
-   action:'RECORD_UNVERIFIED_COORDINATOR_CONTACT',
+   action:action==='RecordUnverifiedCoordinatorContact'?
+    'RECORD_UNVERIFIED_COORDINATOR_CONTACT':'ATTACH_UNVERIFIED_CLINICAL_SOURCE',
    memberRef:root.memberRef,
    originalMemberRequestRef:root.originalMemberRequestRef,
    originalSubmissionRequestId:root.requestId,
-   claimedActorRef:actor,unverifiedNoteOrDocumentRef:note
+   claimedActorRef:actor,unverifiedNoteOrDocumentRef:documentRef
   });
-  const original:Original={ref,body,requestId,
+  const original:Original={ref,body,requestId,action,
    expectedRevision:snapshot.revision,memberRef:root.memberRef,
    originRef:root.originalMemberRequestRef,
-   originalId:root.requestId,actor,note};
+   originalId:root.requestId,actor,note:documentRef};
   setPending(original);
   void send(original);
  }
@@ -179,8 +190,11 @@ export function InternalCareCoordination(){
   <p data-testid="center-care-status" role="status">{status}</p>
   {pending&&<section data-testid="center-care-uncertain" role="alert">
    <p>نتیجه فرمان قبلی نامعلوم است؛ هیچ فرمان تازه‌ای صادر نمی‌شود.</p>
+   <p>عملیات قفل‌شده: {pending.action==='RecordUnverifiedCoordinatorContact'?
+    'ادعای تماس':'مرجع بالینی تأییدنشده'} — UUID {pending.requestId}</p>
    <button type="button" disabled={busy} onClick={()=>void verifiedPending()}>
-    بررسی فقط‌خواندنی همان تماس
+    {pending.action==='RecordUnverifiedCoordinatorContact'?
+     'بررسی فقط‌خواندنی همان تماس':'بررسی فقط‌خواندنی همان مرجع'}
    </button>
    <button type="button" disabled={busy} onClick={()=>void send(pending)}>
     بازپخش دستی دقیق UUID قبلی
@@ -206,7 +220,18 @@ export function InternalCareCoordination(){
      onChange={e=>setNote(e.target.value)}/>
    </label>
    <button type="button" disabled={busy||!!pending||!testRef(actor)||!testRef(note)}
-    onClick={submit}>ثبت مستقل ادعای تماس هماهنگ‌کننده</button>
+    onClick={()=>submit('RecordUnverifiedCoordinatorContact')}>ثبت مستقل ادعای تماس هماهنگ‌کننده</button>
+   <label>مرجع منبع بالینی ادعایی، بدون احراز صحت
+    <input aria-label="مرجع بالینی تأییدنشده آزمایشی" value={sourceRef}
+     maxLength={100} disabled={busy||!!pending}
+     onChange={e=>setSourceRef(e.target.value)}/>
+   </label>
+   <p>ثبت این مرجع صرفاً وجود یک ادعای منبع را نگه می‌دارد؛
+    اصل پرونده، اجازه درمان، صحت مدرک یا رضایت عضو بررسی نمی‌شود.</p>
+   <button type="button" disabled={busy||!!pending||!testRef(actor)||!testRef(sourceRef)}
+    onClick={()=>submit('AttachUnverifiedClinicalSourceReference')}>
+    ثبت مستقل مرجع بالینی تأییدنشده
+   </button>
    <p>احراز هویت و صلاحیت: خیر | تماس و ارجاع واقعی: خیر |
     درمان و نوبت: خیر | انتشار ملی: ممنوع</p>
   </section>}
