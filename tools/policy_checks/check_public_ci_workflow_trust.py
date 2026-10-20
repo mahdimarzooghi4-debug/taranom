@@ -463,6 +463,10 @@ DISPATCHER_BRANCHES = {
         "sprint-179-member-distinct-care-claims",
         "main",
     ),
+    "sprint-180-care-command-recovery-receipts.yml": (
+        "sprint-180-care-command-recovery-receipts",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

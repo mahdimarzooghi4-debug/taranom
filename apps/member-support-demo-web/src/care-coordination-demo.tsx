@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {careReceipt,parseCareReceipt} from './care-command-recovery';
 type Action='REQUEST_NONCLINICAL_COORDINATION'|
  'RECORD_UNVERIFIED_COORDINATOR_CONTACT'|'ATTACH_UNVERIFIED_CLINICAL_SOURCE';
 type Command={requestId:string;expectedRevision:number;action:Action;
@@ -110,6 +111,7 @@ export function CareCoordinationDemo(){
  const [clinicalSource,setClinicalSource]=useState('test:opaque-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
  const [uncertain,setUncertain]=useState<{ref:string;body:string}|null>(null);
+ const [recoveryText,setRecoveryText]=useState('');
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState('فقط شناسه‌های ساختگی؛ هیچ درخواست واقعی ارسال نشده است.');
  function change(fn:(s:string)=>void,value:string){
@@ -175,6 +177,19 @@ export function CareCoordinationDemo(){
    setStatus('ثبت همان فرمان با خواندن تأیید نشد؛ قفل و بازپخش دستی حفظ شد.');
   }finally{setBusy(false);}
  }
+ function loadRecovery(){
+  if(busy||uncertain)return;
+  const imported=parseCareReceipt(recoveryText,'MEMBER');
+  if(!imported){
+   setStatus('رسید بازیابی هماهنگی نامعتبر است؛ هیچ فرمانی ارسال نشد.');
+   return;
+  }
+  // No POST, GET, identity or clinical claims on import. Lock first.
+  setCaseRef(imported.caseRef);
+  setSnapshot(null);
+  setUncertain({ref:imported.caseRef,body:imported.body});
+  setStatus('رسید معتبر آزمایشی بارگذاری شد؛ هیچ POST یا GET اجرا نشد. فرمان تازه قفل است.');
+ }
  function canIssue(action:Action|null):boolean{
   if(!snapshot||!action||snapshot.caseRef!==caseRef||busy||uncertain)return false;
   if(action==='REQUEST_NONCLINICAL_COORDINATION')
@@ -195,7 +210,10 @@ export function CareCoordinationDemo(){
    claimedActorRef:first?null:coordinator,
    unverifiedNoteOrDocumentRef:first?null:
     action==='RECORD_UNVERIFIED_COORDINATOR_CONTACT'?contactNote:clinicalSource};
-  void send({ref:caseRef,body:JSON.stringify(cmd)});
+  const original={ref:caseRef,body:JSON.stringify(cmd)};
+  // Make the exact UUID/payload manually exportable before HTTP ACK.
+  setUncertain(original);
+  void send(original);
  }
  const suggestion=nextClaimStep(snapshot,caseRef);
  const guideAction=uncertain?null:suggestion.action;
@@ -266,10 +284,23 @@ export function CareCoordinationDemo(){
   </section>
   {uncertain&&<section role="alert"><p>ممکن است رویداد در سرور ثبت شده باشد.
    فرمان جدید قفل است؛ همان متن اصلی و UUID فقط با کلیک جداگانه تکرار می‌شود.</p>
+   <label>رسید متنیِ دستی هماهنگی عضو — فقط آزمایش، بدون مجوز
+    <textarea data-testid="care-recovery-export" readOnly
+     value={careReceipt('MEMBER',uncertain.ref,uncertain.body)} rows={4}/></label>
+   <p>پیش از بستن صفحه، متن رسید را خودتان نگه دارید؛ هیچ ذخیره خودکار وجود ندارد.</p>
    <button disabled={busy} onClick={()=>void inspectUncertain()}>
     بررسی فقط‌خواندنی فرمان قبلی</button>
    <button disabled={busy} onClick={()=>void send(uncertain)}>
     بازپخش دستی دقیق فرمان قبلی</button></section>}
+  <fieldset aria-label="بازیابی دستی هماهنگی عضو">
+   <legend>بازیابی دستی فرمان نامطمئن پس از بارگذاری مجدد</legend>
+   <label>متن رسید بازیابی هماهنگی عضو
+    <textarea value={recoveryText} maxLength={4096} rows={4}
+     disabled={busy||!!uncertain} onChange={e=>setRecoveryText(e.target.value)}/></label>
+   <button type="button" disabled={busy||!!uncertain}
+    onClick={loadRecovery}>بارگذاری رسید هماهنگی عضو بدون ارسال</button>
+   <p>رسید فقط شناسه و فرمان test: را برمی‌گرداند؛ فاقد هویت، رضایت، سند یا مجوز درمانی است.</p>
+  </fieldset>
   <p role="status" data-testid="care-status">{status}</p>
   {snapshot&&<section className="timeline" role="region" aria-label="تاریخچه هماهنگی ادعایی">
    <p>نسخه پرونده: <strong>{snapshot.revision}</strong></p>

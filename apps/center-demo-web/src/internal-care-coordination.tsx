@@ -1,5 +1,6 @@
 import {useRef,useState} from 'react';
 import {InternalCareWorklist} from './internal-care-worklist';
+import {careReceipt,parseCareReceipt} from './care-command-recovery';
 
 // TRN-TECH-184: CI-only source-linked coordination claims. Not a clinician
 // login, patient referral, treatment, appointment or approved contact.
@@ -81,6 +82,7 @@ export function InternalCareCoordination(){
  const [sourceRef,setSourceRef]=useState('test:unverified-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
  const [pending,setPending]=useState<Original|null>(null);
+ const [recoveryText,setRecoveryText]=useState('');
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState('ابتدا درخواست آزمایشی عضو را از ژورنال بخوانید.');
  const epoch=useRef(0);
@@ -150,6 +152,27 @@ export function InternalCareCoordination(){
    }
   }finally{setBusy(false);}
  }
+ function loadRecovery(){
+  if(busy||pending)return;
+  const imported=parseCareReceipt(recoveryText,'CENTER');
+  if(!imported){
+   setStatus('رسید بازیابی هماهنگی مرکز نامعتبر است؛ هیچ فرمانی ارسال نشد.');
+   return;
+  }
+  const c=imported.command;
+  // Parser excludes initial-member request for this surface.
+  const action:FollowUpAction=c.action==='RECORD_UNVERIFIED_COORDINATOR_CONTACT'
+   ?'RecordUnverifiedCoordinatorContact':'AttachUnverifiedClinicalSourceReference';
+  epoch.current++;
+  setRef(imported.caseRef);
+  setSnapshot(null);
+  setPending({ref:imported.caseRef,body:imported.body,
+   requestId:c.requestId,action,expectedRevision:c.expectedRevision,
+   memberRef:c.memberRef,originRef:c.originalMemberRequestRef,
+   originalId:c.originalSubmissionRequestId,
+   actor:c.claimedActorRef!,note:c.unverifiedNoteOrDocumentRef!});
+  setStatus('رسید معتبر آزمایشی بارگذاری شد؛ هیچ POST یا GET اجرا نشد. فرمان تازه قفل است.');
+ }
  function submit(action:FollowUpAction){
   // Separate human-selected domain actions with separately entered refs.
   // Neither creates verification, clinical approval or patient access.
@@ -192,6 +215,10 @@ export function InternalCareCoordination(){
    <p>نتیجه فرمان قبلی نامعلوم است؛ هیچ فرمان تازه‌ای صادر نمی‌شود.</p>
    <p>عملیات قفل‌شده: {pending.action==='RecordUnverifiedCoordinatorContact'?
     'ادعای تماس':'مرجع بالینی تأییدنشده'} — UUID {pending.requestId}</p>
+   <label>رسید متنیِ دستی هماهنگی مرکز — فقط آزمایش، بدون مجوز
+    <textarea data-testid="center-care-recovery-export" readOnly rows={4}
+     value={careReceipt('CENTER',pending.ref,pending.body)}/></label>
+   <p>پیش از بستن صفحه، متن را به‌صورت دستی نگه دارید؛ در مرورگر ذخیره نمی‌شود.</p>
    <button type="button" disabled={busy} onClick={()=>void verifiedPending()}>
     {pending.action==='RecordUnverifiedCoordinatorContact'?
      'بررسی فقط‌خواندنی همان تماس':'بررسی فقط‌خواندنی همان مرجع'}
@@ -200,6 +227,15 @@ export function InternalCareCoordination(){
     بازپخش دستی دقیق UUID قبلی
    </button>
   </section>}
+  <fieldset aria-label="بازیابی دستی هماهنگی مرکز">
+   <legend>بازیابی دستی فرمان نامطمئن پس از بارگذاری مجدد</legend>
+   <label>متن رسید بازیابی هماهنگی مرکز
+    <textarea value={recoveryText} maxLength={4096} rows={4}
+     disabled={busy||!!pending} onChange={e=>setRecoveryText(e.target.value)}/></label>
+   <button type="button" disabled={busy||!!pending}
+    onClick={loadRecovery}>بارگذاری رسید هماهنگی مرکز بدون ارسال</button>
+   <p>بارگذاری رسید نه منبع بالینی را تأیید می‌کند، نه مجوزی به مرکز می‌دهد.</p>
+  </fieldset>
   {snapshot&&<section data-testid="center-care-source">
    <p>پرونده: <code>{snapshot.caseRef}</code> — نسخه {snapshot.revision}</p>
    <p>عضو ادعایی: <code>{snapshot.events[0].memberRef}</code>
