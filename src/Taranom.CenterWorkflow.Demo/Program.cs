@@ -242,6 +242,8 @@ app.MapGet("/internal/demo/v1/late-evidence/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/late-evidence/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.WriteAsync);
+app.MapGet("/internal/demo/v1/care-coordination-worklist",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareWorklistHttp.ListAsync);
 app.MapGet("/internal/demo/v1/care-coordination/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareCoordinationHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/care-coordination/{caseRef}/commands",

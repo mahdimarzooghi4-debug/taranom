@@ -1,4 +1,5 @@
 import {useRef,useState} from 'react';
+import {InternalCareWorklist} from './internal-care-worklist';
 
 // TRN-TECH-184: CI-only source-linked coordination claims. Not a clinician
 // login, patient referral, treatment, appointment or approved contact.
@@ -168,6 +169,7 @@ export function InternalCareCoordination(){
   <p>این محیط، پرونده درمانی یا حساب عضو نیست. فقط رویدادهای ادعایی
     ثبت‌شده در ژورنال PostgreSQL عضو را با شناسه test: مشاهده می‌کند.
     مجوز دسترسی، ارجاع و تأیید تماس واقعی وجود ندارد.</p>
+  <InternalCareWorklist disabled={busy||!!pending} onSelect={changeRef}/>
   <label>شناسه هماهنگی آزمایشی
    <input aria-label="شناسه پرونده هماهنگی مرکز" value={ref} maxLength={100}
     disabled={busy||!!pending} onChange={e=>changeRef(e.target.value)}/>

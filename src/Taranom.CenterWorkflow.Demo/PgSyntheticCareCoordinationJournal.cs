@@ -245,6 +245,60 @@ internal sealed class PgSyntheticCareCoordinationJournal(NpgsqlDataSource writer
         await tx.CommitAsync();
         return change;
     }
+    // TRN-TECH-186: bounded, explicit, source-verified synthetic case worklist.
+    // List uses ONLY the reader principal and the canonical event/audit replay.
+    // No raw JSON topic/medical inference, member IDs, actors, notes or authority.
+    internal async Task<((
+        string CaseRef,long Revision,int ContactClaims,int SourceClaims
+        )[] Rows,bool HasMore)> ReadWorklistAsync(string? afterCaseRef,int limit)
+    {
+        if(limit is <1 or >10||(afterCaseRef is not null&&!Synthetic(afterCaseRef)))
+            throw new InvalidOperationException("INVALID_TEST_CARE_CURSOR");
+        await using var cn=await reader.OpenConnectionAsync();
+        await using var tx=await cn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead);
+        await using(var ro=new NpgsqlCommand("SET TRANSACTION READ ONLY",cn,tx))
+            await ro.ExecuteNonQueryAsync();
+        var result=new List<(string CaseRef,long Revision,int ContactClaims,int SourceClaims)>();
+        await using(var query=new NpgsqlCommand("""
+            SELECT case_ref FROM internal_test_care_case
+            WHERE current_revision>0
+              AND (@after='' OR case_ref COLLATE "C" > @after COLLATE "C")
+            ORDER BY case_ref COLLATE "C"
+            LIMIT @max
+            """,cn,tx))
+        {
+            query.Parameters.AddWithValue("after",afterCaseRef??string.Empty);
+            query.Parameters.AddWithValue("max",limit+1);
+            var refs=new List<string>();
+            await using(var rows=await query.ExecuteReaderAsync())
+            {
+                while(await rows.ReadAsync())refs.Add(rows.GetString(0));
+            }
+            // Verify *every* candidate, including the limit+1 lookahead;
+            // corrupt source cannot disappear merely because it is off page.
+            foreach(var caseRef in refs)
+            {
+                if(!Synthetic(caseRef))
+                    throw new InvalidOperationException("TEST_CARE_UNVERIFIED_REFERENCE");
+                var state=await RebuildAsync(cn,tx,caseRef,false);
+                if(state.Revision<1||state.History.Length!=state.Revision||
+                   state.History[0].Command.Action!=
+                       SyntheticCareTrailAction.RequestNonclinicalCoordination)
+                    throw new InvalidOperationException("TEST_CARE_WORKLIST_UNVERIFIABLE");
+                var contacts=state.History.Count(x=>x.Command.Action==
+                    SyntheticCareTrailAction.RecordUnverifiedCoordinatorContact);
+                var sources=state.History.Count(x=>x.Command.Action==
+                    SyntheticCareTrailAction.AttachUnverifiedClinicalSourceReference);
+                if(contacts+sources!=state.Revision-1)
+                    throw new InvalidOperationException("TEST_CARE_WORKLIST_INVALID_HISTORY");
+                result.Add((caseRef,state.Revision,contacts,sources));
+            }
+        }
+        await tx.CommitAsync();
+        return (result.Take(limit).ToArray(),result.Count>limit);
+    }
+
     internal async Task<SyntheticCareTrailSnapshot> ReadAsync(string caseRef)
     {
         if(!Synthetic(caseRef))throw new InvalidOperationException("INVALID_CARE_CASE");
