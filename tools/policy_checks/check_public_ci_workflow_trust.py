@@ -487,6 +487,10 @@ DISPATCHER_BRANCHES = {
         "sprint-185-member-care-version-explorer",
         "main",
     ),
+    "sprint-186-care-pinned-journal-history.yml": (
+        "sprint-186-care-pinned-journal-history",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -8,6 +8,19 @@ type Command={requestId:string;expectedRevision:number;action:Action;
 type Event={revision:number;action:string;requestId:string;memberRef:string;
  originalMemberRequestRef:string;originalSubmissionRequestId:string;
  claimedActorRef:string|null;unverifiedNoteOrDocumentRef:string|null};
+type CareHistoryPage={
+ contract:'TRN-TECH-195';syntheticOnly:true;unverifiedClaimsOnly:true;
+ source:'VERIFIED_ISOLATED_POSTGRES_CARE_JOURNAL';
+ caseRef:string;currentRevision:number;expectedCurrentRevision:number;
+ afterRevision:number;limit:number;hasMore:boolean;nextAfterRevision:number|null;
+ events:Event[];
+ realMemberAuthenticated:false;realCoordinatorVerified:false;
+ clinicalSourceVerified:false;clinicianAuthorized:false;
+ referralOrdered:false;referralDelivered:false;appointmentBooked:false;
+ treatmentStarted:false;medicalRecordAccessGranted:false;
+ emergencyServiceDispatched:false;consentGranted:false;
+ walletMutated:false;nationalReleaseAllowed:false
+};
 type Snapshot={contract:'TRN-TECH-115';syntheticOnly:true;unverifiedClaimsOnly:true;
  caseRef:string;outcome:string;revision:number;events:Event[];
  realMemberAuthenticated:false;realCoordinatorVerified:false;
@@ -92,6 +105,33 @@ const appended=(prior:Snapshot,next:Snapshot):Event[]|null=>
  prior.caseRef===next.caseRef&&next.revision>=prior.revision&&
  prior.events.every((e,i)=>equalEvent(e,next.events[i]))
  ?next.events.slice(prior.revision):null;
+const HISTORY_LIMIT=4;
+// History pages are independently read from the canonical source, and also
+// compared event-for-event to the already accepted revision-pinned snapshot.
+function validHistoryPage(value:unknown,pin:Snapshot,cursor:number):
+ value is CareHistoryPage {
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const p=value as Partial<CareHistoryPage>;
+ if(p.contract!=='TRN-TECH-195'||p.syntheticOnly!==true||
+    p.unverifiedClaimsOnly!==true||
+    p.source!=='VERIFIED_ISOLATED_POSTGRES_CARE_JOURNAL'||
+    p.caseRef!==pin.caseRef||p.currentRevision!==pin.revision||
+    p.expectedCurrentRevision!==pin.revision||p.afterRevision!==cursor||
+    p.limit!==HISTORY_LIMIT||!denialKeys.every(k=>p[k]===false)||
+    typeof p.hasMore!=='boolean'||!Array.isArray(p.events)||
+    p.events.length>HISTORY_LIMIT||cursor>pin.revision)return false;
+ for(const [i,e] of p.events.entries()){
+  const expected=pin.events[cursor+i];
+  if(!expected||!e||!equalEvent(e,expected)||e.revision!==cursor+i+1)
+   return false;
+ }
+ return p.hasMore
+  ?p.events.length===HISTORY_LIMIT&&
+   typeof p.nextAfterRevision==='number'&&
+   p.nextAfterRevision===cursor+p.events.length&&
+   p.nextAfterRevision<pin.revision
+  :p.nextAfterRevision===null&&cursor+p.events.length===pin.revision;
+}
 type SuggestedStep={
  action:Action|null;label:string;contactClaims:number;sourceClaims:number
 };
@@ -123,18 +163,19 @@ export function CareCoordinationDemo(){
  const [clinicalSource,setClinicalSource]=useState('test:opaque-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
  const [asOf,setAsOf]=useState<number|null>(null);
+ const [historyPage,setHistoryPage]=useState<CareHistoryPage|null>(null);
  const [activity,setActivity]=useState<Event[]|null>(null);
  const [uncertain,setUncertain]=useState<{ref:string;body:string}|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState('فقط شناسه‌های ساختگی؛ هیچ درخواست واقعی ارسال نشده است.');
  function change(fn:(s:string)=>void,value:string){
-  fn(value);setSnapshot(null);setActivity(null);setAsOf(null);setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
+  fn(value);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
  }
  async function read(){
   if(busy||uncertain)return;
   const previous=snapshot;
-  setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);
+  setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   try{
    const response=await fetch('/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef),
     {credentials:'omit',cache:'no-store'});
@@ -151,7 +192,7 @@ export function CareCoordinationDemo(){
   finally{setBusy(false);}
  }
  async function send(original:{ref:string;body:string}){
-  if(busy)return;setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);
+  if(busy)return;setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   try{
    const result=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref)+'/commands',{
@@ -183,7 +224,7 @@ export function CareCoordinationDemo(){
  async function inspectUncertain(){
   if(busy||!uncertain)return;
   const original=uncertain;
-  setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);
+  setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   try{
    const res=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref),{credentials:'omit',cache:'no-store'});
@@ -207,9 +248,29 @@ export function CareCoordinationDemo(){
   }
   // No POST, GET, identity or clinical claims on import. Lock first.
   setCaseRef(imported.caseRef);
-  setSnapshot(null);setActivity(null);setAsOf(null);
+  setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   setUncertain({ref:imported.caseRef,body:imported.body});
   setStatus('رسید معتبر آزمایشی بارگذاری شد؛ هیچ POST یا GET اجرا نشد. فرمان تازه قفل است.');
+ }
+ async function readHistory(after:number){
+  if(busy||uncertain||!snapshot||!Number.isSafeInteger(after)||
+     after<0||after>snapshot.revision)return;
+  const pinned=snapshot;
+  setBusy(true);setHistoryPage(null);
+  try{
+   const url='/internal/demo/v1/care-coordination/'+
+    encodeURIComponent(pinned.caseRef)+'/history?afterRevision='+after+
+    '&limit='+HISTORY_LIMIT+'&expectedCurrentRevision='+pinned.revision;
+   const response=await fetch(url,{credentials:'omit',cache:'no-store'});
+   if(!response.ok)throw Error('HISTORY_SOURCE_FAILED');
+   const page:unknown=await response.json();
+   if(!validHistoryPage(page,pinned,after))throw Error('HISTORY_UNVERIFIED');
+   setHistoryPage(page);
+   setStatus('صفحه تاریخچه با نسخه ثابت، جداگانه از PostgreSQL آزمایشی تأیید شد.');
+  }catch{
+   setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+   setStatus('تاریخچه صفحه‌بندی‌شده قابل تأیید نیست؛ داده قدیمی کنار گذاشته شد. پرونده را دوباره بخوانید.');
+  }finally{setBusy(false);}
  }
  function canIssue(action:Action|null):boolean{
   // The selected historical version is NEVER a command source.
@@ -341,6 +402,28 @@ export function CareCoordinationDemo(){
    <ul>{activity.map(e=><li key={e.requestId}>
     نسخه {e.revision}: {eventLabel(e.action)} — {e.unverifiedNoteOrDocumentRef??'بدون مرجع'}
    </li>)}</ul>
+  </section>}
+  {snapshot&&<section data-testid="member-care-server-history"
+   role="region" aria-label="تاریخچه صفحه‌بندی‌شده PostgreSQL">
+   <h2>بازخوانی مستقل تاریخچه با نسخه ثابت</h2>
+   <p>این مسیر فقط با اقدام دستی و از همان ژورنال ممیزی‌شده PostgreSQL
+    رویدادهای تأییدنشده را در صفحات چهاررویدادی می‌خواند.
+    اگر نسخه بین صفحات تغییر کند، ادامه بدون بازخوانی پرونده رد می‌شود.</p>
+   <button type="button" disabled={busy||!!uncertain}
+    onClick={()=>void readHistory(0)}>خواندن نخستین صفحه تاریخچه</button>
+   {historyPage&&<div data-testid="member-care-server-history-page">
+    <p>نسخه پین‌شده: {historyPage.currentRevision}؛
+     شروع پس از نسخه: {historyPage.afterRevision}</p>
+    <ol>{historyPage.events.map(e=><li key={e.requestId}>
+     نسخه {e.revision}: {eventLabel(e.action)} —
+     شناسه درخواست <code>{e.requestId}</code>،
+     مرجع ادعایی <code>{e.unverifiedNoteOrDocumentRef??'ثبت نشده'}</code>
+    </li>)}</ol>
+    {historyPage.hasMore&&historyPage.nextAfterRevision!==null&&
+     <button type="button" disabled={busy||!!uncertain}
+      onClick={()=>void readHistory(historyPage.nextAfterRevision!)}>
+      صفحه بعدی تاریخچه با همان نسخه</button>}
+   </div>}
   </section>}
   {snapshot&&<section data-testid="member-care-version-explorer"
    role="region" aria-label="کاوش نسخه‌های تاریخی هماهنگی">
