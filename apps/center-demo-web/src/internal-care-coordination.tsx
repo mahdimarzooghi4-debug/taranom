@@ -229,7 +229,7 @@ export function InternalCareCoordination(){
   <button type="button" disabled={busy||!!pending||!testRef(ref)}
     onClick={()=>void read()}>خواندن مستقل هماهنگی عضو</button>
   {snapshot&&<button type="button" disabled={busy||!!pending}
-   onClick={()=>void read()}>بررسی دستی تغییرات هماهنگی مرکز</button>
+   onClick={()=>void read()}>بررسی دستی تغییرات هماهنگی مرکز</button>}
   <p data-testid="center-care-status" role="status">{status}</p>
   {activity!==null&&snapshot&&<section data-testid="center-care-activity" role="status">
    <p>پس از خواندن قبلی همین صفحه {activity.length} ادعای جدید اضافه شده است.
@@ -237,7 +237,7 @@ export function InternalCareCoordination(){
    <ul>{activity.map(e=><li key={e.requestId}>
     نسخه {e.revision}: {e.action} — {e.unverifiedNoteOrDocumentRef??'بدون مرجع'}
    </li>)}</ul>
-  </section>
+  </section>}
   {pending&&<section data-testid="center-care-uncertain" role="alert">
    <p>نتیجه فرمان قبلی نامعلوم است؛ هیچ فرمان تازه‌ای صادر نمی‌شود.</p>
    <p>عملیات قفل‌شده: {pending.action==='RecordUnverifiedCoordinatorContact'?
