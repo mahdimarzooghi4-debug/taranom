@@ -21,6 +21,26 @@ const deny=['realMemberAuthenticated','realCoordinatorVerified',
 const testRef=(x:string)=>x.length<=128&&/^test:[A-Za-z0-9_:-]{1,123}$/.test(x);
 const LIMIT=4;
 type Filter=Page['claimFilter'];
+type Activity={caseRef:string;newContactClaims:number;newSourceClaims:number;revision:number};
+// A same-page comparison shows additions ONLY to already source-verified
+// immutable-claim counts. It is not a case notification or care assignment.
+function additions(before:Row[],after:Row[],beforeNext:string|null,
+ afterNext:string|null):Activity[]|null{
+ if(before.length!==after.length||beforeNext!==afterNext)return null;
+ const changed:Activity[]=[];
+ for(let i=0;i<before.length;i++){
+  const old=before[i],fresh=after[i];
+  if(old.caseRef!==fresh.caseRef||fresh.revision<old.revision||
+   fresh.contactClaims<old.contactClaims||fresh.sourceClaims<old.sourceClaims||
+   fresh.revision-old.revision!==
+   fresh.contactClaims-old.contactClaims+fresh.sourceClaims-old.sourceClaims)
+   return null;
+  if(fresh.revision>old.revision)changed.push({caseRef:fresh.caseRef,
+   newContactClaims:fresh.contactClaims-old.contactClaims,
+   newSourceClaims:fresh.sourceClaims-old.sourceClaims,revision:fresh.revision});
+ }
+ return changed;
+}
 function verified(input:unknown,after:string,filter:Filter):input is Page{
  if(!input||typeof input!=='object'||Array.isArray(input))return false;
  const p=input as Partial<Page>;
@@ -55,18 +75,23 @@ export function InternalCareWorklist({disabled,onSelect}:{
  const [filter,setFilter]=useState<Filter>('ALL');
  const [rows,setRows]=useState<Row[]>([]);
  const [next,setNext]=useState<string|null>(null);
+ const [pageAfter,setPageAfter]=useState('');
+ const [activity,setActivity]=useState<Activity[]|null>(null);
  const [phase,setPhase]=useState<'IDLE'|'LOADING'|'READY'|'DENIED'>('IDLE');
  const epoch=useRef(0);
  function invalidate(){
-  epoch.current++;setRows([]);setNext(null);setPhase('IDLE');
+  epoch.current++;setRows([]);setNext(null);setActivity(null);
+  setPageAfter('');setPhase('IDLE');
  }
  function changeCursor(value:string){invalidate();setCursor(value);}
  function changeFilter(value:Filter){invalidate();setFilter(value);}
- async function page(after:string){
-  if(disabled||phase==='LOADING'||(after.length>0&&!testRef(after)))return;
+ async function page(after:string,check=false){
+  if(disabled||phase==='LOADING'||(after.length>0&&!testRef(after))||
+    (check&&(phase!=='READY'||rows.length===0||pageAfter!==after)))return;
+  const previous=check?rows:null,previousNext=next;
   const current=++epoch.current;
   const selected=filter;
-  setRows([]);setNext(null);setPhase('LOADING');
+  setRows([]);setNext(null);setActivity(null);setPhase('LOADING');
   try{
    const response=await fetch('/internal/demo/v1/care-coordination-worklist?afterCaseRef='+
      encodeURIComponent(after)+'&limit='+LIMIT+'&claimFilter='+selected,
@@ -74,11 +99,16 @@ export function InternalCareWorklist({disabled,onSelect}:{
    if(!response.ok)throw Error('GET_DENIED');
    const raw:unknown=await response.json();
    if(!verified(raw,after,selected))throw Error('UNVERIFIED');
+   const delta=previous?additions(previous,raw.cases,previousNext,
+    raw.nextAfterCaseRef):null;
+   if(previous&&delta===null)throw Error('PAGE_MEMBERSHIP_OR_HISTORY_CHANGED');
    if(epoch.current!==current)return;
-   setRows(raw.cases);setNext(raw.nextAfterCaseRef);setPhase('READY');
+   setRows(raw.cases);setNext(raw.nextAfterCaseRef);setPageAfter(after);
+   setActivity(delta);setPhase('READY');
   }catch{
    if(epoch.current!==current)return;
-   setRows([]);setNext(null);setPhase('DENIED');
+   setRows([]);setNext(null);setActivity(null);setPageAfter('');
+   setPhase('DENIED');
   }
  }
  return <section className="panel" data-testid="center-care-worklist">
@@ -105,11 +135,25 @@ export function InternalCareWorklist({disabled,onSelect}:{
     onClick={()=>void page(cursor)}>خواندن فهرست هماهنگی از ژورنال</button>
   {next&&<button type="button" disabled={disabled||phase==='LOADING'}
     onClick={()=>void page(next)}>صفحه بعد هماهنگی‌ها</button>}
+  {phase==='READY'&&rows.length>0&&
+   <button type="button" disabled={disabled}
+    onClick={()=>void page(pageAfter,true)}>بررسی دستی تغییرات پرونده‌های همین صفحه</button>}
   <p role="status">{phase==='IDLE'?'هنوز فهرستی خوانده نشده است.':
     phase==='LOADING'?'در حال خواندن فهرست از PostgreSQL':
     phase==='DENIED'?'فهرست قابل تأیید نیست؛ هیچ ردیفی قابل انتخاب نیست.':
     rows.length===0?'در این صفحه درخواست ثبت‌شده‌ای نیست.':
     'فهرست ممیزی‌شده PostgreSQL خوانده شد.'}</p>
+  {phase==='READY'&&activity!==null&&
+   <section data-testid="center-care-worklist-activity" role="region"
+    aria-label="تغییرات ادعایی صفحه فعلی">
+    <p>از آخرین خواندن همین صفحه، {activity.length} پرونده با ادعاهای تازه مشاهده شد.
+     این گزارش اعلان رسمی، اولویت درمانی یا تأیید انجام خدمت نیست.</p>
+    <ul>{activity.map(a=><li key={a.caseRef}>
+     پرونده <code>{a.caseRef}</code> — نسخه {a.revision}،
+     ادعای تماس جدید {a.newContactClaims}،
+     مرجع بالینی تأییدنشده جدید {a.newSourceClaims}
+    </li>)}</ul>
+   </section>}
   {phase==='READY'&&<ul data-testid="center-care-worklist-rows">
    {rows.map(r=><li key={r.caseRef}>پرونده <code>{r.caseRef}</code>
     {' — نسخه '+r.revision+'، ادعاهای تماس '+r.contactClaims+
