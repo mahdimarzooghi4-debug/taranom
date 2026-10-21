@@ -1,0 +1,12 @@
+name: Sprint 184 Care Worklist Independent Page Audit Full Regression
+on:
+  push:
+    branches: [sprint-184-care-worklist-audited-page-inspection]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
