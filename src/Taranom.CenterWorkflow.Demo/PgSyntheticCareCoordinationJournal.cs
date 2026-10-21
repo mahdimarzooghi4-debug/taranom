@@ -250,9 +250,11 @@ internal sealed class PgSyntheticCareCoordinationJournal(NpgsqlDataSource writer
     // No raw JSON topic/medical inference, member IDs, actors, notes or authority.
     internal async Task<((
         string CaseRef,long Revision,int ContactClaims,int SourceClaims
-        )[] Rows,bool HasMore)> ReadWorklistAsync(string? afterCaseRef,int limit)
+        )[] Rows,bool HasMore)> ReadWorklistAsync(
+            string? afterCaseRef,int limit,string claimFilter="ALL")
     {
-        if(limit is <1 or >10||(afterCaseRef is not null&&!Synthetic(afterCaseRef)))
+        if(claimFilter is not ("ALL" or "HAS_CONTACT" or "HAS_SOURCE" or "HAS_BOTH")||
+           limit is <1 or >10||(afterCaseRef is not null&&!Synthetic(afterCaseRef)))
             throw new InvalidOperationException("INVALID_TEST_CARE_CURSOR");
         await using var cn=await reader.OpenConnectionAsync();
         await using var tx=await cn.BeginTransactionAsync(
@@ -269,7 +271,10 @@ internal sealed class PgSyntheticCareCoordinationJournal(NpgsqlDataSource writer
             """,cn,tx))
         {
             query.Parameters.AddWithValue("after",afterCaseRef??string.Empty);
-            query.Parameters.AddWithValue("max",limit+1);
+            // A filtered page must search past nonmatching cases BEFORE
+            // applying its keyset page limit, not filter a raw N+1 slice.
+            // The fixed scan cap fails closed instead of hiding later matches.
+            query.Parameters.AddWithValue("max",claimFilter=="ALL"?limit+1:512);
             var refs=new List<string>();
             await using(var rows=await query.ExecuteReaderAsync())
             {
@@ -292,8 +297,21 @@ internal sealed class PgSyntheticCareCoordinationJournal(NpgsqlDataSource writer
                     SyntheticCareTrailAction.AttachUnverifiedClinicalSourceReference);
                 if(contacts+sources!=state.Revision-1)
                     throw new InvalidOperationException("TEST_CARE_WORKLIST_INVALID_HISTORY");
-                result.Add((caseRef,state.Revision,contacts,sources));
+                var matches=claimFilter switch
+                {
+                    "ALL"=>true,
+                    "HAS_CONTACT"=>contacts>0,
+                    "HAS_SOURCE"=>sources>0,
+                    "HAS_BOTH"=>contacts>0&&sources>0,
+                    _=>false
+                };
+                if(matches)result.Add((caseRef,state.Revision,contacts,sources));
+                if(result.Count>limit)break;
             }
+            // If scanning exhausted a bounded candidate window without
+            // finding N+1 matches, its next cursor is unknowable. Deny.
+            if(claimFilter!="ALL"&&refs.Count==512&&result.Count<=limit)
+                throw new InvalidOperationException("TEST_CARE_FILTER_SCAN_INCOMPLETE");
         }
         await tx.CommitAsync();
         return (result.Take(limit).ToArray(),result.Count>limit);

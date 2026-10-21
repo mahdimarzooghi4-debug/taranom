@@ -471,6 +471,10 @@ DISPATCHER_BRANCHES = {
         "sprint-181-care-journal-manual-activity-delta",
         "main",
     ),
+    "sprint-182-care-claim-worklist-filter.yml": (
+        "sprint-182-care-claim-worklist-filter",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

@@ -10,12 +10,16 @@ internal static class CareWorklistHttp
     internal static async Task<IResult> ListAsync(HttpContext ctx)
     {
         var q=ctx.Request.Query;
-        if(q.Count!=2||!q.ContainsKey("afterCaseRef")||!q.ContainsKey("limit")||
-           q["afterCaseRef"].Count!=1||q["limit"].Count!=1)
+        if(q.Count is <2 or >3||!q.ContainsKey("afterCaseRef")||!q.ContainsKey("limit")||
+           q["afterCaseRef"].Count!=1||q["limit"].Count!=1||
+           (q.Count==3&&(!q.ContainsKey("claimFilter")||q["claimFilter"].Count!=1)))
             return Deny(400,"INVALID_TEST_CARE_WORKLIST_CURSOR");
         var after=q["afterCaseRef"].ToString();
         var count=q["limit"].ToString();
-        if((after.Length>0 && !TestRef(after))||
+        // Old callers remain ALL; no clinical/task-state semantics are inferred.
+        var filter=q.ContainsKey("claimFilter")?q["claimFilter"].ToString():"ALL";
+        if(filter is not ("ALL" or "HAS_CONTACT" or "HAS_SOURCE" or "HAS_BOTH")||
+           (after.Length>0 && !TestRef(after))||
            count.Length is <1 or >2||count[0]=='0'||
            !count.All(char.IsAsciiDigit)||
            !int.TryParse(count,NumberStyles.None,CultureInfo.InvariantCulture,out var limit)||
@@ -24,7 +28,7 @@ internal static class CareWorklistHttp
         try
         {
             var (rows,more)=await CareCoordinationHttp.Store.ReadWorklistAsync(
-                after.Length==0?null:after,limit);
+                after.Length==0?null:after,limit,filter);
             var cases=rows.Select(x=>new
             {
                 caseRef=x.CaseRef,revision=x.Revision,
@@ -41,7 +45,7 @@ internal static class CareWorklistHttp
                 appointmentBooked=false,treatmentStarted=false,
                 medicalRecordAccessGranted=false,emergencyServiceDispatched=false,
                 consentGranted=false,walletMutated=false,nationalReleaseAllowed=false,
-                afterCaseRef=after,limit,hasMore=more,
+                afterCaseRef=after,limit,claimFilter=filter,hasMore=more,
                 nextAfterCaseRef=more?cases[^1].caseRef:null,
                 cases
             });
