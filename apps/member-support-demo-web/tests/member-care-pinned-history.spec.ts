@@ -54,7 +54,9 @@ test('CARE186-01 full source-attested six-event care history spans independent f
  await expect(history).toContainText('شروع پس از نسخه: 4');
  await expect(history.locator('li')).toHaveCount(2);
  await expect(history.locator('li').first()).toContainText('نسخه 5');
- await expect(history.locator('li').last()).toContainText('test:source186');
+ await expect(history.locator('li').first()).toContainText('test:source186');
+ await expect(history.locator('li').last()).toContainText('نسخه 6');
+ await expect(history.locator('li').last()).toContainText('test:note186');
  await expect(panel.getByRole('button',{name:next})).toHaveCount(0);
  expect(historyReads).toBe(2);expect(writes).toBe(0);
  const persisted=await (await request.get(root+ref)).json();
