@@ -483,6 +483,10 @@ DISPATCHER_BRANCHES = {
         "sprint-184-care-worklist-audited-page-inspection",
         "main",
     ),
+    "sprint-185-member-care-version-explorer.yml": (
+        "sprint-185-member-care-version-explorer",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

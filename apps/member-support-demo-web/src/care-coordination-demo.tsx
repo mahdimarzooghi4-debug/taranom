@@ -122,18 +122,19 @@ export function CareCoordinationDemo(){
  const [contactNote,setContactNote]=useState('test:claimed-contact-note');
  const [clinicalSource,setClinicalSource]=useState('test:opaque-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
+ const [asOf,setAsOf]=useState<number|null>(null);
  const [activity,setActivity]=useState<Event[]|null>(null);
  const [uncertain,setUncertain]=useState<{ref:string;body:string}|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState('فقط شناسه‌های ساختگی؛ هیچ درخواست واقعی ارسال نشده است.');
  function change(fn:(s:string)=>void,value:string){
-  fn(value);setSnapshot(null);setActivity(null);setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
+  fn(value);setSnapshot(null);setActivity(null);setAsOf(null);setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
  }
  async function read(){
   if(busy||uncertain)return;
   const previous=snapshot;
-  setBusy(true);setSnapshot(null);setActivity(null);
+  setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);
   try{
    const response=await fetch('/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef),
     {credentials:'omit',cache:'no-store'});
@@ -150,7 +151,7 @@ export function CareCoordinationDemo(){
   finally{setBusy(false);}
  }
  async function send(original:{ref:string;body:string}){
-  if(busy)return;setBusy(true);setSnapshot(null);setActivity(null);
+  if(busy)return;setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);
   try{
    const result=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref)+'/commands',{
@@ -182,7 +183,7 @@ export function CareCoordinationDemo(){
  async function inspectUncertain(){
   if(busy||!uncertain)return;
   const original=uncertain;
-  setBusy(true);setSnapshot(null);setActivity(null);
+  setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);
   try{
    const res=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref),{credentials:'omit',cache:'no-store'});
@@ -206,12 +207,14 @@ export function CareCoordinationDemo(){
   }
   // No POST, GET, identity or clinical claims on import. Lock first.
   setCaseRef(imported.caseRef);
-  setSnapshot(null);setActivity(null);
+  setSnapshot(null);setActivity(null);setAsOf(null);
   setUncertain({ref:imported.caseRef,body:imported.body});
   setStatus('رسید معتبر آزمایشی بارگذاری شد؛ هیچ POST یا GET اجرا نشد. فرمان تازه قفل است.');
  }
  function canIssue(action:Action|null):boolean{
-  if(!snapshot||!action||snapshot.caseRef!==caseRef||busy||uncertain)return false;
+  // The selected historical version is NEVER a command source.
+  if(!snapshot||!action||snapshot.caseRef!==caseRef||busy||uncertain||
+    (asOf!==null&&asOf!==snapshot.revision))return false;
   if(action==='REQUEST_NONCLINICAL_COORDINATION')
    return snapshot.revision===0&&testRef(memberRef)&&testRef(requestRef);
   const value=action==='RECORD_UNVERIFIED_COORDINATOR_CONTACT'?contactNote:clinicalSource;
@@ -237,6 +240,14 @@ export function CareCoordinationDemo(){
  }
  const suggestion=nextClaimStep(snapshot,caseRef);
  const guideAction=uncertain?null:suggestion.action;
+ const chosenRevision=asOf??snapshot?.revision??0;
+ const historical=snapshot!==null&&chosenRevision!==snapshot.revision;
+ const asOfEvents=snapshot?.events.slice(0,chosenRevision)??[];
+ const afterEvents=snapshot?.events.slice(chosenRevision)??[];
+ const asOfContact=asOfEvents.filter(e=>
+  e.action==='RecordUnverifiedCoordinatorContact').length;
+ const asOfSource=asOfEvents.filter(e=>
+  e.action==='AttachUnverifiedClinicalSourceReference').length;
  const eventLabel=(action:string)=>action==='RecordUnverifiedCoordinatorContact'
   ?'ادعای تماس تأییدنشده':action==='AttachUnverifiedClinicalSourceReference'
   ?'مرجع بالینی ادعایی تأییدنشده':'درخواست هماهنگی غیرتشخیصی';
@@ -330,6 +341,49 @@ export function CareCoordinationDemo(){
    <ul>{activity.map(e=><li key={e.requestId}>
     نسخه {e.revision}: {eventLabel(e.action)} — {e.unverifiedNoteOrDocumentRef??'بدون مرجع'}
    </li>)}</ul>
+  </section>}
+  {snapshot&&<section data-testid="member-care-version-explorer"
+   role="region" aria-label="کاوش نسخه‌های تاریخی هماهنگی">
+   <h2>بررسی نسخه‌به‌نسخه ادعاهای هماهنگی — فقط خواندنی</h2>
+   <p>منبع این گزارش فقط آخرین GET معتبر ژورنال PostgreSQL آزمایشی است.
+    هیچ داده تاریخی بازنویسی نمی‌شود و نسخه گذشته برای فرمان جدید قابل استفاده نیست.</p>
+   <label>نسخه تاریخی برای مشاهده
+    <select aria-label="نسخه تاریخی برای مشاهده" value={chosenRevision}
+     disabled={busy||!!uncertain}
+     onChange={e=>setAsOf(Number(e.target.value))}>
+     {Array.from({length:snapshot.revision+1},(_,i)=>
+      <option key={i} value={i}>نسخه {i}</option>)}
+    </select>
+   </label>
+   {historical&&<button type="button" disabled={busy||!!uncertain}
+    onClick={()=>setAsOf(null)}>بازگشت به نسخه جاری هماهنگی</button>}
+   <p data-testid="member-care-as-of-counts">
+    نمای نسخه {chosenRevision} از {snapshot.revision} |
+    ادعاهای تماس تا این نسخه: {asOfContact} |
+    منابع بالینی ادعایی تا این نسخه: {asOfSource} |
+    رویدادهای ثبت‌شده بعد از نسخه منتخب: {afterEvents.length}
+   </p>
+   {historical&&<p>نمای تاریخی فعال است؛ هیچ فرمان تازه‌ای بر اساس این نسخه صادر نمی‌شود.
+    برای ادامه فقط به نسخه جاری بازگردید.</p>}
+   <h3>رویدادها تا نسخه انتخابی</h3>
+   <ol data-testid="member-care-as-of-events">
+    {asOfEvents.map(e=><li key={e.requestId}>
+     نسخه {e.revision}: {eventLabel(e.action)} — درخواست <code>{e.requestId}</code>؛
+     شناسه ادعایی عضو <code>{e.memberRef}</code>؛
+     مرجع درخواست اولیه <code>{e.originalMemberRequestRef}</code>؛
+     UUID درخواست اصلی <code>{e.originalSubmissionRequestId}</code>؛
+     مدعی هماهنگ‌کننده <code>{e.claimedActorRef??'ثبت نشده'}</code>؛
+     مرجع ادعایی <code>{e.unverifiedNoteOrDocumentRef??'ثبت نشده'}</code>
+    </li>)}
+   </ol>
+   <h3>رویدادهای پس از نسخه انتخابی</h3>
+   <ol data-testid="member-care-after-events">
+    {afterEvents.map(e=><li key={e.requestId}>
+     نسخه {e.revision}: {eventLabel(e.action)} — <code>{e.requestId}</code>
+    </li>)}
+   </ol>
+   <p>این تاریخچه، تأیید هویت، رضایت، تماس واقعی، صحت مدارک،
+    ارجاع پزشکی، ارائه خدمت یا مجوز درمانی ایجاد نمی‌کند.</p>
   </section>}
   {snapshot&&<section className="timeline" role="region" aria-label="تاریخچه هماهنگی ادعایی">
    <p>نسخه پرونده: <strong>{snapshot.revision}</strong></p>
