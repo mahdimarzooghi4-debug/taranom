@@ -63,6 +63,18 @@ function valid(x:unknown,ref:string):x is Snapshot{
  }
  return new Set(s.events.map(e=>e.requestId)).size===s.events.length;
 }
+// Compare only the original immutable journal event fields after an
+// independent, validated PostgreSQL READ. This is not a delivery receipt.
+const equalEvent=(a:Event,b:Event):boolean=>
+ a.revision===b.revision&&a.action===b.action&&a.requestId===b.requestId&&
+ a.memberRef===b.memberRef&&a.originalMemberRequestRef===b.originalMemberRequestRef&&
+ a.originalSubmissionRequestId===b.originalSubmissionRequestId&&
+ a.claimedActorRef===b.claimedActorRef&&
+ a.unverifiedNoteOrDocumentRef===b.unverifiedNoteOrDocumentRef;
+const appended=(prior:Snapshot,next:Snapshot):Event[]|null=>
+ prior.caseRef===next.caseRef&&next.revision>=prior.revision&&
+ prior.events.every((e,i)=>equalEvent(e,next.events[i]))
+ ?next.events.slice(prior.revision):null;
 function acknowledged(source:Snapshot,original:Original){
  if(source.revision<original.expectedRevision+1)return false;
  const matches=source.events.filter(e=>e.requestId===original.requestId);
@@ -81,6 +93,7 @@ export function InternalCareCoordination(){
  const [note,setNote]=useState('test:claimed-contact-note');
  const [sourceRef,setSourceRef]=useState('test:unverified-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
+ const [activity,setActivity]=useState<Event[]|null>(null);
  const [pending,setPending]=useState<Original|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
  const [busy,setBusy]=useState(false);
@@ -88,7 +101,7 @@ export function InternalCareCoordination(){
  const epoch=useRef(0);
  const url=(caseRef:string)=>'/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef);
  function changeRef(value:string){
-  epoch.current++;setRef(value);setSnapshot(null);
+  epoch.current++;setRef(value);setSnapshot(null);setActivity(null);
   setStatus('شناسه پرونده تغییر کرد؛ منبع قبلی قابل استفاده نیست.');
  }
  async function sourceRead(caseRef:string){
@@ -100,13 +113,18 @@ export function InternalCareCoordination(){
  }
  async function read(){
   if(busy||pending||!testRef(ref))return;
-  const generation=++epoch.current;setBusy(true);setSnapshot(null);
+  const previous=snapshot;
+  const generation=++epoch.current;setBusy(true);setSnapshot(null);setActivity(null);
   try{
    const fresh=await sourceRead(ref);
    if(epoch.current!==generation)return;
    if(fresh.revision===0)throw Error('ORIGINAL_MISSING');
-   setSnapshot(fresh);
-   setStatus('درخواست و ادعاهای قبلی از PostgreSQL خوانده شد؛ هیچ هماهنگ‌کننده واقعی احراز نشده است.');
+   const delta=previous&&previous.caseRef===ref?appended(previous,fresh):null;
+   if(previous&&previous.caseRef===ref&&delta===null)
+    throw Error('HISTORICAL_JOURNAL_CHANGED_OR_STALE');
+   setSnapshot(fresh);setActivity(delta);
+   setStatus(delta===null?'درخواست و ادعاهای قبلی از PostgreSQL خوانده شد؛ هیچ هماهنگ‌کننده واقعی احراز نشده است.':
+    'رویدادهای تازه مرکز فقط با خواندن مستقل PostgreSQL بررسی شدند؛ هیچ خدمت واقعی احراز نشده است.');
   }catch{
    if(epoch.current===generation)setStatus('درخواست اولیه معتبر پیدا نشد یا منبع نامعتبر است.');
   }finally{setBusy(false);}
@@ -114,7 +132,7 @@ export function InternalCareCoordination(){
  async function verifiedPending(){
   if(busy||!pending)return;
   const original=pending,generation=++epoch.current;
-  setBusy(true);setSnapshot(null);
+  setBusy(true);setSnapshot(null);setActivity(null);
   try{
    const fresh=await sourceRead(original.ref);
    if(!acknowledged(fresh,original))throw Error('ORIGINAL_NOT_COMMITTED');
@@ -129,7 +147,7 @@ export function InternalCareCoordination(){
  }
  async function send(original:Original){
   if(busy)return;
-  const generation=++epoch.current;setBusy(true);setSnapshot(null);
+  const generation=++epoch.current;setBusy(true);setSnapshot(null);setActivity(null);
   try{
    const response=await fetch(url(original.ref)+'/commands',{
     method:'POST',headers:{'Content-Type':'application/json'},
@@ -165,7 +183,7 @@ export function InternalCareCoordination(){
    ?'RecordUnverifiedCoordinatorContact':'AttachUnverifiedClinicalSourceReference';
   epoch.current++;
   setRef(imported.caseRef);
-  setSnapshot(null);
+  setSnapshot(null);setActivity(null);
   setPending({ref:imported.caseRef,body:imported.body,
    requestId:c.requestId,action,expectedRevision:c.expectedRevision,
    memberRef:c.memberRef,originRef:c.originalMemberRequestRef,
@@ -210,7 +228,16 @@ export function InternalCareCoordination(){
   </label>
   <button type="button" disabled={busy||!!pending||!testRef(ref)}
     onClick={()=>void read()}>خواندن مستقل هماهنگی عضو</button>
+  {snapshot&&<button type="button" disabled={busy||!!pending}
+   onClick={()=>void read()}>بررسی دستی تغییرات هماهنگی مرکز</button>
   <p data-testid="center-care-status" role="status">{status}</p>
+  {activity!==null&&snapshot&&<section data-testid="center-care-activity" role="status">
+   <p>پس از خواندن قبلی همین صفحه {activity.length} ادعای جدید اضافه شده است.
+    این تأیید تماس، دسترسی پزشکی یا اعلان رسمی نیست.</p>
+   <ul>{activity.map(e=><li key={e.requestId}>
+    نسخه {e.revision}: {e.action} — {e.unverifiedNoteOrDocumentRef??'بدون مرجع'}
+   </li>)}</ul>
+  </section>
   {pending&&<section data-testid="center-care-uncertain" role="alert">
    <p>نتیجه فرمان قبلی نامعلوم است؛ هیچ فرمان تازه‌ای صادر نمی‌شود.</p>
    <p>عملیات قفل‌شده: {pending.action==='RecordUnverifiedCoordinatorContact'?

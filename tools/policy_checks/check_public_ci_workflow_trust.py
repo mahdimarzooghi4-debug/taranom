@@ -467,6 +467,10 @@ DISPATCHER_BRANCHES = {
         "sprint-180-care-command-recovery-receipts",
         "main",
     ),
+    "sprint-181-care-journal-manual-activity-delta.yml": (
+        "sprint-181-care-journal-manual-activity-delta",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

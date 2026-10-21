@@ -80,6 +80,18 @@ function acknowledged(s:Snapshot,c:Command,viaRead=false):boolean{
   (s.outcome==='Replayed'||(viaRead&&s.outcome==='READ')||
    (s.outcome==='RecordedUnverified'&&s.revision===rev));
 }
+// Compare only the original immutable journal event fields after an
+// independent, validated PostgreSQL READ. This is not a delivery receipt.
+const equalEvent=(a:Event,b:Event):boolean=>
+ a.revision===b.revision&&a.action===b.action&&a.requestId===b.requestId&&
+ a.memberRef===b.memberRef&&a.originalMemberRequestRef===b.originalMemberRequestRef&&
+ a.originalSubmissionRequestId===b.originalSubmissionRequestId&&
+ a.claimedActorRef===b.claimedActorRef&&
+ a.unverifiedNoteOrDocumentRef===b.unverifiedNoteOrDocumentRef;
+const appended=(prior:Snapshot,next:Snapshot):Event[]|null=>
+ prior.caseRef===next.caseRef&&next.revision>=prior.revision&&
+ prior.events.every((e,i)=>equalEvent(e,next.events[i]))
+ ?next.events.slice(prior.revision):null;
 type SuggestedStep={
  action:Action|null;label:string;contactClaims:number;sourceClaims:number
 };
@@ -110,27 +122,35 @@ export function CareCoordinationDemo(){
  const [contactNote,setContactNote]=useState('test:claimed-contact-note');
  const [clinicalSource,setClinicalSource]=useState('test:opaque-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
+ const [activity,setActivity]=useState<Event[]|null>(null);
  const [uncertain,setUncertain]=useState<{ref:string;body:string}|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState('فقط شناسه‌های ساختگی؛ هیچ درخواست واقعی ارسال نشده است.');
  function change(fn:(s:string)=>void,value:string){
-  fn(value);setSnapshot(null);setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
+  fn(value);setSnapshot(null);setActivity(null);setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
  }
  async function read(){
-  if(busy||uncertain)return;setBusy(true);setSnapshot(null);
+  if(busy||uncertain)return;
+  const previous=snapshot;
+  setBusy(true);setSnapshot(null);setActivity(null);
   try{
    const response=await fetch('/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef),
     {credentials:'omit',cache:'no-store'});
    if(!response.ok)throw Error('HTTP_DENIED');
    const data:unknown=await response.json();
-   if(!valid(data,caseRef))throw Error('INVALID_SOURCE');
-   setSnapshot(data);setStatus('تاریخچه ممیزی‌شده از PostgreSQL آزمایشی خوانده شد.');
+   if(!valid(data,caseRef)||data.outcome!=='READ')throw Error('INVALID_SOURCE');
+   const fresh=previous&&previous.caseRef===caseRef?appended(previous,data):null;
+   if(previous&&previous.caseRef===caseRef&&fresh===null)
+    throw Error('HISTORICAL_JOURNAL_CHANGED_OR_STALE');
+   setSnapshot(data);setActivity(fresh);
+   setStatus(fresh===null?'تاریخچه ممیزی‌شده از PostgreSQL آزمایشی خوانده شد.':
+    'رویدادهای تازه فقط با خواندن مستقل PostgreSQL بررسی شدند؛ هیچ خدمت واقعی احراز نشده است.');
   }catch{setStatus('منبع قابل تأیید نیست؛ هیچ وضعیت موفقی نمایش داده نمی‌شود.');}
   finally{setBusy(false);}
  }
  async function send(original:{ref:string;body:string}){
-  if(busy)return;setBusy(true);setSnapshot(null);
+  if(busy)return;setBusy(true);setSnapshot(null);setActivity(null);
   try{
    const result=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref)+'/commands',{
@@ -162,7 +182,7 @@ export function CareCoordinationDemo(){
  async function inspectUncertain(){
   if(busy||!uncertain)return;
   const original=uncertain;
-  setBusy(true);setSnapshot(null);
+  setBusy(true);setSnapshot(null);setActivity(null);
   try{
    const res=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref),{credentials:'omit',cache:'no-store'});
@@ -186,7 +206,7 @@ export function CareCoordinationDemo(){
   }
   // No POST, GET, identity or clinical claims on import. Lock first.
   setCaseRef(imported.caseRef);
-  setSnapshot(null);
+  setSnapshot(null);setActivity(null);
   setUncertain({ref:imported.caseRef,body:imported.body});
   setStatus('رسید معتبر آزمایشی بارگذاری شد؛ هیچ POST یا GET اجرا نشد. فرمان تازه قفل است.');
  }
@@ -237,6 +257,8 @@ export function CareCoordinationDemo(){
       onChange={e=>change(setRequestRef,e.target.value)}/></label>
    <button disabled={busy||!!uncertain} onClick={()=>void read()}>
     خواندن پرونده هماهنگی</button>
+   {snapshot&&<button type="button" disabled={busy||!!uncertain}
+    onClick={()=>void read()}>بررسی دستی تغییرات هماهنگی عضو</button>}
    <button disabled={!canIssue('REQUEST_NONCLINICAL_COORDINATION')}
     onClick={()=>issue('REQUEST_NONCLINICAL_COORDINATION')}>
     ثبت درخواست ادعایی هماهنگی</button>
@@ -302,6 +324,13 @@ export function CareCoordinationDemo(){
    <p>رسید فقط شناسه و فرمان test: را برمی‌گرداند؛ فاقد هویت، رضایت، سند یا مجوز درمانی است.</p>
   </fieldset>
   <p role="status" data-testid="care-status">{status}</p>
+  {activity!==null&&snapshot&&<section data-testid="member-care-activity" role="status">
+   <p>پس از خواندن قبلی همین صفحه {activity.length} رویداد ادعایی اضافه شده است.
+    این اعلان رسمی، رسید مشاهده، تماس واقعی یا تأیید پزشکی نیست.</p>
+   <ul>{activity.map(e=><li key={e.requestId}>
+    نسخه {e.revision}: {eventLabel(e.action)} — {e.unverifiedNoteOrDocumentRef??'بدون مرجع'}
+   </li>)}</ul>
+  </section>}
   {snapshot&&<section className="timeline" role="region" aria-label="تاریخچه هماهنگی ادعایی">
    <p>نسخه پرونده: <strong>{snapshot.revision}</strong></p>
    <p>ارجاع پزشکی، تماس واقعی، نوبت و دسترسی به پرونده: <strong>هیچ‌کدام</strong></p>

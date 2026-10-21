@@ -1,0 +1,12 @@
+name: Sprint 181 Manual Care Journal Activity Full Regression
+on:
+  push:
+    branches: [sprint-181-care-journal-manual-activity-delta]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml
