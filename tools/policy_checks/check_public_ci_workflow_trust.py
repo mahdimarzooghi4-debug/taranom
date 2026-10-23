@@ -499,6 +499,10 @@ DISPATCHER_BRANCHES = {
         "sprint-188-care-history-claim-type-filter",
         "main",
     ),
+    "sprint-189-member-center-care-handoff.yml": (
+        "sprint-189-member-center-care-handoff",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

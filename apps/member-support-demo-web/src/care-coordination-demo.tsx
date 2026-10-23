@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {careReceipt,parseCareReceipt} from './care-command-recovery';
+import {createCareHandoff} from './care-handoff';
 type Action='REQUEST_NONCLINICAL_COORDINATION'|
  'RECORD_UNVERIFIED_COORDINATOR_CONTACT'|'ATTACH_UNVERIFIED_CLINICAL_SOURCE';
 type Command={requestId:string;expectedRevision:number;action:Action;
@@ -401,6 +402,19 @@ export function CareCoordinationDemo(){
    <p>رسید فقط شناسه و فرمان test: را برمی‌گرداند؛ فاقد هویت، رضایت، سند یا مجوز درمانی است.</p>
   </fieldset>
   <p role="status" data-testid="care-status">{status}</p>
+  {snapshot&&snapshot.outcome==='READ'&&snapshot.revision>=1&&!busy&&!uncertain&&
+   (asOf===null||asOf===snapshot.revision)&&
+   createCareHandoff(snapshot,caseRef,memberRef)!==''&&
+   <section data-testid="member-care-handoff" role="region"
+    aria-label="تحویل دستی درخواست هماهنگی آزمایشی">
+    <h2>تحویل دستی شناسه درخواست به مرکز — فقط آزمایش</h2>
+    <p>این رسید تنها به نسخه دقیق ژورنال تأییدنشده اشاره می‌کند.
+     رسید هویت، اجازه مشاهده پرونده پزشکی، انتقال درمان یا ارجاع نیست.
+     آن را فقط به صورت دستی منتقل کنید؛ مرورگر آن را ذخیره نمی‌کند.</p>
+    <label>رسید تحویل دستی هماهنگی عضو
+     <textarea readOnly rows={4} dir="ltr"
+      value={createCareHandoff(snapshot,caseRef,memberRef)}/></label>
+   </section>}
   {activity!==null&&snapshot&&<section data-testid="member-care-activity" role="status">
    <p>پس از خواندن قبلی همین صفحه {activity.length} رویداد ادعایی اضافه شده است.
     این اعلان رسمی، رسید مشاهده، تماس واقعی یا تأیید پزشکی نیست.</p>

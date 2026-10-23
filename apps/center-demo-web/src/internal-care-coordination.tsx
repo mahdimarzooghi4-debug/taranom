@@ -1,6 +1,7 @@
 import {useRef,useState} from 'react';
 import {InternalCareWorklist} from './internal-care-worklist';
 import {careReceipt,parseCareReceipt} from './care-command-recovery';
+import {type CareHandoff,parseCareHandoff,matchesCareHandoff} from './care-handoff';
 import {type Event,type Snapshot,valid,testRef,uuid} from './care-journal-source';
 import {type CareHistoryPage,type HistoryFilter,CARE_HISTORY_LIMIT,validHistoryPage} from './care-pinned-history';
 
@@ -44,12 +45,15 @@ export function InternalCareCoordination(){
  const [activity,setActivity]=useState<Event[]|null>(null);
  const [pending,setPending]=useState<Original|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
+ const [handoffText,setHandoffText]=useState('');
+ const [confirmedHandoff,setConfirmedHandoff]=useState<CareHandoff|null>(null);
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState('ابتدا درخواست آزمایشی عضو را از ژورنال بخوانید.');
  const epoch=useRef(0);
  const url=(caseRef:string)=>'/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef);
  function changeRef(value:string){
   epoch.current++;setRef(value);setSnapshot(null);setActivity(null);setHistoryPage(null);
+  setConfirmedHandoff(null);
   setStatus('شناسه پرونده تغییر کرد؛ منبع قبلی قابل استفاده نیست.');
  }
  async function sourceRead(caseRef:string){
@@ -59,10 +63,34 @@ export function InternalCareCoordination(){
   if(!valid(raw,caseRef)||raw.outcome!=='READ')throw Error('INVALID_SOURCE');
   return raw;
  }
+ async function acceptHandoff(){
+  if(busy||pending)return;
+  const generation=++epoch.current;
+  setBusy(true);setSnapshot(null);setActivity(null);setHistoryPage(null);
+  setConfirmedHandoff(null);
+  try{
+   // Parsing is pure and MUST precede any HTTP request. A locator has
+   // no access or action authority, regardless of its apparent origin.
+   const ticket=parseCareHandoff(handoffText);
+   if(!ticket)throw Error('BAD_HANDOFF');
+   const fresh=await sourceRead(ticket.caseRef);
+   if(!matchesCareHandoff(fresh,ticket))throw Error('SOURCE_MISMATCH');
+   if(epoch.current!==generation)return;
+   setRef(ticket.caseRef);setSnapshot(fresh);setConfirmedHandoff(ticket);
+   setHandoffText('');
+   setStatus('رسید فقط با همان نسخه و ریشه رویداد ژورنال PostgreSQL تطبیق یافت؛ هیچ اختیار یا خدمت واقعی ایجاد نشد.');
+  }catch{
+   if(epoch.current!==generation)return;
+   setSnapshot(null);setActivity(null);setHistoryPage(null);
+   setConfirmedHandoff(null);
+   setStatus('رسید تحویل هماهنگی با منبع قابل تأیید نیست؛ هیچ پرونده‌ای از آن پذیرفته نشد.');
+  }finally{setBusy(false);}
+ }
  async function read(){
   if(busy||pending||!testRef(ref))return;
   const previous=snapshot;
   const generation=++epoch.current;setBusy(true);setSnapshot(null);setActivity(null);setHistoryPage(null);
+  setConfirmedHandoff(null);
   try{
    const fresh=await sourceRead(ref);
    if(epoch.current!==generation)return;
@@ -103,6 +131,7 @@ export function InternalCareCoordination(){
  }
  async function verifiedPending(){
   if(busy||!pending)return;
+  setConfirmedHandoff(null);
   const original=pending,generation=++epoch.current;
   setBusy(true);setSnapshot(null);setActivity(null);setHistoryPage(null);
   try{
@@ -153,7 +182,7 @@ export function InternalCareCoordination(){
   // Parser excludes initial-member request for this surface.
   const action:FollowUpAction=c.action==='RECORD_UNVERIFIED_COORDINATOR_CONTACT'
    ?'RecordUnverifiedCoordinatorContact':'AttachUnverifiedClinicalSourceReference';
-  epoch.current++;
+  epoch.current++;setConfirmedHandoff(null);
   setRef(imported.caseRef);
   setSnapshot(null);setActivity(null);setHistoryPage(null);
   setPending({ref:imported.caseRef,body:imported.body,
@@ -185,6 +214,7 @@ export function InternalCareCoordination(){
    expectedRevision:snapshot.revision,memberRef:root.memberRef,
    originRef:root.originalMemberRequestRef,
    originalId:root.requestId,actor,note:documentRef};
+  setConfirmedHandoff(null);
   setPending(original);
   void send(original);
  }
@@ -194,6 +224,26 @@ export function InternalCareCoordination(){
     ثبت‌شده در ژورنال PostgreSQL عضو را با شناسه test: مشاهده می‌کند.
     مجوز دسترسی، ارجاع و تأیید تماس واقعی وجود ندارد.</p>
   <InternalCareWorklist disabled={busy||!!pending} onSelect={changeRef}/>
+  <fieldset data-testid="center-care-handoff">
+   <legend>تحویل دستی شناسه هماهنگی عضو به مرکز — فقط آزمایش</legend>
+   <p>رسید، مجوز دسترسی یا ارجاع درمانی نیست؛ قبل از هر نتیجه
+    تنها ژورنال PostgreSQL موجود به‌صورت مستقل خوانده می‌شود.</p>
+   <label>ورود رسید تحویل هماهنگی عضو
+    <textarea rows={4} maxLength={1024} value={handoffText}
+     disabled={busy||!!pending}
+     onChange={e=>{epoch.current++;setHandoffText(e.target.value);
+      setSnapshot(null);setActivity(null);setHistoryPage(null);
+      setConfirmedHandoff(null);}}/>
+   </label>
+   <button type="button" disabled={busy||!!pending||!handoffText}
+    onClick={()=>void acceptHandoff()}>بررسی مستقل رسید هماهنگی عضو از PostgreSQL</button>
+   {confirmedHandoff&&snapshot&&
+    <p data-testid="center-care-handoff-confirmed">
+     نسخه {confirmedHandoff.revision} درخواست آزمایشی
+     <code>{confirmedHandoff.caseRef}</code> از ژورنال مستقل تطبیق شد؛
+     بدون احراز هویت، ارجاع پزشکی، تماس واقعی یا مجوز دسترسی.
+    </p>}
+  </fieldset>
   <label>شناسه هماهنگی آزمایشی
    <input aria-label="شناسه پرونده هماهنگی مرکز" value={ref} maxLength={100}
     disabled={busy||!!pending} onChange={e=>changeRef(e.target.value)}/>
