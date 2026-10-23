@@ -2,6 +2,7 @@ import {useRef,useState} from 'react';
 import {InternalCareWorklist} from './internal-care-worklist';
 import {careReceipt,parseCareReceipt} from './care-command-recovery';
 import {type Event,type Snapshot,valid,testRef,uuid} from './care-journal-source';
+import {type CareHistoryPage,CARE_HISTORY_LIMIT,validHistoryPage} from './care-pinned-history';
 
 type FollowUpAction='RecordUnverifiedCoordinatorContact'|
  'AttachUnverifiedClinicalSourceReference';
@@ -38,6 +39,7 @@ export function InternalCareCoordination(){
  const [note,setNote]=useState('test:claimed-contact-note');
  const [sourceRef,setSourceRef]=useState('test:unverified-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
+ const [historyPage,setHistoryPage]=useState<CareHistoryPage|null>(null);
  const [activity,setActivity]=useState<Event[]|null>(null);
  const [pending,setPending]=useState<Original|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
@@ -46,7 +48,7 @@ export function InternalCareCoordination(){
  const epoch=useRef(0);
  const url=(caseRef:string)=>'/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef);
  function changeRef(value:string){
-  epoch.current++;setRef(value);setSnapshot(null);setActivity(null);
+  epoch.current++;setRef(value);setSnapshot(null);setActivity(null);setHistoryPage(null);
   setStatus('شناسه پرونده تغییر کرد؛ منبع قبلی قابل استفاده نیست.');
  }
  async function sourceRead(caseRef:string){
@@ -59,7 +61,7 @@ export function InternalCareCoordination(){
  async function read(){
   if(busy||pending||!testRef(ref))return;
   const previous=snapshot;
-  const generation=++epoch.current;setBusy(true);setSnapshot(null);setActivity(null);
+  const generation=++epoch.current;setBusy(true);setSnapshot(null);setActivity(null);setHistoryPage(null);
   try{
    const fresh=await sourceRead(ref);
    if(epoch.current!==generation)return;
@@ -74,10 +76,34 @@ export function InternalCareCoordination(){
    if(epoch.current===generation)setStatus('درخواست اولیه معتبر پیدا نشد یا منبع نامعتبر است.');
   }finally{setBusy(false);}
  }
+ async function readHistory(after:number){
+  if(busy||pending||!snapshot||!Number.isSafeInteger(after)||
+    after<0||after>snapshot.revision)return;
+  const pinned=snapshot,generation=++epoch.current;
+  setBusy(true);setHistoryPage(null);
+  try{
+   const response=await fetch(url(pinned.caseRef)+'/history?afterRevision='+
+    after+'&limit='+CARE_HISTORY_LIMIT+
+    '&expectedCurrentRevision='+pinned.revision,
+    {cache:'no-store',credentials:'omit'});
+   if(!response.ok)throw Error('PINNED_HISTORY_READ_DENIED');
+   const page:unknown=await response.json();
+   if(!validHistoryPage(page,pinned,after))
+    throw Error('PINNED_HISTORY_UNVERIFIABLE');
+   if(epoch.current!==generation)return;
+   setHistoryPage(page);
+   setStatus('صفحه تاریخچه مرکز با نسخه ثابت از ژورنال PostgreSQL تأیید شد؛ هیچ اقدام واقعی ایجاد نشد.');
+  }catch{
+   if(epoch.current===generation){
+    setSnapshot(null);setActivity(null);setHistoryPage(null);
+    setStatus('تاریخچه نسخه‌ثابت قابل تأیید نیست؛ داده و فرمان‌های قدیمی کنار گذاشته شدند. پرونده را مستقل دوباره بخوانید.');
+   }
+  }finally{setBusy(false);}
+ }
  async function verifiedPending(){
   if(busy||!pending)return;
   const original=pending,generation=++epoch.current;
-  setBusy(true);setSnapshot(null);setActivity(null);
+  setBusy(true);setSnapshot(null);setActivity(null);setHistoryPage(null);
   try{
    const fresh=await sourceRead(original.ref);
    if(!acknowledged(fresh,original))throw Error('ORIGINAL_NOT_COMMITTED');
@@ -92,7 +118,7 @@ export function InternalCareCoordination(){
  }
  async function send(original:Original){
   if(busy)return;
-  const generation=++epoch.current;setBusy(true);setSnapshot(null);setActivity(null);
+  const generation=++epoch.current;setBusy(true);setSnapshot(null);setActivity(null);setHistoryPage(null);
   try{
    const response=await fetch(url(original.ref)+'/commands',{
     method:'POST',headers:{'Content-Type':'application/json'},
@@ -128,7 +154,7 @@ export function InternalCareCoordination(){
    ?'RecordUnverifiedCoordinatorContact':'AttachUnverifiedClinicalSourceReference';
   epoch.current++;
   setRef(imported.caseRef);
-  setSnapshot(null);setActivity(null);
+  setSnapshot(null);setActivity(null);setHistoryPage(null);
   setPending({ref:imported.caseRef,body:imported.body,
    requestId:c.requestId,action,expectedRevision:c.expectedRevision,
    memberRef:c.memberRef,originRef:c.originalMemberRequestRef,
@@ -208,6 +234,33 @@ export function InternalCareCoordination(){
     onClick={loadRecovery}>بارگذاری رسید هماهنگی مرکز بدون ارسال</button>
    <p>بارگذاری رسید نه منبع بالینی را تأیید می‌کند، نه مجوزی به مرکز می‌دهد.</p>
   </fieldset>
+  {snapshot&&<section data-testid="center-care-server-history" role="region"
+    aria-label="تاریخچه نسخه‌ثابت هماهنگی مرکز">
+   <h3>تاریخچه صفحه‌بندی‌شده هماهنگی مرکز، فقط خواندنی</h3>
+   <p>هر صفحه جداگانه با نسخه {snapshot.revision} از PostgreSQL آزمایشی
+    خوانده می‌شود. این سند پزشکی، تأیید تماس، رضایت یا اعلان واقعی نیست.</p>
+   <button type="button" disabled={busy||!!pending}
+    onClick={()=>void readHistory(0)}>خواندن نخستین صفحه تاریخچه مرکز</button>
+   {historyPage&&<section data-testid="center-care-server-history-page">
+    <p>نسخه پین‌شده: {historyPage.expectedCurrentRevision} |
+     شروع پس از نسخه: {historyPage.afterRevision}</p>
+    <ol>{historyPage.events.map(e=><li key={e.requestId}>
+     نسخه {e.revision}: {e.action} |
+     UUID <code>{e.requestId}</code> |
+     عضو ادعایی <code>{e.memberRef}</code> |
+     ارجاع اولیه <code>{e.originalMemberRequestRef}</code> |
+     شناسه درخواست اصلی <code>{e.originalSubmissionRequestId}</code> |
+     مدعی هماهنگ‌کننده <code>{e.claimedActorRef??'ثبت نشده'}</code> |
+     مرجع ادعایی <code>{e.unverifiedNoteOrDocumentRef??'ثبت نشده'}</code>
+    </li>)}</ol>
+   </section>}
+   {historyPage?.hasMore&&historyPage.nextAfterRevision!==null&&
+    <button type="button" disabled={busy||!!pending}
+     onClick={()=>void readHistory(historyPage!.nextAfterRevision!)}>
+     صفحه بعدی تاریخچه مرکز با همان نسخه
+    </button>}
+   <p>این مشاهده هیچ رویداد یا اختیار جدیدی به پرونده اضافه نمی‌کند.</p>
+  </section>}
   {snapshot&&<section data-testid="center-care-source">
    <p>پرونده: <code>{snapshot.caseRef}</code> — نسخه {snapshot.revision}</p>
    <p>عضو ادعایی: <code>{snapshot.events[0].memberRef}</code>
