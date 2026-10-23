@@ -6,7 +6,7 @@ export type CareHistoryPage={
  contract:'TRN-TECH-195';syntheticOnly:true;unverifiedClaimsOnly:true;
  source:'VERIFIED_ISOLATED_POSTGRES_CARE_JOURNAL';
  caseRef:string;currentRevision:number;expectedCurrentRevision:number;
- afterRevision:number;limit:number;hasMore:boolean;nextAfterRevision:number|null;
+ afterRevision:number;limit:number;claimType:'ALL'|'CONTACT'|'SOURCE';hasMore:boolean;nextAfterRevision:number|null;
  events:Event[];
  realMemberAuthenticated:false;realCoordinatorVerified:false;
  clinicalSourceVerified:false;clinicianAuthorized:false;
@@ -29,8 +29,9 @@ const exactEvent=(a:Event,b:Event)=>
  a.unverifiedNoteOrDocumentRef===b.unverifiedNoteOrDocumentRef;
 // An independently fetched server page cannot alter the verified case or
 // make a completed source history appear incomplete/more complete.
-export function validHistoryPage(raw:unknown,pin:Snapshot,after:number):
- raw is CareHistoryPage{
+export type HistoryFilter=CareHistoryPage['claimType'];
+export function validHistoryPage(raw:unknown,pin:Snapshot,after:number,
+ filter:HistoryFilter):raw is CareHistoryPage{
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
     !Number.isSafeInteger(after)||after<0||after>pin.revision)return false;
  const page=raw as Partial<CareHistoryPage>;
@@ -41,16 +42,19 @@ export function validHistoryPage(raw:unknown,pin:Snapshot,after:number):
     page.currentRevision!==pin.revision||
     page.expectedCurrentRevision!==pin.revision||
     page.afterRevision!==after||page.limit!==CARE_HISTORY_LIMIT||
+    page.claimType!==filter||
     typeof page.hasMore!=='boolean'||!Array.isArray(page.events)||
     !denials.every(k=>page[k]===false))return false;
- const count=Math.min(CARE_HISTORY_LIMIT,pin.revision-after);
- if(page.events.length!==count)return false;
+ const matching=pin.events.filter(e=>e.revision>after&&
+  (filter==='ALL'||
+   (filter==='CONTACT'&&e.action==='RecordUnverifiedCoordinatorContact')||
+   (filter==='SOURCE'&&e.action==='AttachUnverifiedClinicalSourceReference')));
+ const expected=matching.slice(0,CARE_HISTORY_LIMIT);
+ if(page.events.length!==expected.length)return false;
  for(const [index,event] of page.events.entries()){
-  const saved=pin.events[after+index];
-  if(!saved||!event||!exactEvent(event,saved)||
-    event.revision!==after+index+1)return false;
+  if(!event||!exactEvent(event,expected[index]))return false;
  }
- const more=after+count<pin.revision;
+ const more=matching.length>CARE_HISTORY_LIMIT;
  return page.hasMore===more&&
-    page.nextAfterRevision===(more?after+count:null);
+    page.nextAfterRevision===(more?expected[expected.length-1].revision:null);
 }

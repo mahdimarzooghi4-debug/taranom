@@ -2,7 +2,7 @@ import {useRef,useState} from 'react';
 import {InternalCareWorklist} from './internal-care-worklist';
 import {careReceipt,parseCareReceipt} from './care-command-recovery';
 import {type Event,type Snapshot,valid,testRef,uuid} from './care-journal-source';
-import {type CareHistoryPage,CARE_HISTORY_LIMIT,validHistoryPage} from './care-pinned-history';
+import {type CareHistoryPage,type HistoryFilter,CARE_HISTORY_LIMIT,validHistoryPage} from './care-pinned-history';
 
 type FollowUpAction='RecordUnverifiedCoordinatorContact'|
  'AttachUnverifiedClinicalSourceReference';
@@ -40,6 +40,7 @@ export function InternalCareCoordination(){
  const [sourceRef,setSourceRef]=useState('test:unverified-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
  const [historyPage,setHistoryPage]=useState<CareHistoryPage|null>(null);
+ const [historyFilter,setHistoryFilter]=useState<HistoryFilter>('ALL');
  const [activity,setActivity]=useState<Event[]|null>(null);
  const [pending,setPending]=useState<Original|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
@@ -79,16 +80,16 @@ export function InternalCareCoordination(){
  async function readHistory(after:number){
   if(busy||pending||!snapshot||!Number.isSafeInteger(after)||
     after<0||after>snapshot.revision)return;
-  const pinned=snapshot,generation=++epoch.current;
+  const pinned=snapshot,selected=historyFilter,generation=++epoch.current;
   setBusy(true);setHistoryPage(null);
   try{
    const response=await fetch(url(pinned.caseRef)+'/history?afterRevision='+
     after+'&limit='+CARE_HISTORY_LIMIT+
-    '&expectedCurrentRevision='+pinned.revision,
+    '&expectedCurrentRevision='+pinned.revision+'&claimType='+selected,
     {cache:'no-store',credentials:'omit'});
    if(!response.ok)throw Error('PINNED_HISTORY_READ_DENIED');
    const page:unknown=await response.json();
-   if(!validHistoryPage(page,pinned,after))
+   if(!validHistoryPage(page,pinned,after,selected))
     throw Error('PINNED_HISTORY_UNVERIFIABLE');
    if(epoch.current!==generation)return;
    setHistoryPage(page);
@@ -239,11 +240,21 @@ export function InternalCareCoordination(){
    <h3>تاریخچه صفحه‌بندی‌شده هماهنگی مرکز، فقط خواندنی</h3>
    <p>هر صفحه جداگانه با نسخه {snapshot.revision} از PostgreSQL آزمایشی
     خوانده می‌شود. این سند پزشکی، تأیید تماس، رضایت یا اعلان واقعی نیست.</p>
+   <label>نوع ادعای تاریخچه نسخه‌ثابت مرکز
+    <select aria-label="فیلتر تاریخچه هماهنگی مرکز" value={historyFilter}
+     disabled={busy||!!pending}
+     onChange={e=>{setHistoryFilter(e.target.value as HistoryFilter);setHistoryPage(null);}}>
+     <option value="ALL">تمام رویدادها</option>
+     <option value="CONTACT">فقط ادعاهای تماس</option>
+     <option value="SOURCE">فقط ارجاع‌های منبع بالینی تأییدنشده</option>
+    </select>
+   </label>
    <button type="button" disabled={busy||!!pending}
     onClick={()=>void readHistory(0)}>خواندن نخستین صفحه تاریخچه مرکز</button>
    {historyPage&&<section data-testid="center-care-server-history-page">
     <p>نسخه پین‌شده: {historyPage.expectedCurrentRevision} |
-     شروع پس از نسخه: {historyPage.afterRevision}</p>
+     شروع پس از نسخه: {historyPage.afterRevision} |
+     نوع ادعا: {historyPage.claimType}</p>
     <ol>{historyPage.events.map(e=><li key={e.requestId}>
      نسخه {e.revision}: {e.action} |
      UUID <code>{e.requestId}</code> |

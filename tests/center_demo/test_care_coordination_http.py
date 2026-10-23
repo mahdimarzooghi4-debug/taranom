@@ -94,6 +94,25 @@ def main():
         status,error=history(bad)
         assert status==400,(bad,status,error)
         assert error["nationalReleaseAllowed"] is False
+    # TRN-TECH-197: sparse type-specific pages preserve ORIGINAL revisions.
+    contact=history("afterRevision=0&limit=1&expectedCurrentRevision=3&claimType=CONTACT")
+    assert contact[0]==200 and contact[1]["claimType"]=="CONTACT",contact
+    assert [e["revision"] for e in contact[1]["events"]]==[2]
+    assert contact[1]["nextAfterRevision"] is None
+    source=history("afterRevision=0&limit=1&expectedCurrentRevision=3&claimType=SOURCE")
+    assert source[0]==200 and source[1]["claimType"]=="SOURCE",source
+    assert [e["revision"] for e in source[1]["events"]]==[3]
+    assert source[1]["nextAfterRevision"] is None
+    empty=history("afterRevision=2&limit=2&expectedCurrentRevision=3&claimType=CONTACT")
+    assert empty[0]==200 and empty[1]["events"]==[],empty
+    assert empty[1]["nextAfterRevision"] is None
+    assert first_page["claimType"]=="ALL"  # backward-compatible old request
+    for bad in ("afterRevision=0&limit=2&expectedCurrentRevision=3&claimType=URGENT",
+        "afterRevision=0&limit=2&expectedCurrentRevision=3&claimType=contact",
+        "afterRevision=0&limit=2&expectedCurrentRevision=3&claimType=SOURCE&claimType=CONTACT",
+        "afterRevision=0&limit=2&expectedCurrentRevision=3&claimType=ALL&clinical=true"):
+        bad_status,denied=history(bad)
+        assert bad_status==400 and denied["nationalReleaseAllowed"] is False,(bad,bad_status,denied)
     status,stale=history("afterRevision=0&limit=2&expectedCurrentRevision=2")
     assert status==409 and stale["outcome"]=="TEST_CARE_HISTORY_REVISION_CHANGED"
     assert stale["nationalReleaseAllowed"] is False

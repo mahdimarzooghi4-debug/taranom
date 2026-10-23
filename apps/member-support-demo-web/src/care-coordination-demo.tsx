@@ -12,7 +12,7 @@ type CareHistoryPage={
  contract:'TRN-TECH-195';syntheticOnly:true;unverifiedClaimsOnly:true;
  source:'VERIFIED_ISOLATED_POSTGRES_CARE_JOURNAL';
  caseRef:string;currentRevision:number;expectedCurrentRevision:number;
- afterRevision:number;limit:number;hasMore:boolean;nextAfterRevision:number|null;
+ afterRevision:number;limit:number;claimType:'ALL'|'CONTACT'|'SOURCE';hasMore:boolean;nextAfterRevision:number|null;
  events:Event[];
  realMemberAuthenticated:false;realCoordinatorVerified:false;
  clinicalSourceVerified:false;clinicianAuthorized:false;
@@ -108,8 +108,9 @@ const appended=(prior:Snapshot,next:Snapshot):Event[]|null=>
 const HISTORY_LIMIT=4;
 // History pages are independently read from the canonical source, and also
 // compared event-for-event to the already accepted revision-pinned snapshot.
-function validHistoryPage(value:unknown,pin:Snapshot,cursor:number):
- value is CareHistoryPage {
+type HistoryFilter=CareHistoryPage['claimType'];
+function validHistoryPage(value:unknown,pin:Snapshot,cursor:number,
+ filter:HistoryFilter):value is CareHistoryPage{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const p=value as Partial<CareHistoryPage>;
  if(p.contract!=='TRN-TECH-195'||p.syntheticOnly!==true||
@@ -117,20 +118,22 @@ function validHistoryPage(value:unknown,pin:Snapshot,cursor:number):
     p.source!=='VERIFIED_ISOLATED_POSTGRES_CARE_JOURNAL'||
     p.caseRef!==pin.caseRef||p.currentRevision!==pin.revision||
     p.expectedCurrentRevision!==pin.revision||p.afterRevision!==cursor||
-    p.limit!==HISTORY_LIMIT||!denialKeys.every(k=>p[k]===false)||
-    typeof p.hasMore!=='boolean'||!Array.isArray(p.events)||
-    p.events.length>HISTORY_LIMIT||cursor>pin.revision)return false;
+    p.limit!==HISTORY_LIMIT||p.claimType!==filter||
+    !denialKeys.every(k=>p[k]===false)||typeof p.hasMore!=='boolean'||
+    !Array.isArray(p.events)||cursor>pin.revision)return false;
+ // Select AFTER comparison with the complete separately attested source.
+ // Sparse cursor values are ORIGINAL revisions, not filtered ordinals.
+ const matching=pin.events.filter(e=>e.revision>cursor&&(
+  filter==='ALL'||(filter==='CONTACT'&&e.action==='RecordUnverifiedCoordinatorContact')||
+  (filter==='SOURCE'&&e.action==='AttachUnverifiedClinicalSourceReference')));
+ const expected=matching.slice(0,HISTORY_LIMIT);
+ if(p.events.length!==expected.length)return false;
  for(const [i,e] of p.events.entries()){
-  const expected=pin.events[cursor+i];
-  if(!expected||!e||!equalEvent(e,expected)||e.revision!==cursor+i+1)
-   return false;
+  if(!e||!equalEvent(e,expected[i]))return false;
  }
- return p.hasMore
-  ?p.events.length===HISTORY_LIMIT&&
-   typeof p.nextAfterRevision==='number'&&
-   p.nextAfterRevision===cursor+p.events.length&&
-   p.nextAfterRevision<pin.revision
-  :p.nextAfterRevision===null&&cursor+p.events.length===pin.revision;
+ const hasMore=matching.length>HISTORY_LIMIT;
+ return p.hasMore===hasMore&&p.nextAfterRevision===
+  (hasMore?expected[expected.length-1].revision:null);
 }
 type SuggestedStep={
  action:Action|null;label:string;contactClaims:number;sourceClaims:number
@@ -164,6 +167,7 @@ export function CareCoordinationDemo(){
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
  const [asOf,setAsOf]=useState<number|null>(null);
  const [historyPage,setHistoryPage]=useState<CareHistoryPage|null>(null);
+ const [historyFilter,setHistoryFilter]=useState<HistoryFilter>('ALL');
  const [activity,setActivity]=useState<Event[]|null>(null);
  const [uncertain,setUncertain]=useState<{ref:string;body:string}|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
@@ -255,16 +259,17 @@ export function CareCoordinationDemo(){
  async function readHistory(after:number){
   if(busy||uncertain||!snapshot||!Number.isSafeInteger(after)||
      after<0||after>snapshot.revision)return;
-  const pinned=snapshot;
+  const pinned=snapshot,selected=historyFilter;
   setBusy(true);setHistoryPage(null);
   try{
    const url='/internal/demo/v1/care-coordination/'+
     encodeURIComponent(pinned.caseRef)+'/history?afterRevision='+after+
-    '&limit='+HISTORY_LIMIT+'&expectedCurrentRevision='+pinned.revision;
+    '&limit='+HISTORY_LIMIT+'&expectedCurrentRevision='+pinned.revision+
+    '&claimType='+selected;
    const response=await fetch(url,{credentials:'omit',cache:'no-store'});
    if(!response.ok)throw Error('HISTORY_SOURCE_FAILED');
    const page:unknown=await response.json();
-   if(!validHistoryPage(page,pinned,after))throw Error('HISTORY_UNVERIFIED');
+   if(!validHistoryPage(page,pinned,after,selected))throw Error('HISTORY_UNVERIFIED');
    setHistoryPage(page);
    setStatus('صفحه تاریخچه با نسخه ثابت، جداگانه از PostgreSQL آزمایشی تأیید شد.');
   }catch{
@@ -409,11 +414,21 @@ export function CareCoordinationDemo(){
    <p>این مسیر فقط با اقدام دستی و از همان ژورنال ممیزی‌شده PostgreSQL
     رویدادهای تأییدنشده را در صفحات چهاررویدادی می‌خواند.
     اگر نسخه بین صفحات تغییر کند، ادامه بدون بازخوانی پرونده رد می‌شود.</p>
+   <label>نوع ادعای تاریخچه نسخه‌ثابت
+    <select aria-label="فیلتر تاریخچه هماهنگی عضو" value={historyFilter}
+     disabled={busy||!!uncertain}
+     onChange={e=>{setHistoryFilter(e.target.value as HistoryFilter);setHistoryPage(null);}}>
+     <option value="ALL">تمام رویدادها</option>
+     <option value="CONTACT">فقط ادعاهای تماس</option>
+     <option value="SOURCE">فقط ارجاع‌های منبع بالینی تأییدنشده</option>
+    </select>
+   </label>
    <button type="button" disabled={busy||!!uncertain}
     onClick={()=>void readHistory(0)}>خواندن نخستین صفحه تاریخچه</button>
    {historyPage&&<div data-testid="member-care-server-history-page">
     <p>نسخه پین‌شده: {historyPage.currentRevision}؛
-     شروع پس از نسخه: {historyPage.afterRevision}</p>
+     شروع پس از نسخه: {historyPage.afterRevision}؛
+     نوع ادعا: {historyPage.claimType}</p>
     <ol>{historyPage.events.map(e=><li key={e.requestId}>
      نسخه {e.revision}: {eventLabel(e.action)} —
      شناسه درخواست <code>{e.requestId}</code>،

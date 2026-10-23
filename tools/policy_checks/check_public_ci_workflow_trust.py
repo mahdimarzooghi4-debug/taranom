@@ -495,6 +495,10 @@ DISPATCHER_BRANCHES = {
         "sprint-187-center-pinned-care-history",
         "main",
     ),
+    "sprint-188-care-history-claim-type-filter.yml": (
+        "sprint-188-care-history-claim-type-filter",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
