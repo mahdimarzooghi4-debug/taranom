@@ -507,6 +507,10 @@ DISPATCHER_BRANCHES = {
         "sprint-190-care-claim-manual-return",
         "main",
     ),
+    "sprint-191-member-care-read-cancel-isolation.yml": (
+        "sprint-191-member-care-read-cancel-isolation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

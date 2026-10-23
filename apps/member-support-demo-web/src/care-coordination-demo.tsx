@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useRef,useState} from 'react';
 import {careReceipt,parseCareReceipt} from './care-command-recovery';
 import {createCareHandoff} from './care-handoff';
 import {type CareClaimReturn,parseCareClaimReturn,matchesCareClaimReturn} from './care-claim-return';
@@ -176,18 +176,31 @@ export function CareCoordinationDemo(){
  const [returnText,setReturnText]=useState('');
  const [confirmedReturn,setConfirmedReturn]=useState<CareClaimReturn|null>(null);
  const [busy,setBusy]=useState(false);
+ // A single increment-only fence for every dismissible GET-only operation.
+ // Never use this to cancel a POST or the original uncertain-UUID latch.
+ const epoch=useRef(0);
+ const [readKind,setReadKind]=useState<'source'|'returnedClaim'|'history'|null>(null);
  const [status,setStatus]=useState('فقط شناسه‌های ساختگی؛ هیچ درخواست واقعی ارسال نشده است.');
+ function cancelRead(){
+  if(readKind===null)return;
+  epoch.current++;
+  setReadKind(null);setBusy(false);setSnapshot(null);setActivity(null);
+  setAsOf(null);setHistoryPage(null);setConfirmedReturn(null);
+  setStatus('خواندن آزمایشی لغو شد؛ پاسخ دیررس پذیرفته نمی‌شود. برای ادامه، دوباره به‌صورت دستی از منبع بخوانید.');
+ }
  function change(fn:(s:string)=>void,value:string){
+  epoch.current++;
   fn(value);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   setConfirmedReturn(null);
   setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
  }
  async function verifyReturn(){
   if(busy||uncertain)return;
+  const generation=++epoch.current;
   const chosenCase=caseRef,chosenMember=memberRef;
   // Import is a manual source locator, never a command or access grant.
   // Clear the previous actionable state BEFORE parsing untrusted text.
-  setBusy(true);setConfirmedReturn(null);
+  setBusy(true);setReadKind('returnedClaim');setConfirmedReturn(null);
   setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   try{
    const ticket=parseCareClaimReturn(returnText);
@@ -200,35 +213,47 @@ export function CareCoordinationDemo(){
    if(!valid(raw,chosenCase)||raw.outcome!=='READ'||
       !matchesCareClaimReturn(raw,ticket))
     throw Error('UNATTESTED_RETURN');
+   if(epoch.current!==generation)return;
    setSnapshot(raw);setConfirmedReturn(ticket);setReturnText('');
    setStatus('آخرین ادعای هماهنگی با همان نسخه و UUID جداگانه از PostgreSQL بررسی شد؛ هیچ پیام یا تأیید واقعی دریافت نشده است.');
   }catch{
+   if(epoch.current!==generation)return;
    setSnapshot(null);setConfirmedReturn(null);
    setStatus('رسید بازگشت ادعا با ژورنال مطابقت ندارد؛ هیچ ادعا یا تصمیمی تأیید نشد.');
-  }finally{setBusy(false);}
+  }finally{
+   if(epoch.current===generation){setReadKind(null);setBusy(false);}
+  }
  }
  async function read(){
   if(busy||uncertain)return;
-  const previous=snapshot;
-  setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  const previous=snapshot,pinnedCase=caseRef,generation=++epoch.current;
+  setBusy(true);setReadKind('source');
+  setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   setConfirmedReturn(null);
   try{
-   const response=await fetch('/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef),
+   const response=await fetch('/internal/demo/v1/care-coordination/'+encodeURIComponent(pinnedCase),
     {credentials:'omit',cache:'no-store'});
    if(!response.ok)throw Error('HTTP_DENIED');
    const data:unknown=await response.json();
-   if(!valid(data,caseRef)||data.outcome!=='READ')throw Error('INVALID_SOURCE');
-   const fresh=previous&&previous.caseRef===caseRef?appended(previous,data):null;
-   if(previous&&previous.caseRef===caseRef&&fresh===null)
+   if(!valid(data,pinnedCase)||data.outcome!=='READ')throw Error('INVALID_SOURCE');
+   const fresh=previous&&previous.caseRef===pinnedCase?appended(previous,data):null;
+   if(previous&&previous.caseRef===pinnedCase&&fresh===null)
     throw Error('HISTORICAL_JOURNAL_CHANGED_OR_STALE');
+   if(epoch.current!==generation)return;
    setSnapshot(data);setActivity(fresh);
    setStatus(fresh===null?'تاریخچه ممیزی‌شده از PostgreSQL آزمایشی خوانده شد.':
     'رویدادهای تازه فقط با خواندن مستقل PostgreSQL بررسی شدند؛ هیچ خدمت واقعی احراز نشده است.');
-  }catch{setStatus('منبع قابل تأیید نیست؛ هیچ وضعیت موفقی نمایش داده نمی‌شود.');}
-  finally{setBusy(false);}
+  }catch{
+   if(epoch.current===generation)
+    setStatus('منبع قابل تأیید نیست؛ هیچ وضعیت موفقی نمایش داده نمی‌شود.');
+  }finally{
+   if(epoch.current===generation){setReadKind(null);setBusy(false);}
+  }
  }
  async function send(original:{ref:string;body:string}){
-  if(busy)return;setConfirmedReturn(null);setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  if(busy)return;
+  epoch.current++;setReadKind(null);
+  setConfirmedReturn(null);setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   try{
    const result=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref)+'/commands',{
@@ -259,6 +284,7 @@ export function CareCoordinationDemo(){
  }
  async function inspectUncertain(){
   if(busy||!uncertain)return;
+  epoch.current++;setReadKind(null);
   setConfirmedReturn(null);
   const original=uncertain;
   setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
@@ -285,6 +311,7 @@ export function CareCoordinationDemo(){
    return;
   }
   // No POST, GET, identity or clinical claims on import. Lock first.
+  epoch.current++;setReadKind(null);
   setCaseRef(imported.caseRef);
   setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   setUncertain({ref:imported.caseRef,body:imported.body});
@@ -293,8 +320,8 @@ export function CareCoordinationDemo(){
  async function readHistory(after:number){
   if(busy||uncertain||!snapshot||!Number.isSafeInteger(after)||
      after<0||after>snapshot.revision)return;
-  const pinned=snapshot,selected=historyFilter;
-  setBusy(true);setHistoryPage(null);
+  const pinned=snapshot,selected=historyFilter,generation=++epoch.current;
+  setBusy(true);setReadKind('history');setHistoryPage(null);
   try{
    const url='/internal/demo/v1/care-coordination/'+
     encodeURIComponent(pinned.caseRef)+'/history?afterRevision='+after+
@@ -304,12 +331,16 @@ export function CareCoordinationDemo(){
    if(!response.ok)throw Error('HISTORY_SOURCE_FAILED');
    const page:unknown=await response.json();
    if(!validHistoryPage(page,pinned,after,selected))throw Error('HISTORY_UNVERIFIED');
+   if(epoch.current!==generation)return;
    setHistoryPage(page);
    setStatus('صفحه تاریخچه با نسخه ثابت، جداگانه از PostgreSQL آزمایشی تأیید شد.');
   }catch{
+   if(epoch.current!==generation)return;
    setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
    setStatus('تاریخچه صفحه‌بندی‌شده قابل تأیید نیست؛ داده قدیمی کنار گذاشته شد. پرونده را دوباره بخوانید.');
-  }finally{setBusy(false);}
+  }finally{
+   if(epoch.current===generation){setReadKind(null);setBusy(false);}
+  }
  }
  function canIssue(action:Action|null):boolean{
   // The selected historical version is NEVER a command source.
@@ -441,7 +472,7 @@ export function CareCoordinationDemo(){
    <label>ورود رسید بازگشت ادعای هماهنگی مرکز
     <textarea rows={4} maxLength={1400} dir="ltr"
      value={returnText} disabled={busy||!!uncertain}
-     onChange={e=>{setReturnText(e.target.value);
+     onChange={e=>{epoch.current++;setReturnText(e.target.value);
       setConfirmedReturn(null);setSnapshot(null);setActivity(null);
       setAsOf(null);setHistoryPage(null);}}/>
    </label>
@@ -458,6 +489,14 @@ export function CareCoordinationDemo(){
     </p>}
   </fieldset>
   <p role="status" data-testid="care-status">{status}</p>
+  {readKind!==null&&<section data-testid="member-care-read-cancel" role="region"
+   aria-label="لغو خواندن فقط‌خواندنی">
+   <p>فقط خواندن مستقل پرونده، رسید بازگشتی یا صفحه تاریخچه در جریان است.
+    لغو آن هیچ POST انجام نمی‌دهد و فرمان نامطمئن را بازپخش نمی‌کند.</p>
+   <button type="button" onClick={cancelRead}>
+    لغو خواندن آزمایشی بدون ثبت فرمان
+   </button>
+  </section>}
   {snapshot&&snapshot.outcome==='READ'&&snapshot.revision>=1&&!busy&&!uncertain&&
    (asOf===null||asOf===snapshot.revision)&&
    createCareHandoff(snapshot,caseRef,memberRef)!==''&&
@@ -487,7 +526,7 @@ export function CareCoordinationDemo(){
    <label>نوع ادعای تاریخچه نسخه‌ثابت
     <select aria-label="فیلتر تاریخچه هماهنگی عضو" value={historyFilter}
      disabled={busy||!!uncertain}
-     onChange={e=>{setHistoryFilter(e.target.value as HistoryFilter);setHistoryPage(null);}}>
+     onChange={e=>{epoch.current++;setHistoryFilter(e.target.value as HistoryFilter);setHistoryPage(null);}}>
      <option value="ALL">تمام رویدادها</option>
      <option value="CONTACT">فقط ادعاهای تماس</option>
      <option value="SOURCE">فقط ارجاع‌های منبع بالینی تأییدنشده</option>
