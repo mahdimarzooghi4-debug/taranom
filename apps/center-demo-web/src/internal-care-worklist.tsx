@@ -1,4 +1,4 @@
-import {useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {valid as validJournal} from './care-journal-source';
 
 // TRN-TECH-186: synthetic nonclinical coordination case locator only.
@@ -97,10 +97,20 @@ export function InternalCareWorklist({disabled,onSelect}:{
  const [activity,setActivity]=useState<Activity[]|null>(null);
  const [audit,setAudit]=useState<Audited[]|null>(null);
  const [phase,setPhase]=useState<'IDLE'|'LOADING'|'READY'|'DENIED'>('IDLE');
+ const [readKind,setReadKind]=useState<'PAGE'|'DELTA'|'AUDIT'|null>(null);
  const epoch=useRef(0);
  function invalidate(){
   epoch.current++;setRows([]);setNext(null);setActivity(null);setAudit(null);
-  setPageAfter('');setPhase('IDLE');
+  setPageAfter('');setPhase('IDLE');setReadKind(null);
+ }
+ // A parent command may start while a worklist GET is still awaiting its
+ // response. Immediately revoke any old page/row inspection in that case.
+ useEffect(()=>{if(disabled)invalidate();},[disabled]);
+ function cancelRead(){
+  if(disabled||phase!=='LOADING'||readKind===null)return;
+  // Only locally revoke GET results. Do NOT cancel any parent POST or the
+  // original uncertain UUID/receipt/manual replay safety interlock.
+  invalidate();
  }
  function changeCursor(value:string){invalidate();setCursor(value);}
  function changeFilter(value:Filter){invalidate();setFilter(value);}
@@ -110,7 +120,8 @@ export function InternalCareWorklist({disabled,onSelect}:{
   const previous=check?rows:null,previousNext=next;
   const current=++epoch.current;
   const selected=filter;
-  setRows([]);setNext(null);setActivity(null);setAudit(null);setPhase('LOADING');
+  setRows([]);setNext(null);setActivity(null);setAudit(null);
+  setPhase('LOADING');setReadKind(check?'DELTA':'PAGE');
   try{
    const response=await fetch('/internal/demo/v1/care-coordination-worklist?afterCaseRef='+
      encodeURIComponent(after)+'&limit='+LIMIT+'&claimFilter='+selected,
@@ -128,18 +139,27 @@ export function InternalCareWorklist({disabled,onSelect}:{
    if(epoch.current!==current)return;
    setRows([]);setNext(null);setActivity(null);setAudit(null);setPageAfter('');
    setPhase('DENIED');
+  }finally{
+   if(epoch.current===current)setReadKind(null);
   }
  }
  async function inspectPage(){
   if(disabled||phase!=='READY'||rows.length===0)return;
   const pinned=rows.map(row=>({...row})),pinnedNext=next,pinnedAfter=pageAfter;
   const current=++epoch.current;
-  setRows([]);setNext(null);setActivity(null);setAudit(null);setPhase('LOADING');
+  setRows([]);setNext(null);setActivity(null);setAudit(null);
+  setPhase('LOADING');setReadKind('AUDIT');
   try{
    const checked:Audited[]=[];
    // Small technical four-row limit; never re-write, silently skip, or
    // accept only some rows. A concurrent POST produces a version conflict.
-   for(const row of pinned)checked.push(await auditCase(row));
+   for(const row of pinned){
+    if(epoch.current!==current)return;
+    const checkedRow=await auditCase(row);
+    // A cancellation must not start another sequential independent read.
+    if(epoch.current!==current)return;
+    checked.push(checkedRow);
+   }
    if(epoch.current!==current)return;
    setRows(pinned);setNext(pinnedNext);setPageAfter(pinnedAfter);
    setAudit(checked);setPhase('READY');
@@ -147,6 +167,8 @@ export function InternalCareWorklist({disabled,onSelect}:{
    if(epoch.current!==current)return;
    setRows([]);setNext(null);setActivity(null);setAudit(null);
    setPageAfter('');setPhase('DENIED');
+  }finally{
+   if(epoch.current===current)setReadKind(null);
   }
  }
  return <section className="panel" data-testid="center-care-worklist">
@@ -179,6 +201,15 @@ export function InternalCareWorklist({disabled,onSelect}:{
    <button type="button" disabled={disabled}
     onClick={()=>void inspectPage()}>ممیزی مستقل همه پرونده‌های همین صفحه</button>
   </>}
+  {phase==='LOADING'&&readKind!==null&&!disabled&&
+   <section role="region" data-testid="center-care-worklist-cancel"
+    aria-label="لغو خواندن فهرست هماهنگی">
+    <p>خواندن فهرست یا ممیزی مستقل فقط‌خواندنی است؛
+     لغو آن هیچ فرمان ثبت یا ارجاع واقعی صادر نمی‌کند.</p>
+    <button type="button" onClick={cancelRead}>
+     لغو خواندن یا ممیزی فقط‌خواندنی فهرست
+    </button>
+   </section>}
   <p role="status">{phase==='IDLE'?'هنوز فهرستی خوانده نشده است.':
     phase==='LOADING'?'در حال خواندن فهرست از PostgreSQL':
     phase==='DENIED'?'فهرست قابل تأیید نیست؛ هیچ ردیفی قابل انتخاب نیست.':

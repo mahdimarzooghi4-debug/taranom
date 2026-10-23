@@ -511,6 +511,10 @@ DISPATCHER_BRANCHES = {
         "sprint-191-member-care-read-cancel-isolation",
         "main",
     ),
+    "sprint-192-center-worklist-read-cancel.yml": (
+        "sprint-192-center-worklist-read-cancel",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({
