@@ -515,6 +515,10 @@ DISPATCHER_BRANCHES = {
         "sprint-192-center-worklist-read-cancel",
         "main",
     ),
+    "sprint-193-support-exact-source-reconciliation.yml": (
+        "sprint-193-support-exact-source-reconciliation",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

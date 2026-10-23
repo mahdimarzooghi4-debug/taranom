@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import {exactSupportSource} from './support-exact-source';
 import {exportRecovery,importRecovery,type SupportCommand,type PendingWrite} from './manual-recovery';
 
 type FollowUp = { revision: number; requestId: string; noteRef: string; claimedActorRef: string };
@@ -198,24 +199,13 @@ export function MemberSupportDemo() {
       });
       if (!response.ok) throw Error('OUTCOME_UNVERIFIABLE');
       const value:unknown=await response.json();
-      if (!verified(value,pending.caseRef) ||
-          (value.outcome!=='RecordedUnverified' && value.outcome!=='Replayed') ||
-          value.revision < pending.command.expectedRevision+1 ||
-          value.memberRef!==pending.command.memberRef ||
-          value.evidenceRef!==pending.command.unverifiedEvidenceRef ||
-          value.claimedSubmitterRef!==pending.command.claimedSubmitterRef ||
-          value.topic!==(pending.command.topic==='MEDICAL_SERVICE_COMPLAINT'
-            ? 'MedicalServiceComplaint':'InsuranceCoverageDispute') ||
-          value.originalRequestId!==(pending.command.action==='SUBMIT_UNVERIFIED'
-            ? pending.command.requestId:pending.command.originalSubmissionRequestId) ||
-          (pending.command.action==='FOLLOW_UP_UNVERIFIED' &&
-            !value.followUps.some(entry=>
-              entry.revision===pending.command.expectedRevision+1 &&
-              entry.noteRef===pending.command.unverifiedFollowUpNoteRef &&
-              entry.claimedActorRef===pending.command.claimedFollowUpActorRef)))
-        throw Error('ACCEPTANCE_UNVERIFIABLE');
+      if(!verified(value,pending.caseRef)||!exactSupportSource(value,pending.caseRef,pending.command,'ACK'))throw Error('ACK_UNVERIFIED');
+      const check=await fetch('/internal/demo/v1/support/'+encodeURIComponent(pending.caseRef),{credentials:'omit',cache:'no-store'});
+      if(!check.ok)throw Error('SOURCE_UNAVAILABLE');
+      const source:unknown=await check.json();
+      if(!verified(source,pending.caseRef)||!exactSupportSource(source,pending.caseRef,pending.command,'READ'))throw Error('ORIGINAL_UUID_NOT_COMMITTED');
       setPendingWrite(null);
-      setCurrent(value);
+      setCurrent(source);
       setMessage(value.outcome==='Replayed'
         ? 'تکرار امن همان دستور در PostgreSQL تأیید شد؛ هیچ رویداد دوم ایجاد نشد.'
         : 'فقط ارجاع آزمایشی ثبت شد؛ پرونده قانونی، رسیدگی بالینی یا مکاتبه با بیمه‌گر ایجاد نشده است.');
@@ -224,6 +214,21 @@ export function MemberSupportDemo() {
       setPendingWrite(pending);
       setMessage('نتیجه شبکه نامطمئن است؛ ممکن است PostgreSQL دستور را ثبت کرده باشد. فقط همان دستور را با همان شناسه تکرار کنید.');
     }finally{setBusy(false);}
+  }
+
+  async function inspectPending(){
+    if(busy||!pendingWrite)return;
+    const original=pendingWrite;setBusy(true);setCurrent(null);setTimeline(null);setPast(null);
+    try{
+      const response=await fetch('/internal/demo/v1/support/'+encodeURIComponent(original.caseRef),{cache:'no-store',credentials:'omit'});
+      if(!response.ok)throw Error('SOURCE_UNAVAILABLE');
+      const source:unknown=await response.json();
+      if(!verified(source,original.caseRef)||!exactSupportSource(source,original.caseRef,original.command,'READ'))
+        throw Error('ORIGINAL_UUID_NOT_COMMITTED');
+      setCurrent(source);setPendingWrite(null);
+      setMessage('همان UUID با GET مستقل از PostgreSQL تأیید شد؛ هیچ POST جدیدی انجام نشد.');
+    }catch{setMessage('همان UUID از منبع تأیید نشد؛ قفل و بازپخش دستی دقیق محفوظ است.');}
+    finally{setBusy(false);}
   }
 
   async function write(followUp: boolean) {
@@ -365,6 +370,9 @@ export function MemberSupportDemo() {
         data-testid="pending-recovery-capsule" value={exportRecovery(pendingWrite)}
         rows={5} spellCheck={false} aria-label="رسید دستی بازیابی آزمایشی"/>
       <p>پس از Reload، فقط با واردکردن دستی این رسید می‌توان همان UUID را بازسازی کرد. هیچ تکراری خودکار نیست.</p>
+      <button type="button" disabled={busy} onClick={()=>void inspectPending()}>
+        بررسی فقط‌خواندنی همان UUID در PostgreSQL
+      </button>
       <button type="button" disabled={busy} onClick={()=>void sendExact(pendingWrite)}>
         تکرار امن همان دستور آزمایشی
       </button>
