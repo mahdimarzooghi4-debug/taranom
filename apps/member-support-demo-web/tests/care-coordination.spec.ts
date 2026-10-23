@@ -143,7 +143,7 @@ test('CARE162-01 lost ACK is reconciled by GET without sending another command',
  expect(journal.events[0].requestId).toBe(JSON.parse(original).requestId);
  expect(journal.nationalReleaseAllowed).toBe(false);
 });
-test('CARE162-02 forged journal GET retains uncertain lock until exact manual replay',async({page})=>{
+test('CARE162-02 forged journal GET retains uncertain lock until exact manual replay',async({page,request})=>{
  await page.goto('/member-demo/coordination');
  await page.getByRole('button',{name:'خواندن پرونده هماهنگی'}).click();
  await page.route('**/internal/demo/v1/care-coordination/**/commands',async route=>{
@@ -152,13 +152,26 @@ test('CARE162-02 forged journal GET retains uncertain lock until exact manual re
  await page.getByRole('button',{name:'ثبت درخواست ادعایی هماهنگی'}).click();
  await expect(page.getByRole('alert')).toContainText('ممکن است رویداد');
  await page.unrouteAll({behavior:'wait'});
- await page.route('**/internal/demo/v1/care-coordination/*',async route=>{
-  const response=await route.fetch();const x=await response.json();
-  x.events[0].requestId=crypto.randomUUID();
-  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+ // Take the authoritative committed fixture through a SEPARATE PostgreSQL
+ // GET. Then deterministically inject a corrupted event ID into the
+ // browser GET rather than depending on a second asynchronous route.fetch().
+ // Verify the mock was actually consumed, otherwise a green product read
+ // would silently invalidate this negative test.
+ const caseRef=await page.getByLabel('شناسه آزمایشی پرونده').inputValue();
+ const source=await request.get('/internal/demo/v1/care-coordination/'+caseRef);
+ expect(source.status()).toBe(200);
+ const forged=await source.json();
+ expect(forged.events).toHaveLength(1);
+ forged.events[0].requestId=crypto.randomUUID();
+ let interceptions=0;
+ await page.route('**/internal/demo/v1/care-coordination/**',async route=>{
+  if(route.request().method()!=='GET')return route.continue();
+  interceptions++;
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(forged)});
  });
  await page.getByRole('button',{name:'بررسی فقط‌خواندنی فرمان قبلی'}).click();
  await expect(page.getByTestId('care-status')).toContainText('قفل و بازپخش دستی حفظ شد');
+ expect(interceptions).toBe(1);
  await expect(page.getByRole('alert')).toBeVisible();
  await expect(page.getByRole('button',{name:'ثبت درخواست ادعایی هماهنگی'})).toBeDisabled();
  await page.unrouteAll({behavior:'wait'});
