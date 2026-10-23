@@ -503,6 +503,10 @@ DISPATCHER_BRANCHES = {
         "sprint-189-member-center-care-handoff",
         "main",
     ),
+    "sprint-190-care-claim-manual-return.yml": (
+        "sprint-190-care-claim-manual-return",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

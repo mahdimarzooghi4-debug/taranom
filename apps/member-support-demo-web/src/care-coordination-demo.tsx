@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {careReceipt,parseCareReceipt} from './care-command-recovery';
 import {createCareHandoff} from './care-handoff';
+import {type CareClaimReturn,parseCareClaimReturn,matchesCareClaimReturn} from './care-claim-return';
 type Action='REQUEST_NONCLINICAL_COORDINATION'|
  'RECORD_UNVERIFIED_COORDINATOR_CONTACT'|'ATTACH_UNVERIFIED_CLINICAL_SOURCE';
 type Command={requestId:string;expectedRevision:number;action:Action;
@@ -172,15 +173,45 @@ export function CareCoordinationDemo(){
  const [activity,setActivity]=useState<Event[]|null>(null);
  const [uncertain,setUncertain]=useState<{ref:string;body:string}|null>(null);
  const [recoveryText,setRecoveryText]=useState('');
+ const [returnText,setReturnText]=useState('');
+ const [confirmedReturn,setConfirmedReturn]=useState<CareClaimReturn|null>(null);
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState('فقط شناسه‌های ساختگی؛ هیچ درخواست واقعی ارسال نشده است.');
  function change(fn:(s:string)=>void,value:string){
-  fn(value);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
+  fn(value);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  setConfirmedReturn(null);
+  setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
+ }
+ async function verifyReturn(){
+  if(busy||uncertain)return;
+  const chosenCase=caseRef,chosenMember=memberRef;
+  // Import is a manual source locator, never a command or access grant.
+  // Clear the previous actionable state BEFORE parsing untrusted text.
+  setBusy(true);setConfirmedReturn(null);
+  setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  try{
+   const ticket=parseCareClaimReturn(returnText);
+   if(!ticket||ticket.caseRef!==chosenCase||
+     ticket.memberRef!==chosenMember)throw Error('INVALID_RETURN');
+   const response=await fetch('/internal/demo/v1/care-coordination/'+
+     encodeURIComponent(chosenCase),{credentials:'omit',cache:'no-store'});
+   if(!response.ok)throw Error('JOURNAL_UNAVAILABLE');
+   const raw:unknown=await response.json();
+   if(!valid(raw,chosenCase)||raw.outcome!=='READ'||
+      !matchesCareClaimReturn(raw,ticket))
+    throw Error('UNATTESTED_RETURN');
+   setSnapshot(raw);setConfirmedReturn(ticket);setReturnText('');
+   setStatus('آخرین ادعای هماهنگی با همان نسخه و UUID جداگانه از PostgreSQL بررسی شد؛ هیچ پیام یا تأیید واقعی دریافت نشده است.');
+  }catch{
+   setSnapshot(null);setConfirmedReturn(null);
+   setStatus('رسید بازگشت ادعا با ژورنال مطابقت ندارد؛ هیچ ادعا یا تصمیمی تأیید نشد.');
+  }finally{setBusy(false);}
  }
  async function read(){
   if(busy||uncertain)return;
   const previous=snapshot;
   setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  setConfirmedReturn(null);
   try{
    const response=await fetch('/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef),
     {credentials:'omit',cache:'no-store'});
@@ -197,7 +228,7 @@ export function CareCoordinationDemo(){
   finally{setBusy(false);}
  }
  async function send(original:{ref:string;body:string}){
-  if(busy)return;setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  if(busy)return;setConfirmedReturn(null);setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   try{
    const result=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref)+'/commands',{
@@ -228,6 +259,7 @@ export function CareCoordinationDemo(){
  }
  async function inspectUncertain(){
   if(busy||!uncertain)return;
+  setConfirmedReturn(null);
   const original=uncertain;
   setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   try{
@@ -246,6 +278,7 @@ export function CareCoordinationDemo(){
  }
  function loadRecovery(){
   if(busy||uncertain)return;
+  setConfirmedReturn(null);
   const imported=parseCareReceipt(recoveryText,'MEMBER');
   if(!imported){
    setStatus('رسید بازیابی هماهنگی نامعتبر است؛ هیچ فرمانی ارسال نشد.');
@@ -400,6 +433,29 @@ export function CareCoordinationDemo(){
    <button type="button" disabled={busy||!!uncertain}
     onClick={loadRecovery}>بارگذاری رسید هماهنگی عضو بدون ارسال</button>
    <p>رسید فقط شناسه و فرمان test: را برمی‌گرداند؛ فاقد هویت، رضایت، سند یا مجوز درمانی است.</p>
+  </fieldset>
+  <fieldset data-testid="member-care-claim-return">
+   <legend>بررسی دستی بازگشت آخرین ادعای هماهنگی از مرکز — فقط آزمایش</legend>
+   <p>این رسید فقط شناسه یک ادعای ثبت‌شده در ژورنال را حمل می‌کند؛
+    پیام واقعی، ارتباط با مرکز، رضایت، صحت سند یا نتیجه درمان نیست.</p>
+   <label>ورود رسید بازگشت ادعای هماهنگی مرکز
+    <textarea rows={4} maxLength={1400} dir="ltr"
+     value={returnText} disabled={busy||!!uncertain}
+     onChange={e=>{setReturnText(e.target.value);
+      setConfirmedReturn(null);setSnapshot(null);setActivity(null);
+      setAsOf(null);setHistoryPage(null);}}/>
+   </label>
+   <button type="button" disabled={busy||!!uncertain||!returnText}
+    onClick={()=>void verifyReturn()}>
+    بررسی مستقل ادعای بازگشتی از PostgreSQL
+   </button>
+   {confirmedReturn&&snapshot&&
+    <p data-testid="member-care-claim-return-confirmed">
+     نسخه {confirmedReturn.revision}، رویداد
+     <code>{confirmedReturn.claimRequestId}</code> و مرجع ادعایی
+     <code>{confirmedReturn.claimRef}</code> با ژورنال آزمایشی تطبیق یافت؛
+     هیچ پاسخ رسمی، تماس واقعی، مجوز بالینی یا اعلان احراز نشده است.
+    </p>}
   </fieldset>
   <p role="status" data-testid="care-status">{status}</p>
   {snapshot&&snapshot.outcome==='READ'&&snapshot.revision>=1&&!busy&&!uncertain&&

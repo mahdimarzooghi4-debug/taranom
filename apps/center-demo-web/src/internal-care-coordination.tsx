@@ -2,6 +2,7 @@ import {useRef,useState} from 'react';
 import {InternalCareWorklist} from './internal-care-worklist';
 import {careReceipt,parseCareReceipt} from './care-command-recovery';
 import {type CareHandoff,parseCareHandoff,matchesCareHandoff} from './care-handoff';
+import {createCareClaimReturn} from './care-claim-return';
 import {type Event,type Snapshot,valid,testRef,uuid} from './care-journal-source';
 import {type CareHistoryPage,type HistoryFilter,CARE_HISTORY_LIMIT,validHistoryPage} from './care-pinned-history';
 
@@ -285,6 +286,18 @@ export function InternalCareCoordination(){
     onClick={loadRecovery}>بارگذاری رسید هماهنگی مرکز بدون ارسال</button>
    <p>بارگذاری رسید نه منبع بالینی را تأیید می‌کند، نه مجوزی به مرکز می‌دهد.</p>
   </fieldset>
+  {snapshot&&snapshot.outcome==='READ'&&snapshot.revision>=2&&!busy&&!pending&&
+   snapshot.caseRef===ref&&createCareClaimReturn(snapshot,ref)!==''&&
+   <section data-testid="center-care-claim-return" role="region"
+    aria-label="بازگشت دستی آخرین ادعای هماهنگی به عضو">
+    <h3>ارجاع دستی آخرین ادعای ثبت‌شده به عضو — فقط آزمایش</h3>
+    <p>این رسید فقط به آخرین ادعای تأییدنشده در ژورنال اشاره دارد.
+     ادعای تماس، تحویل واقعی پیام، انتساب به مرکز، صحت منبع بالینی،
+     رضایت یا ارجاع درمانی را تأیید نمی‌کند؛ انتقال فقط دستی است.</p>
+    <label>رسید دستی بازگشت ادعای هماهنگی مرکز
+     <textarea rows={4} readOnly dir="ltr"
+      value={createCareClaimReturn(snapshot,ref)}/></label>
+   </section>}
   {snapshot&&<section data-testid="center-care-server-history" role="region"
     aria-label="تاریخچه نسخه‌ثابت هماهنگی مرکز">
    <h3>تاریخچه صفحه‌بندی‌شده هماهنگی مرکز، فقط خواندنی</h3>
