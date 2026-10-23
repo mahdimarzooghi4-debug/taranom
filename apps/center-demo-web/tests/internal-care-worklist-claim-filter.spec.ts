@@ -71,7 +71,9 @@ test('CARE182-02 HAS_SOURCE and HAS_BOTH exact source audit-backed counts, legac
   .toEqual([refs[2],refs[4],refs[5],refs[7]]);
  const both=await (await request.get(route(prefix,'HAS_BOTH',10))).json();
  expect(both.cases.map((r:{caseRef:string})=>r.caseRef).slice(0,2)).toEqual([refs[4],refs[7]]);
- for(const r of both.cases){
+ // Other CI test cases may be lexicographically AFTER our fixture;
+ // attest only the exact two references already matched above.
+ for(const r of both.cases.slice(0,2)){
   const source=await (await request.get(root+r.caseRef)).json();
   expect(r.revision).toBe(source.revision);
   expect(r.contactClaims).toBe(1);expect(r.sourceClaims).toBe(1);
