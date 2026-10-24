@@ -1,0 +1,12 @@
+name: Sprint 195 Center Care Linked Support Followup Full Regression
+on:
+  push:
+    branches: [sprint-195-center-care-linked-support-followup]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

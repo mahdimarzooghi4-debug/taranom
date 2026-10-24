@@ -523,6 +523,10 @@ DISPATCHER_BRANCHES = {
         "sprint-194-member-care-support-continuation",
         "main",
     ),
+    "sprint-195-center-care-linked-support-followup.yml": (
+        "sprint-195-center-care-linked-support-followup",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

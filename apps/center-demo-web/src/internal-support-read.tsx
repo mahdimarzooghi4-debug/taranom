@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {InternalSupportHistory} from './internal-support-history';
 import {InternalSupportWrite} from './internal-support-write';
+import {CenterCareSupportFollowUp} from './center-care-support-followup';
 import {InternalSupportWorklist} from './internal-support-worklist';
 
 // Local test-only UI over the EXISTING .NET + PostgreSQL support journal.
@@ -170,6 +171,10 @@ export function InternalSupportRead(){
    <InternalSupportWrite key={snapshot.caseRef+':'+snapshot.revision}
     caseRef={snapshot.caseRef} existing={snapshot} onChanged={()=>void read()}
     onPendingChange={setPendingWrite}/>
+   {snapshot.revision>=1&&snapshot.topic==='MedicalServiceComplaint'&&
+    snapshot.evidenceRef?.startsWith('test:')&&
+    <CenterCareSupportFollowUp key={'care-support:'+snapshot.caseRef+':'+snapshot.revision}
+     source={snapshot} onPendingChange={setPendingWrite} onChanged={()=>void read()}/>}
    <InternalSupportHistory key={snapshot.caseRef+':'+snapshot.revision}
     caseRef={snapshot.caseRef} revision={snapshot.revision}/>
   </div>}
