@@ -129,7 +129,7 @@ def freeze_bibliography(sources):
 def _words(value):
     text = unicodedata.normalize("NFKC", _label(value)).casefold()
     text = text.replace("ي", "ی").replace("ك", "ک")
-    text = text.replace("\u200c", " ").replace("\u200d", " ")
+    text = text.replace("\u200c", "").replace("\u200d", "")
     text = DIACRITICS.sub("", text)
     words = TOKEN.findall(text)
     if not words or len(words) > 48:
