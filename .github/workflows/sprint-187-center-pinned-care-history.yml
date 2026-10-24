@@ -2,8 +2,6 @@ name: Sprint 187 Center Pinned Care History Full Regression
 on:
   push:
     branches: [sprint-187-center-pinned-care-history]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

@@ -2,8 +2,6 @@ name: Sprint 176 Member Care Journal Source Attestation Full Regression
 on:
   push:
     branches: [sprint-176-member-care-journal-attestation]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

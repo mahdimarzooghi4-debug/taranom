@@ -2,8 +2,6 @@ name: Sprint 145 AI Worker Synthetic Evidence Full Regression
 on:
   push:
     branches: [sprint-145-ai-worker-synthetic-evidence-ledger]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

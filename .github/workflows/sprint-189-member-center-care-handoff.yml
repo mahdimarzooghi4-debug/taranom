@@ -2,8 +2,6 @@ name: Sprint 189 Care Manual Member Center Handoff Full Regression
 on:
   push:
     branches: [sprint-189-member-center-care-handoff]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
