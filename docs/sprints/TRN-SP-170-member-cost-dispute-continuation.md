@@ -1,0 +1,5 @@
+# TRN-SP-170 — DRAFT / Member cost-dispute continuation across reload
+- Parent: Sprint 169 Draft/Open PR #183, exact base commit `e20f8791206e7cb73e35c4cf261e79d18c543b35`.
+- Technical: [TRN-TECH-179](../technical/TRN-TECH-179-member-cost-dispute-continuation.md). Business: TRN-BIZ-049 (unified insurer-dispute support journey) and TRN-BIZ-052 (source-linked nonbinding cost choice).
+- Build: usable Persian member UI that exports a test-only manually carried case locator after independently verified link, and manually restores the existing case after a cost preview read + original support-link verification. No browser storage, new APIs, implicit onboarding or auto-submission. Fail closed on changed/fake/stale identifiers and version.
+- Tests: real three-scenario Chromium/PostgreSQL, historic audited followup, no-POST continuation, forged cross-case refusal and stale preview revision refusal. Execute canonical 14-job CI and exact-head technical Code Review COMMENT. All stacked PRs must remain Draft/Open/Unmerged, no Ready for Review/Merge/Stage/QA Gate/Release/Production; official nationwide launch DENIED_BY_DEFAULT.

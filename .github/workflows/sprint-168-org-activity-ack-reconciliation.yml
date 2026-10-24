@@ -1,0 +1,12 @@
+name: Sprint 168 Organization Activity ACK Reconciliation Full Regression
+on:
+  push:
+    branches: [sprint-168-org-activity-ack-reconciliation]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

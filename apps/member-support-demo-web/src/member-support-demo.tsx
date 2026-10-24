@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import {exactSupportSource} from './support-exact-source';
 import {exportRecovery,importRecovery,type SupportCommand,type PendingWrite} from './manual-recovery';
 
-type FollowUp = { revision: number; noteRef: string; claimedActorRef: string };
+type FollowUp = { revision: number; requestId: string; noteRef: string; claimedActorRef: string };
 type Support = {
   contract: 'TRN-TECH-075'; syntheticOnly: true;
   memberAuthenticated: false; complaintLegallySubmitted: false;
@@ -84,7 +85,9 @@ function verified(value: unknown, caseRef: string): value is Support {
     typeof x.memberRef === 'string' && testRef(x.memberRef) &&
     typeof x.evidenceRef === 'string' && testRef(x.evidenceRef) &&
     typeof x.claimedSubmitterRef === 'string' && testRef(x.claimedSubmitterRef) &&
-    x.followUps.every(v => v && Number.isSafeInteger(v.revision) && v.revision >= 2 &&
+    x.followUps.every((v,i) => v && Number.isSafeInteger(v.revision) && v.revision===i+2 &&
+      typeof v.requestId==='string'&&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.requestId) &&
       testRef(v.noteRef) && testRef(v.claimedActorRef));
 }
 
@@ -102,6 +105,9 @@ export function MemberSupportDemo() {
   // create a fresh requestId for its retry; no browser storage or real actor.
   const [pendingWrite, setPendingWrite] = useState<PendingWrite|null>(null);
   const [manualRecoveryText, setManualRecoveryText] = useState('');
+  const [returnedFollowUp, setReturnedFollowUp] = useState('');
+  const [returnStatus, setReturnStatus] = useState('رسید پیگیری مرکز هنوز بررسی نشده است.');
+  const [confirmedReturn, setConfirmedReturn] = useState<{caseRef:string;revision:number;noteRef:string}|null>(null);
   const [message, setMessage] = useState('این فرم فقط درخواست‌ها و ارجاعات آزمایشی را ذخیره می‌کند.');
   const [timeline, setTimeline] = useState<SupportHistory|null>(null);
   const [past, setPast] = useState<SupportHistorical|null>(null);
@@ -110,6 +116,7 @@ export function MemberSupportDemo() {
 
   async function read() {
     setBusy(true); setCurrent(null); setTimeline(null); setPast(null);
+    setConfirmedReturn(null);
     if (!testRef(caseRef)) {
       setMessage('فقط شناسه پرونده آزمایشی با پیشوند test: مجاز است.');
       setBusy(false); return;
@@ -127,6 +134,57 @@ export function MemberSupportDemo() {
     } finally { setBusy(false); }
   }
 
+  // Untrusted versioned locator, not authentication, delivery or clinical advice.
+  async function inspectReturnedFollowUp(){
+    if(busy||pendingWrite||returnedFollowUp.length===0||
+       returnedFollowUp.length>1300)return;
+    setBusy(true);setCurrent(null);setTimeline(null);setPast(null);
+    setConfirmedReturn(null);
+    try{
+      const raw:unknown=JSON.parse(returnedFollowUp);
+      if(!raw||typeof raw!=='object'||Array.isArray(raw))throw Error('INVALID_RECEIPT');
+      const v=raw as Record<string,unknown>;
+      const keys=['format','version','caseRef','memberRef','topic','evidenceRef',
+        'originalRequestId','revision','followUpRequestId','noteRef','claimedActorRef'];
+      if(Object.keys(v).length!==keys.length||
+         Object.keys(v).some(k=>!keys.includes(k))||
+         v.format!=='TRN-TECH-182-TEST-FOLLOWUP-RETURN'||v.version!==1||
+         v.caseRef!==caseRef||v.memberRef!==memberRef||
+         typeof v.caseRef!=='string'||!testRef(v.caseRef)||
+         typeof v.memberRef!=='string'||!testRef(v.memberRef)||
+         typeof v.evidenceRef!=='string'||!testRef(v.evidenceRef)||
+         !['MedicalServiceComplaint','InsuranceCoverageDispute'].includes(String(v.topic))||
+         typeof v.originalRequestId!=='string'||
+         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.originalRequestId)||
+         typeof v.followUpRequestId!=='string'||
+         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.followUpRequestId)||
+         typeof v.noteRef!=='string'||!testRef(v.noteRef)||
+         typeof v.claimedActorRef!=='string'||!testRef(v.claimedActorRef)||
+         !Number.isSafeInteger(v.revision)||Number(v.revision)<2)
+        throw Error('INVALID_FIELDS');
+      const response=await fetch('/internal/demo/v1/support/'+encodeURIComponent(caseRef),
+        {cache:'no-store',credentials:'omit'});
+      if(!response.ok)throw Error('READ_UNAVAILABLE');
+      const source:unknown=await response.json();
+      if(!verified(source,caseRef)||source.outcome!=='READ'||
+         source.revision!==v.revision||source.memberRef!==v.memberRef||
+         source.topic!==v.topic||source.evidenceRef!==v.evidenceRef||
+         source.originalRequestId!==v.originalRequestId||
+         source.followUpCount<1)throw Error('SOURCE_MISMATCH');
+      const last=source.followUps[source.followUps.length-1];
+      if(last.revision!==v.revision||last.requestId!==v.followUpRequestId||
+         last.noteRef!==v.noteRef||last.claimedActorRef!==v.claimedActorRef)
+        throw Error('FOLLOWUP_MISMATCH');
+      setCurrent(source);
+      setConfirmedReturn({caseRef,revision:source.revision,noteRef:last.noteRef});
+      setReturnStatus('آخرین یادداشت ادعایی دقیقاً از PostgreSQL بازخوانی شد؛ هیچ پاسخ رسمی تأیید نشده است.');
+      setReturnedFollowUp('');
+    }catch{
+      setCurrent(null);setConfirmedReturn(null);
+      setReturnStatus('رسید پیگیری تأیید نشد؛ هیچ پرونده یا پاسخ رسمی بازیابی نشده است.');
+    }finally{setBusy(false);}
+  }
+
   // An unknown network result is NOT a failed database transaction.
   // Browser may have lost the response after PostgreSQL committed.
   async function sendExact(pending:PendingWrite) {
@@ -141,24 +199,13 @@ export function MemberSupportDemo() {
       });
       if (!response.ok) throw Error('OUTCOME_UNVERIFIABLE');
       const value:unknown=await response.json();
-      if (!verified(value,pending.caseRef) ||
-          (value.outcome!=='RecordedUnverified' && value.outcome!=='Replayed') ||
-          value.revision < pending.command.expectedRevision+1 ||
-          value.memberRef!==pending.command.memberRef ||
-          value.evidenceRef!==pending.command.unverifiedEvidenceRef ||
-          value.claimedSubmitterRef!==pending.command.claimedSubmitterRef ||
-          value.topic!==(pending.command.topic==='MEDICAL_SERVICE_COMPLAINT'
-            ? 'MedicalServiceComplaint':'InsuranceCoverageDispute') ||
-          value.originalRequestId!==(pending.command.action==='SUBMIT_UNVERIFIED'
-            ? pending.command.requestId:pending.command.originalSubmissionRequestId) ||
-          (pending.command.action==='FOLLOW_UP_UNVERIFIED' &&
-            !value.followUps.some(entry=>
-              entry.revision===pending.command.expectedRevision+1 &&
-              entry.noteRef===pending.command.unverifiedFollowUpNoteRef &&
-              entry.claimedActorRef===pending.command.claimedFollowUpActorRef)))
-        throw Error('ACCEPTANCE_UNVERIFIABLE');
+      if(!verified(value,pending.caseRef)||!exactSupportSource(value,pending.caseRef,pending.command,'ACK'))throw Error('ACK_UNVERIFIED');
+      const check=await fetch('/internal/demo/v1/support/'+encodeURIComponent(pending.caseRef),{credentials:'omit',cache:'no-store'});
+      if(!check.ok)throw Error('SOURCE_UNAVAILABLE');
+      const source:unknown=await check.json();
+      if(!verified(source,pending.caseRef)||!exactSupportSource(source,pending.caseRef,pending.command,'READ'))throw Error('ORIGINAL_UUID_NOT_COMMITTED');
       setPendingWrite(null);
-      setCurrent(value);
+      setCurrent(source);
       setMessage(value.outcome==='Replayed'
         ? 'تکرار امن همان دستور در PostgreSQL تأیید شد؛ هیچ رویداد دوم ایجاد نشد.'
         : 'فقط ارجاع آزمایشی ثبت شد؛ پرونده قانونی، رسیدگی بالینی یا مکاتبه با بیمه‌گر ایجاد نشده است.');
@@ -167,6 +214,21 @@ export function MemberSupportDemo() {
       setPendingWrite(pending);
       setMessage('نتیجه شبکه نامطمئن است؛ ممکن است PostgreSQL دستور را ثبت کرده باشد. فقط همان دستور را با همان شناسه تکرار کنید.');
     }finally{setBusy(false);}
+  }
+
+  async function inspectPending(){
+    if(busy||!pendingWrite)return;
+    const original=pendingWrite;setBusy(true);setCurrent(null);setTimeline(null);setPast(null);
+    try{
+      const response=await fetch('/internal/demo/v1/support/'+encodeURIComponent(original.caseRef),{cache:'no-store',credentials:'omit'});
+      if(!response.ok)throw Error('SOURCE_UNAVAILABLE');
+      const source:unknown=await response.json();
+      if(!verified(source,original.caseRef)||!exactSupportSource(source,original.caseRef,original.command,'READ'))
+        throw Error('ORIGINAL_UUID_NOT_COMMITTED');
+      setCurrent(source);setPendingWrite(null);
+      setMessage('همان UUID با GET مستقل از PostgreSQL تأیید شد؛ هیچ POST جدیدی انجام نشد.');
+    }catch{setMessage('همان UUID از منبع تأیید نشد؛ قفل و بازپخش دستی دقیق محفوظ است.');}
+    finally{setBusy(false);}
   }
 
   async function write(followUp: boolean) {
@@ -267,11 +329,11 @@ export function MemberSupportDemo() {
     <fieldset className="fields" disabled={busy || pendingWrite!==null}>
       <label htmlFor="sup-case">پرونده آزمایشی
         <input id="sup-case" dir="ltr" value={caseRef}
-          onChange={e => { setCaseRef(e.target.value); setCurrent(null); setTimeline(null); setPast(null); }} autoComplete="off" />
+          onChange={e => { setCaseRef(e.target.value); setCurrent(null); setTimeline(null); setPast(null); setConfirmedReturn(null); }} autoComplete="off" />
       </label>
       <label htmlFor="sup-member">شناسه عضو فرضی
         <input id="sup-member" dir="ltr" value={memberRef}
-          onChange={e => setMemberRef(e.target.value)} autoComplete="off" />
+          onChange={e => {setMemberRef(e.target.value);setConfirmedReturn(null);}} autoComplete="off" />
       </label>
       <label htmlFor="sup-evidence">ارجاع مدرک تأییدنشده
         <input id="sup-evidence" dir="ltr" value={evidenceRef}
@@ -308,6 +370,9 @@ export function MemberSupportDemo() {
         data-testid="pending-recovery-capsule" value={exportRecovery(pendingWrite)}
         rows={5} spellCheck={false} aria-label="رسید دستی بازیابی آزمایشی"/>
       <p>پس از Reload، فقط با واردکردن دستی این رسید می‌توان همان UUID را بازسازی کرد. هیچ تکراری خودکار نیست.</p>
+      <button type="button" disabled={busy} onClick={()=>void inspectPending()}>
+        بررسی فقط‌خواندنی همان UUID در PostgreSQL
+      </button>
       <button type="button" disabled={busy} onClick={()=>void sendExact(pendingWrite)}>
         تکرار امن همان دستور آزمایشی
       </button>
@@ -323,6 +388,27 @@ export function MemberSupportDemo() {
       <button type="button" disabled={busy || pendingWrite!==null}
         onClick={importManualRecovery}>بارگذاری رسید بازیابی بدون ارسال</button>
     </section>
+    <section data-testid="member-return-followup" aria-label="بازخوانی رسید پیگیری از مرکز">
+      <h3>پیگیری ادعایی ثبت‌شده در مرکز — بازخوانی توسط عضو آزمایشی</h3>
+      <p>ابتدا شناسه پرونده و عضو فرضی را وارد کنید؛ سپس رسید
+        آزمایشی را از مرکز کپی کنید. فقط رویداد PostgreSQL بررسی می‌شود،
+        نه صلاحیت مرکز، پاسخ بیمه، تشخیص یا اقدام درمانی.</p>
+      <textarea dir="ltr" rows={5} maxLength={1300}
+        aria-label="ورود رسید پیگیری آزمایشی مرکز"
+        value={returnedFollowUp} spellCheck={false}
+        disabled={busy||pendingWrite!==null}
+        onChange={e=>{setReturnedFollowUp(e.target.value);setConfirmedReturn(null);}}/>
+      <button type="button" disabled={busy||pendingWrite!==null||
+          returnedFollowUp.length===0||returnedFollowUp.length>1300}
+        onClick={()=>void inspectReturnedFollowUp()}>
+        بررسی مستقل پیگیری مرکز از PostgreSQL
+      </button>
+      <p role="status" data-testid="member-return-followup-status">{returnStatus}</p>
+      {confirmedReturn&&<p data-testid="member-return-followup-confirmed">
+        پرونده آزمایشی {confirmedReturn.caseRef} | نسخه {confirmedReturn.revision} |
+        یادداشت تأییدنشده: <code>{confirmedReturn.noteRef}</code>
+      </p>}
+    </section>
     <div className="actions">
       <button disabled={busy || pendingWrite!==null} type="button" onClick={() => void read()}>بازخوانی پرونده پشتیبانی آزمایشی</button>
       <button disabled={busy || pendingWrite!==null || !current || current.revision !== 0} type="button"
@@ -333,6 +419,24 @@ export function MemberSupportDemo() {
     <p data-testid="support-status" aria-live="polite" className="status">
       {busy ? 'در حال ثبت یا خواندن از پایگاه آزمایشی...' : message}
     </p>
+    {current && current.revision>0 && !pendingWrite &&
+      current.caseRef===caseRef && current.memberRef===memberRef &&
+      <section aria-label="رسید دستی تحویل پرونده به محیط مرکز"
+        data-testid="member-support-handoff">
+       <h3>تحویل دستی مرجع پرونده آزمایشی به محیط مرکز</h3>
+       <p>این فقط نشانی نسخه‌دار پرونده و ادعاهای ثبت‌شده است؛
+         هیچ دسترسی به پرونده شخصی، مجوز حرفه‌ای، ارجاع درمانی،
+         ثبت شکایت قانونی یا اختیار مرکز ایجاد نمی‌کند.
+         در محیط آزمایشی مرکز باید همین پرونده مستقلاً از PostgreSQL خوانده شود.</p>
+       <textarea aria-label="رسید خروجی تحویل آزمایشی پرونده"
+        dir="ltr" readOnly rows={8} spellCheck={false}
+        value={JSON.stringify({
+         format:'TRN-TECH-180-TEST-SUPPORT-HANDOFF',version:1,
+         caseRef:current.caseRef,memberRef:current.memberRef,
+         topic:current.topic,evidenceRef:current.evidenceRef,
+         originalRequestId:current.originalRequestId,revision:current.revision
+        },null,2)}/>
+      </section>}
     {current && <section aria-label="وضعیت پرونده پشتیبانی آزمایشی">
       <p><strong>نسخه:</strong> {current.revision} | <strong>پیگیری‌های تأییدنشده:</strong> {current.followUpCount}</p>
       <p>{current.topic === 'MedicalServiceComplaint' ? 'موضوع: نارضایتی از خدمت پزشکی' :

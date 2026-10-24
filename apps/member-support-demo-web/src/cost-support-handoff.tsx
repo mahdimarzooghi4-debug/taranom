@@ -56,6 +56,14 @@ export function CostSupportHandoff({source}:{source:Cost}) {
   const [busy,setBusy]=useState(false);
   const [followUpPending,setFollowUpPending]=useState(false);
   const [message,setMessage]=useState('رابطه دو Journal هنوز بررسی نشده است.');
+  const [continuationInput,setContinuationInput]=useState('');
+  const continuation=review?JSON.stringify({
+    format:'TRN-TECH-179-TEST-CONTINUATION',version:1,
+    previewId:source.previewId,memberRef:source.memberRef,
+    previewRevision:source.previewRevision,
+    previewFingerprint:source.previewFingerprint,
+    choiceRevision:source.choiceRevision,caseRef
+  },null,2):null;
   const evidence='test:cost-preview:'+source.previewId;
   function reset(ref:string) {
     setCaseRef(ref);setCreated(false);setReview(null);
@@ -129,6 +137,43 @@ export function CostSupportHandoff({source}:{source:Cost}) {
       setMessage('رابطه دو پرونده قابل تأیید نیست؛ هیچ وضعیت سابقی معتبر فرض نشد.');
     }finally{setBusy(false);}
   }
+  // A portable *locator*, not an access credential or authentication.
+  // It never grants rights, persists in browser storage or issues a POST.
+  async function resumeContinuation(){
+    if(busy||pending||followUpPending)return;
+    setBusy(true);setReview(null);
+    try{
+      if(continuationInput.length===0||continuationInput.length>1200)
+        throw Error('INVALID_LENGTH');
+      const value:unknown=JSON.parse(continuationInput);
+      if(!value||typeof value!=='object'||Array.isArray(value))
+        throw Error('INVALID_FORMAT');
+      const v=value as Record<string,unknown>;
+      const keys=['format','version','previewId','memberRef','previewRevision',
+        'previewFingerprint','choiceRevision','caseRef'];
+      if(Object.keys(v).length!==keys.length||
+        Object.keys(v).some(k=>!keys.includes(k))||
+        v.format!=='TRN-TECH-179-TEST-CONTINUATION'||v.version!==1||
+        v.previewId!==source.previewId||v.memberRef!==source.memberRef||
+        v.previewRevision!==source.previewRevision||
+        v.previewFingerprint!==source.previewFingerprint||
+        v.choiceRevision!==source.choiceRevision||
+        typeof v.caseRef!=='string'||!testRef(v.caseRef))
+          throw Error('UNMATCHED_LOCATOR');
+      const nextCase=v.caseRef;
+      const res=await fetch('/internal/demo/v1/cost-previews/'+
+        encodeURIComponent(source.previewId)+'/support-link/'+
+        encodeURIComponent(nextCase),{credentials:'omit',cache:'no-store'});
+      const raw:unknown=await res.json();
+      if(!res.ok||!verified(raw,source,nextCase)||
+         raw.costChoiceRevision!==source.choiceRevision)
+         throw Error('UNVERIFIED_CASE_RELATION');
+      setCaseRef(nextCase);setCreated(true);setReview(raw);
+      setMessage('پرونده از هر دو ژورنال PostgreSQL بدون ارسال فرمان جدید بازخوانی شد.');
+    }catch{
+      setMessage('رسید با منبع و نسخه فعلی تطبیق نداشت؛ هیچ پرونده یا اختیاری بازیابی نشد.');
+    }finally{setBusy(false);}
+  }
   return <section data-testid="cost-support-handoff" className="panel"
     aria-label="پیوند آزمایشی برآورد هزینه و اعتراض بیمه">
     <h3>پیگیری دستی اختلاف بیمه برای همین برآورد ساختگی</h3>
@@ -148,6 +193,28 @@ export function CostSupportHandoff({source}:{source:Cost}) {
       {pending?<button type="button" disabled={busy}
         onClick={()=>void sendExact(pending)}>تکرار دقیق UUID درخواست نامطمئن</button>:null}
     </div>
+    {review&&!pending&&!followUpPending?<section aria-label="اطلاعات انتقال دستی پرونده"
+      data-testid="cost-continuation-ticket">
+      <h4>رسید دستی ادامه پرونده — فقط شناسه آزمایشی</h4>
+      <p>این متن هیچ رمز، تأیید هویت یا حق مشاهده داده واقعی نیست.
+        آن را فقط در محیط آزمایشی نگهداری و پس از بارگذاری دوباره همراه
+        با بازخوانی مستقل پیش‌برآورد استفاده کنید. هیچ اطلاعات شخصی وارد نکنید.</p>
+      <textarea aria-label="رسید ادامه پرونده آزمایشی" readOnly dir="ltr"
+        value={continuation??''} rows={9}/>
+    </section>:null}
+    <section aria-label="بازکردن دستی پرونده موجود با رسید"
+      data-testid="cost-continuation-restore">
+      <h4>ادامه پرونده قبلی با رسید آزمایشی</h4>
+      <p>ابتدا پیش‌برآورد همین UUID را در PostgreSQL بازخوانی کنید؛ سپس رسید
+         را وارد و ارتباط هر دو ژورنال را مستقلاً تأیید کنید.
+         هیچ POST یا فعال‌سازی خودکار رخ نمی‌دهد.</p>
+      <textarea aria-label="ورود رسید ادامه پرونده آزمایشی" dir="ltr" rows={5}
+        disabled={busy||pending!==null||followUpPending}
+        value={continuationInput} onChange={e=>setContinuationInput(e.target.value)}/>
+      <button type="button" disabled={busy||pending!==null||followUpPending||
+          continuationInput.length===0||continuationInput.length>1200}
+        onClick={()=>void resumeContinuation()}>بازیابی مستقل پرونده از روی رسید</button>
+    </section>
     {review?<CostSupportFollowUp source={source} caseRef={caseRef}
       link={review} onPending={setFollowUpPending}
       onRecorded={(result)=>{setReview(null);setCreated(true);setMessage(result);}}/>:null}

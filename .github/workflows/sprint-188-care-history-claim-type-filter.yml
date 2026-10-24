@@ -1,0 +1,12 @@
+name: Sprint 188 Care History Claim Filter Full Regression
+on:
+  push:
+    branches: [sprint-188-care-history-claim-type-filter]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

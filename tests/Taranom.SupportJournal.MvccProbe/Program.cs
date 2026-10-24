@@ -429,3 +429,111 @@ await using (var audit = new NpgsqlCommand("""
 }
 Console.WriteLine("PASS: cost journal unlocked read-only MVCC under real writer row lock; 8 concurrent source-backed choices/audits and all financial/clinical grants denied");
 
+
+
+/* TRN-TECH-183 — corruption of an excluded topic must NOT become an
+ * invisible row. PostgreSQL-owner-only mutation is a negative test fixture:
+ * production/HTTP reader/writer roles still cannot perform this action.
+ * Restore in finally; never persist a corrupted synthetic journal. */
+var topic174Prefix = "test:topic174-" + Guid.NewGuid().ToString("N");
+var topic174Case = topic174Prefix + "-a";
+var topic174Other = topic174Prefix + "-b";
+async Task SeedTopic174(string refId, string topic)
+{
+    using var response = await http.PostAsJsonAsync(
+        "internal/demo/v1/support/" + refId + "/commands", new {
+            requestId=Guid.NewGuid(),expectedRevision=0L,
+            action="SUBMIT_UNVERIFIED",memberRef="test:topic174-member",
+            topic,unverifiedEvidenceRef="test:topic174-evidence",
+            claimedSubmitterRef="test:topic174-submitter",
+            originalSubmissionRequestId=Guid.Empty,
+            claimedFollowUpActorRef=(string?)null,
+            unverifiedFollowUpNoteRef=(string?)null
+        });
+    if (!response.IsSuccessStatusCode)
+        throw new InvalidOperationException("TOPIC174_SEED_FAILED");
+}
+await SeedTopic174(topic174Case, "MEDICAL_SERVICE_COMPLAINT");
+await SeedTopic174(topic174Other, "INSURANCE_COVERAGE_DISPUTE");
+var topic174Url = "internal/demo/v1/support-worklist?afterCaseRef=" +
+    Uri.EscapeDataString(topic174Prefix) + "&limit=1&topic=";
+async Task MustListTopic174(string topic, string expectedRef)
+{
+    using var response = await http.GetAsync(topic174Url + topic);
+    if (!response.IsSuccessStatusCode)
+        throw new InvalidOperationException("TOPIC174_VALID_WORKLIST_FAILED");
+    using var json = await JsonDocument.ParseAsync(
+        await response.Content.ReadAsStreamAsync());
+    var items = json.RootElement.GetProperty("cases");
+    if (items.GetArrayLength() != 1 ||
+        items[0].GetProperty("caseRef").GetString() != expectedRef ||
+        json.RootElement.GetProperty("nationalReleaseAllowed").GetBoolean())
+        throw new InvalidOperationException("TOPIC174_PAGINATION_OR_SCOPE_INVALID");
+}
+await MustListTopic174("MedicalServiceComplaint", topic174Case);
+await MustListTopic174("InsuranceCoverageDispute", topic174Other);
+string originalTopic174;
+await using (var readConn = await pg.OpenConnectionAsync())
+await using (var command = new NpgsqlCommand("""
+    SELECT command_json FROM internal_test_support_event
+    WHERE case_ref=@case AND revision=1
+    """, readConn))
+{
+    command.Parameters.AddWithValue("case", topic174Case);
+    originalTopic174 = (string?)await command.ExecuteScalarAsync()
+        ?? throw new InvalidOperationException("TOPIC174_EVENT_ABSENT");
+}
+const string topic174Old = "\"Topic\":1";
+const string topic174New = "\"Topic\":2";
+if (!originalTopic174.Contains(topic174Old, StringComparison.Ordinal))
+    throw new InvalidOperationException("TOPIC174_JSON_SHAPE_CHANGED");
+async Task ChangeOwnerOnlyTopic174(string value)
+{
+    await using var ownerConn = await pg.OpenConnectionAsync();
+    await using var changeTx = await ownerConn.BeginTransactionAsync();
+    await using (var disable = new NpgsqlCommand("""
+        ALTER TABLE internal_test_support_event
+        DISABLE TRIGGER internal_test_support_event_guard
+        """, ownerConn, changeTx))
+        await disable.ExecuteNonQueryAsync();
+    await using (var update = new NpgsqlCommand("""
+        UPDATE internal_test_support_event SET command_json=@json
+        WHERE case_ref=@case AND revision=1
+        """, ownerConn, changeTx))
+    {
+        update.Parameters.AddWithValue("json", value);
+        update.Parameters.AddWithValue("case", topic174Case);
+        if (await update.ExecuteNonQueryAsync() != 1)
+            throw new InvalidOperationException("TOPIC174_OWNER_MUTATION_MISSING");
+    }
+    await using (var enable = new NpgsqlCommand("""
+        ALTER TABLE internal_test_support_event
+        ENABLE TRIGGER internal_test_support_event_guard
+        """, ownerConn, changeTx))
+        await enable.ExecuteNonQueryAsync();
+    await changeTx.CommitAsync();
+}
+await ChangeOwnerOnlyTopic174(originalTopic174.Replace(
+    topic174Old, topic174New, StringComparison.Ordinal));
+try
+{
+    foreach (var selected in new[] {"MedicalServiceComplaint",
+                                    "InsuranceCoverageDispute", "ALL"})
+    {
+        using var response = await http.GetAsync(topic174Url + selected);
+        using var denied = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync());
+        if ((int)response.StatusCode != 503 ||
+            denied.RootElement.GetProperty("nationalReleaseAllowed").GetBoolean() ||
+            denied.RootElement.GetProperty("cases").GetArrayLength() != 0)
+            throw new InvalidOperationException(
+                "TOPIC174_CORRUPT_FIRST_EVENT_WAS_SILENTLY_FILTERED");
+    }
+}
+finally
+{
+    await ChangeOwnerOnlyTopic174(originalTopic174);
+}
+await MustListTopic174("MedicalServiceComplaint", topic174Case);
+await MustListTopic174("InsuranceCoverageDispute", topic174Other);
+Console.WriteLine("PASS: verified-before-filter topic scan catches tampered hidden roots; owner corruption restored, no role elevation");

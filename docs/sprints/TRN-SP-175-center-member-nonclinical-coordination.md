@@ -1,0 +1,6 @@
+# TRN-SP-175 — DRAFT / source-confirmed nonclinical Member ↔ Center coordination
+
+Base: Draft/Open Sprint 174 PR #188 at exact SHA `346cf1ec709ccf6ca8bb71978d0a813c10e277aa`.
+Business basis: approved high-level TRN-BIZ-046 hybrid coordination with licensed practitioners retaining exclusive clinical authority. Technical boundary: [TRN-TECH-184](../technical/TRN-TECH-184-center-member-nonclinical-coordination.md).
+
+Deliver a genuine cross-interface synthetic workflow, not a dashboard or fabricated clinical operation. Center QA can explicitly read a member's already-durable nonclinical `test:` case from the *existing* immutable care PostgreSQL journal and append a single source-pinned unverified contact claim via the original endpoint. Accepted writes require independent exact-event source verification. Lost or forged ACKs remain locked, with GET-only recovery or separate manual identical UUID replay. Member's previous read view can observe the same claim. Four real Chromium/PostgreSQL adversarial tests, full 14-job exact-head CI, technical COMMENT review. All real patient identity, consent, clinician privileges, genuine provider contact and external integrations remain unconnected and prohibited. All Sprint PRs Draft/Open/Unmerged and national launch denied by default.

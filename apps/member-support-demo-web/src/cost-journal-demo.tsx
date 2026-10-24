@@ -189,7 +189,9 @@ export function CostJournalDemo() {
       </button>:null}
     </section>:null}
     {current&&!pending?<CostHistoryPanel key={current.previewId+':'+current.choiceRevision} source={current}/>:null}
-    {current&&!pending?<CostSupportHandoff source={current}/>:null}
+    {current&&!pending?<CostSupportHandoff
+      key={current.previewId+':'+current.previewFingerprint+':'+current.choiceRevision}
+      source={current}/>:null}
     {pending?<button type="button" disabled={busy} onClick={()=>void send(pending)}>
       تکرار امن همان UUID نامطمئن
     </button>:null}

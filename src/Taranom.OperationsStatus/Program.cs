@@ -48,6 +48,10 @@ app.Use(async (context, next) =>
 });
 app.MapGet("/internal/ops/v1/epic-progress",
     (Func<HttpContext,IResult>)EpicProgressHttp.Read);
+app.MapGet("/internal/ops/v1/dependencies",
+    (Func<HttpContext,IResult>)ReleaseDependencyHttp.Read);
+app.MapGet("/internal/ops/v1/dependencies/packet",
+    (Func<HttpContext,IResult>)ReleaseDependencyHttp.ReadPacket);
 // The Epic candidate inventory is never Production acceptance or a release gate.
 app.MapGet("/internal/ops/v1/status", () =>
 {
@@ -124,6 +128,9 @@ app.MapGet("/operations", () =>
 app.MapGet("/operations/progress", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "index.html"), "text/html; charset=utf-8"));
+app.MapGet("/operations/dependencies", () =>
+    Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+        "index.html"), "text/html; charset=utf-8"));
 // Only explicitly listed audience information pages can render HTML.
 foreach (var route in new[] {
     "/markets", "/markets/individuals", "/markets/support", "/markets/corporate"
@@ -171,6 +178,8 @@ internal static class OpsFallback
         if ((ProductPageSource.IsExplicitPage(path) && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/status" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/epic-progress" && !HttpMethods.IsGet(method)) ||
+            (path == "/internal/ops/v1/dependencies" && !HttpMethods.IsGet(method)) ||
+            (path == "/operations/dependencies" && !HttpMethods.IsGet(method)) ||
             (path == "/operations/progress" && !HttpMethods.IsGet(method)) ||
             (path == "/internal/ops/v1/waiting-preview" && !HttpMethods.IsPost(method)) ||
             (path == "/internal/ops/v1/payer-scenario-preview" && !HttpMethods.IsPost(method)) ||

@@ -1,0 +1,12 @@
+name: Sprint 179 Member Distinct Care Claims Full Regression
+on:
+  push:
+    branches: [sprint-179-member-distinct-care-claims]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

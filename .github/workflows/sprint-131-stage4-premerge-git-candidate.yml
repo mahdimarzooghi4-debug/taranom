@@ -1,0 +1,14 @@
+name: Sprint 131 Stage4 Git Candidate Full Regression
+on:
+  push:
+    branches: [sprint-131-stage4-premerge-git-candidate]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

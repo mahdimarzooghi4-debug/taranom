@@ -1,0 +1,12 @@
+name: Sprint 171 Member Center Support Handoff Full Regression
+on:
+  push:
+    branches: [sprint-171-member-center-support-handoff]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

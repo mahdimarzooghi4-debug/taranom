@@ -1,0 +1,12 @@
+name: Sprint 185 Member Care Version Explorer Full Regression
+on:
+  push:
+    branches: [sprint-185-member-care-version-explorer]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

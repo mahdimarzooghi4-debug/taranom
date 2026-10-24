@@ -1,0 +1,12 @@
+name: Sprint 162 Read-Only Uncertain Command Reconciliation Full Regression
+on:
+  push:
+    branches: [sprint-162-read-only-uncertain-command-reconciliation]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

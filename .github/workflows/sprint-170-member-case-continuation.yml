@@ -1,0 +1,12 @@
+name: Sprint 170 Member Cost Dispute Continuation Full Regression
+on:
+  push:
+    branches: [sprint-170-member-case-continuation]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

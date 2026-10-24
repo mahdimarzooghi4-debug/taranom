@@ -1,0 +1,5 @@
+# TRN-SP-176 — DRAFT / member-care exact event lineage + independent ACK source verification
+
+Stack on Draft/Open PR #189 at `646069362fc422dcd0a53414f39991b16e16c56d`. Contract: [TRN-TECH-185](../technical/TRN-TECH-185-member-care-journal-source-attestation.md).
+
+Correct a trust and safety gap that Sprint 175 exposed between two workbenches sharing a single authoritative test-only care journal. The Member UI must not display or act on forged 200-read events with impossible root actions, duplicate IDs or mismatched root/member lineage, nor treat a syntactically valid 200 POST as committed without an independent GET of that exact event. Preserve existing manual same-UUID and GET-only reconciliation, audit journal and DENIED authorities. Four genuine Chromium/Kestrel/PostgreSQL adversarial tests plus exact-head full 14-job CI and initial technical Code Review COMMENT. No real patient flow, staff credential, provider decision, consent, referral, wallet or national release; all PRs Draft/Open/Unmerged.

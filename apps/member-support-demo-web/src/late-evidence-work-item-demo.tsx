@@ -38,6 +38,24 @@ function validated(v:unknown,id:string):v is Snapshot{
  x.financialLedgerMutated===false&&x.clinicalAccessGranted===false&&
  x.nationalReleaseAllowed===false;
 }
+function acknowledged(s:Snapshot,c:WorkCommand,viaRead=false):boolean{
+ const actions:Record<Action,string>={
+  SUBMIT_UNVERIFIED_EVIDENCE:'SubmitUnverifiedEvidence',
+  RECORD_UNVERIFIED_HUMAN_NOTE:'RecordUnverifiedHumanNote'};
+ const match=s.events.filter(e=>e.requestId===c.requestId);
+ if(match.length!==1)return false;
+ const e=match[0],rev=c.expectedRevision+1;
+ return e.revision===rev&&e.action===actions[c.action]&&
+  e.memberRef===c.memberRef&&e.evidenceRef===c.evidenceRef&&
+  e.submittedByClaimRef===c.submittedByClaimRef&&
+  e.originalSubmissionRequestId===c.originalSubmissionRequestId&&
+  e.reviewerClaimRef===c.reviewerClaimRef&&
+  e.reviewNoteEvidenceRef===c.reviewNoteEvidenceRef&&
+  e.periodStartInclusive===c.periodStartInclusive&&
+  e.periodEndExclusive===c.periodEndExclusive&&
+  (s.outcome==='Replayed'||(viaRead&&s.outcome==='READ')||
+   (s.outcome==='RecordedUnverified'&&s.revision===rev));
+}
 export function LateEvidenceWorkItemDemo(){
  const [caseRef,setCaseRef]=useState(newId);
  const [memberRef,setMemberRef]=useState('test:member-claim');
@@ -75,7 +93,7 @@ export function LateEvidenceWorkItemDemo(){
    if(!validated(value,pending.ref)||!['RecordedUnverified','Replayed'].includes(value.outcome))
     throw Error('INVALID_RESPONSE');
    const command=JSON.parse(pending.original) as WorkCommand;
-   if(value.revision<command.expectedRevision+1)throw Error('VERSION_INVALID');
+   if(!acknowledged(value,command))throw Error('UNBOUND_ACK');
    setSnapshot(value);setUnknown(null);
    setMessage(value.outcome==='Replayed'?
     'همان درخواست قبلی بدون ثبت رویداد تازه بازیابی شد.':
@@ -83,6 +101,24 @@ export function LateEvidenceWorkItemDemo(){
   }catch{
    setUnknown(pending);
    setMessage('نتیجه ثبت نامطمئن است. برای جلوگیری از تکرار، فقط همان فرمان را دستی بازپخش کنید.');
+  }finally{setBusy(false);}
+ }
+ async function inspectUnknown(){
+  if(busy||!unknown)return;
+  const original=unknown;
+  setBusy(true);setSnapshot(null);
+  try{
+   const res=await fetch('/internal/demo/v1/late-evidence/'+
+     encodeURIComponent(original.ref),{credentials:'omit',cache:'no-store'});
+   if(!res.ok)throw Error('READ_DENIED');
+   const x:unknown=await res.json();
+   const c=JSON.parse(original.original) as WorkCommand;
+   if(!validated(x,original.ref)||x.outcome!=='READ'||!acknowledged(x,c,true))
+    throw Error('UNBOUND_JOURNAL_READ');
+   setSnapshot(x);setUnknown(null);
+   setMessage('همان فرمان در ژورنال آزمایشی پیدا شد؛ بدون بازپخش یا ثبت جدید بازیابی شد.');
+  }catch{
+   setMessage('ثبت همان فرمان با خواندن تأیید نشد؛ قفل و بازپخش دستی حفظ شد.');
   }finally{setBusy(false);}
  }
  function submit(action:Action){
@@ -144,6 +180,9 @@ export function LateEvidenceWorkItemDemo(){
   {unknown&&<section role="alert">
    <p>ACK ثبت نامعلوم است. فرمان اولیه در حافظه موقت صفحه قفل شده؛
      بدون درخواست تازه فقط همان UUID و متن اصلی را بازپخش کنید.</p>
+   <button disabled={busy} onClick={()=>void inspectUnknown()}>
+     بررسی فقط‌خواندنی فرمان قبلی
+   </button>
    <button disabled={busy} onClick={()=>void send(unknown)}>
      بازپخش دستی دقیق فرمان اولیه
    </button>

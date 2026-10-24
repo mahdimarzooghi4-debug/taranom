@@ -1,4 +1,5 @@
 import {useRef,useState} from 'react';
+import {exactSupportSource} from './support-exact-source';
 import {makeSupportReceipt,parseSupportCommand,parseSupportReceipt} from './support-command-receipt';
 import type {PendingSupportWrite,SupportWriteBody} from './support-command-receipt';
 
@@ -27,33 +28,6 @@ function sameOrigin(input:PendingSupportWrite,existing:Existing){
   wireTopic[existing.topic as Topic]===command.topic&&
   existing.evidenceRef===command.unverifiedEvidenceRef&&
   existing.claimedSubmitterRef===command.claimedSubmitterRef;
-}
-function confirmed(raw:unknown,input:PendingSupportWrite):boolean{
- if(!raw||typeof raw!=='object'||Array.isArray(raw))return false;
- const v=raw as Record<string,unknown>;
- const c=input.command;
- if(v.contract!=='TRN-TECH-075'||v.syntheticOnly!==true||
-  v.memberAuthenticated!==false||v.complaintLegallySubmitted!==false||
-  v.insurerContacted!==false||v.clinicalReviewCompleted!==false||
-  v.nationalReleaseAllowed!==false||v.caseRef!==input.caseRef||
-  (v.outcome!=='RecordedUnverified'&&v.outcome!=='Replayed')||
-  !Number.isSafeInteger(v.revision)||
-  (v.revision as number)<c.expectedRevision+1||
-  (v.outcome==='RecordedUnverified'&&v.revision!==c.expectedRevision+1)||
-  v.memberRef!==c.memberRef||v.evidenceRef!==c.unverifiedEvidenceRef||
-  v.claimedSubmitterRef!==c.claimedSubmitterRef||
-  v.topic!==(c.topic==='MEDICAL_SERVICE_COMPLAINT'?
-   'MedicalServiceComplaint':'InsuranceCoverageDispute')||
-  v.originalRequestId!==(c.action==='SUBMIT_UNVERIFIED'?
-   c.requestId:c.originalSubmissionRequestId))return false;
- if(c.action==='FOLLOW_UP_UNVERIFIED'){
-  if(!Array.isArray(v.followUps))return false;
-  const event=v.followUps[c.expectedRevision-1] as Record<string,unknown>|undefined;
-  if(!event||event.revision!==c.expectedRevision+1||
-   event.noteRef!==c.unverifiedFollowUpNoteRef||
-   event.claimedActorRef!==c.claimedFollowUpActorRef)return false;
- }
- return true;
 }
 export function InternalSupportWrite({caseRef,existing,onChanged,onPendingChange}:{
  caseRef:string;existing:Existing;onChanged:()=>void;onPendingChange:(locked:boolean)=>void}){
@@ -103,13 +77,27 @@ export function InternalSupportWrite({caseRef,existing,onChanged,onPendingChange
      headers:{'Content-Type':'application/json'},body:command.body});
    if(!res.ok)throw Error('REJECTED_OR_UNCERTAIN');
    const raw:unknown=await res.json();
-   if(!confirmed(raw,command))throw Error('UNVERIFIABLE_REPLY');
+   if(!exactSupportSource(raw,command.caseRef,command.command,'ACK'))throw Error('UNVERIFIABLE_REPLY');
+   const check=await fetch('/internal/demo/v1/support/'+encodeURIComponent(command.caseRef),{credentials:'omit',cache:'no-store'});
+   if(!check.ok||!exactSupportSource(await check.json(),command.caseRef,command.command,'READ'))
+    throw Error('ORIGINAL_UUID_NOT_COMMITTED');
    setPhase('CONFIRMED');setPending(null);onPendingChange(false);
    onChanged();
   }catch{
    // No new UUID, payload, expectedRevision or fields may be generated here.
    setPhase('UNCERTAIN');
   }finally{processing.current=false;}
+ }
+ async function inspectPending(){
+  if(processing.current||!pending)return;
+  processing.current=true;setPhase('SUBMITTING');
+  try{
+   const response=await fetch('/internal/demo/v1/support/'+encodeURIComponent(pending.caseRef),{credentials:'omit',cache:'no-store'});
+   if(!response.ok||!exactSupportSource(await response.json(),pending.caseRef,pending.command,'READ'))
+    throw Error('ORIGINAL_UUID_NOT_COMMITTED');
+   setPending(null);setPhase('CONFIRMED');onPendingChange(false);onChanged();
+  }catch{setPhase('UNCERTAIN');}
+  finally{processing.current=false;}
  }
  function importReceipt(){
   if(pending||processing.current)return;
@@ -147,6 +135,8 @@ export function InternalSupportWrite({caseRef,existing,onChanged,onPendingChange
    <label>رسید قابل انتقال درخواست (بدون اعتبار هویتی)
     <textarea aria-label="رسید قابل انتقال درخواست" readOnly
      value={makeSupportReceipt(pending)} rows={5}/></label>
+   <button type="button" disabled={phase==='SUBMITTING'} onClick={()=>void inspectPending()}>
+    بررسی فقط‌خواندنی همان UUID در PostgreSQL</button>
    <button type="button" disabled={phase==='SUBMITTING'||!canRetry}
     onClick={()=>void submit()}>تکرار ایمن همان درخواست</button>
    {!canRetry&&<p role="alert">نسخه یا مالک پرونده ناسازگار است؛ بازپخش مسدود شد.</p>}
@@ -162,7 +152,7 @@ export function InternalSupportWrite({caseRef,existing,onChanged,onPendingChange
   </div>}
   <p role="status">{phase==='IDLE'?'هیچ دستور نوشتنی ارسال نشده است.':
    phase==='SUBMITTING'?'در حال ثبت در PostgreSQL':
-   phase==='CONFIRMED'?'ثبت از پاسخ معتبر سرور تأیید شد؛ بازخوانی در جریان است.':
+   phase==='CONFIRMED'?'همان UUID از PostgreSQL مستقل تأیید شد؛ بازخوانی در جریان است.':
    'نتیجه نامشخص است؛ فقط تکرار دقیق همان درخواست مجاز است.'}</p>
  </section>;
 }

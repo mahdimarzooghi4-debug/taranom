@@ -1,0 +1,12 @@
+name: Sprint 156 Operations Dependencies HTTP React Full Regression
+on:
+  push:
+    branches: [sprint-156-operations-dependency-worklist-ui]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression:
+    uses: ./.github/workflows/taranom-full-regression-reusable.yml

@@ -1,4 +1,9 @@
-import {useState} from 'react';
+import {useRef,useState} from 'react';
+import {CareSupportContinuation,type CarePin} from './care-support-continuation';
+import {MemberCareSupportFollowUp} from './member-care-support-followup';
+import {careReceipt,parseCareReceipt} from './care-command-recovery';
+import {createCareHandoff} from './care-handoff';
+import {type CareClaimReturn,parseCareClaimReturn,matchesCareClaimReturn} from './care-claim-return';
 type Action='REQUEST_NONCLINICAL_COORDINATION'|
  'RECORD_UNVERIFIED_COORDINATOR_CONTACT'|'ATTACH_UNVERIFIED_CLINICAL_SOURCE';
 type Command={requestId:string;expectedRevision:number;action:Action;
@@ -7,6 +12,19 @@ type Command={requestId:string;expectedRevision:number;action:Action;
 type Event={revision:number;action:string;requestId:string;memberRef:string;
  originalMemberRequestRef:string;originalSubmissionRequestId:string;
  claimedActorRef:string|null;unverifiedNoteOrDocumentRef:string|null};
+type CareHistoryPage={
+ contract:'TRN-TECH-195';syntheticOnly:true;unverifiedClaimsOnly:true;
+ source:'VERIFIED_ISOLATED_POSTGRES_CARE_JOURNAL';
+ caseRef:string;currentRevision:number;expectedCurrentRevision:number;
+ afterRevision:number;limit:number;claimType:'ALL'|'CONTACT'|'SOURCE';hasMore:boolean;nextAfterRevision:number|null;
+ events:Event[];
+ realMemberAuthenticated:false;realCoordinatorVerified:false;
+ clinicalSourceVerified:false;clinicianAuthorized:false;
+ referralOrdered:false;referralDelivered:false;appointmentBooked:false;
+ treatmentStarted:false;medicalRecordAccessGranted:false;
+ emergencyServiceDispatched:false;consentGranted:false;
+ walletMutated:false;nationalReleaseAllowed:false
+};
 type Snapshot={contract:'TRN-TECH-115';syntheticOnly:true;unverifiedClaimsOnly:true;
  caseRef:string;outcome:string;revision:number;events:Event[];
  realMemberAuthenticated:false;realCoordinatorVerified:false;
@@ -21,46 +39,223 @@ const denialKeys=['realMemberAuthenticated','realCoordinatorVerified',
  'referralDelivered','appointmentBooked','treatmentStarted',
  'medicalRecordAccessGranted','emergencyServiceDispatched','consentGranted',
  'walletMutated','nationalReleaseAllowed'] as const;
+// The client must recheck exact event lineage before displaying a source
+// snapshot, suggesting next steps or accepting a successful command ACK.
+// This validation is not authorization or a replacement for the PG digest/audit.
+const testRef=(v:unknown):v is string=>typeof v==='string'&&v.length<=100&&
+ /^test:[A-Za-z0-9_:-]+$/.test(v);
+const uuid=(v:unknown):v is string=>typeof v==='string'&&
+ /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 function valid(x:unknown,caseRef:string):x is Snapshot{
- if(!x||typeof x!=='object')return false;
+ if(!x||typeof x!=='object'||Array.isArray(x)||!testRef(caseRef))return false;
  const s=x as Partial<Snapshot>;
  if(s.contract!=='TRN-TECH-115'||s.syntheticOnly!==true||
     s.unverifiedClaimsOnly!==true||s.caseRef!==caseRef||
     !['READ','RecordedUnverified','Replayed'].includes(String(s.outcome))||
     !Number.isSafeInteger(s.revision)||s.revision!<0||
     !Array.isArray(s.events)||s.events.length!==s.revision||
-    !s.events.every((e,i)=>e.revision===i+1&&
-      ['RequestNonclinicalCoordination','RecordUnverifiedCoordinatorContact',
-       'AttachUnverifiedClinicalSourceReference'].includes(e.action)))return false;
- return denialKeys.every(k=>s[k]===false);
+    !denialKeys.every(k=>s[k]===false))return false;
+ let root:Event|undefined;
+ const requestIds=new Set<string>();
+ for(const [i,event] of s.events.entries()){
+  if(!event||event.revision!==i+1||!uuid(event.requestId)||
+     requestIds.has(event.requestId.toLowerCase())||
+     !testRef(event.memberRef)||!testRef(event.originalMemberRequestRef))
+    return false;
+  requestIds.add(event.requestId.toLowerCase());
+  if(i===0){
+   if(event.action!=='RequestNonclinicalCoordination'||
+      event.originalSubmissionRequestId!==zero||
+      event.claimedActorRef!==null||
+      event.unverifiedNoteOrDocumentRef!==null)return false;
+   root=event;
+  }else if(!root||
+      !['RecordUnverifiedCoordinatorContact',
+        'AttachUnverifiedClinicalSourceReference'].includes(event.action)||
+      event.memberRef!==root.memberRef||
+      event.originalMemberRequestRef!==root.originalMemberRequestRef||
+      event.originalSubmissionRequestId!==root.requestId||
+      !testRef(event.claimedActorRef)||
+      !testRef(event.unverifiedNoteOrDocumentRef))return false;
+ }
+ return true;
+}
+function acknowledged(s:Snapshot,c:Command,viaRead=false):boolean{
+ const actions:Record<Action,string>={
+  REQUEST_NONCLINICAL_COORDINATION:'RequestNonclinicalCoordination',
+  RECORD_UNVERIFIED_COORDINATOR_CONTACT:'RecordUnverifiedCoordinatorContact',
+  ATTACH_UNVERIFIED_CLINICAL_SOURCE:'AttachUnverifiedClinicalSourceReference'};
+ const match=s.events.filter(e=>e.requestId===c.requestId);
+ if(match.length!==1)return false;
+ const e=match[0],rev=c.expectedRevision+1;
+ return e.revision===rev&&e.action===actions[c.action]&&
+  e.memberRef===c.memberRef&&
+  e.originalMemberRequestRef===c.originalMemberRequestRef&&
+  e.originalSubmissionRequestId===c.originalSubmissionRequestId&&
+  e.claimedActorRef===c.claimedActorRef&&
+  e.unverifiedNoteOrDocumentRef===c.unverifiedNoteOrDocumentRef&&
+  (s.outcome==='Replayed'||(viaRead&&s.outcome==='READ')||
+   (s.outcome==='RecordedUnverified'&&s.revision===rev));
+}
+// Compare only the original immutable journal event fields after an
+// independent, validated PostgreSQL READ. This is not a delivery receipt.
+const equalEvent=(a:Event,b:Event):boolean=>
+ a.revision===b.revision&&a.action===b.action&&a.requestId===b.requestId&&
+ a.memberRef===b.memberRef&&a.originalMemberRequestRef===b.originalMemberRequestRef&&
+ a.originalSubmissionRequestId===b.originalSubmissionRequestId&&
+ a.claimedActorRef===b.claimedActorRef&&
+ a.unverifiedNoteOrDocumentRef===b.unverifiedNoteOrDocumentRef;
+const appended=(prior:Snapshot,next:Snapshot):Event[]|null=>
+ prior.caseRef===next.caseRef&&next.revision>=prior.revision&&
+ prior.events.every((e,i)=>equalEvent(e,next.events[i]))
+ ?next.events.slice(prior.revision):null;
+const HISTORY_LIMIT=4;
+// History pages are independently read from the canonical source, and also
+// compared event-for-event to the already accepted revision-pinned snapshot.
+type HistoryFilter=CareHistoryPage['claimType'];
+function validHistoryPage(value:unknown,pin:Snapshot,cursor:number,
+ filter:HistoryFilter):value is CareHistoryPage{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const p=value as Partial<CareHistoryPage>;
+ if(p.contract!=='TRN-TECH-195'||p.syntheticOnly!==true||
+    p.unverifiedClaimsOnly!==true||
+    p.source!=='VERIFIED_ISOLATED_POSTGRES_CARE_JOURNAL'||
+    p.caseRef!==pin.caseRef||p.currentRevision!==pin.revision||
+    p.expectedCurrentRevision!==pin.revision||p.afterRevision!==cursor||
+    p.limit!==HISTORY_LIMIT||p.claimType!==filter||
+    !denialKeys.every(k=>p[k]===false)||typeof p.hasMore!=='boolean'||
+    !Array.isArray(p.events)||cursor>pin.revision)return false;
+ // Select AFTER comparison with the complete separately attested source.
+ // Sparse cursor values are ORIGINAL revisions, not filtered ordinals.
+ const matching=pin.events.filter(e=>e.revision>cursor&&(
+  filter==='ALL'||(filter==='CONTACT'&&e.action==='RecordUnverifiedCoordinatorContact')||
+  (filter==='SOURCE'&&e.action==='AttachUnverifiedClinicalSourceReference')));
+ const expected=matching.slice(0,HISTORY_LIMIT);
+ if(p.events.length!==expected.length)return false;
+ for(const [i,e] of p.events.entries()){
+  if(!e||!equalEvent(e,expected[i]))return false;
+ }
+ const hasMore=matching.length>HISTORY_LIMIT;
+ return p.hasMore===hasMore&&p.nextAfterRevision===
+  (hasMore?expected[expected.length-1].revision:null);
+}
+type SuggestedStep={
+ action:Action|null;label:string;contactClaims:number;sourceClaims:number
+};
+// A navigational guide over source-backed, unverified *claims*. The two
+// follow-up types have no clinical prerequisite order; they are suggestions,
+// not authorization, clinical outcomes, SLAs, or business approvals.
+function nextClaimStep(s:Snapshot|null,caseRef:string):SuggestedStep{
+ if(!s||s.caseRef!==caseRef)
+  return {action:null,label:'ابتدا پرونده را از PostgreSQL بخوانید.',
+    contactClaims:0,sourceClaims:0};
+ const contacts=s.events.filter(e=>e.action==='RecordUnverifiedCoordinatorContact').length;
+ const sources=s.events.filter(e=>e.action==='AttachUnverifiedClinicalSourceReference').length;
+ if(s.revision===0)return {action:'REQUEST_NONCLINICAL_COORDINATION',
+    label:'گام ۱: ثبت درخواست هماهنگی صرفاً ادعایی',contactClaims:0,sourceClaims:0};
+ if(contacts===0)return {action:'RECORD_UNVERIFIED_COORDINATOR_CONTACT',
+    label:'گام پیشنهادی: ثبت ادعای تماس هماهنگ‌کننده',contactClaims:contacts,sourceClaims:sources};
+ if(sources===0)return {action:'ATTACH_UNVERIFIED_CLINICAL_SOURCE',
+    label:'گام پیشنهادی: پیوست ارجاع منبع تأییدنشده',contactClaims:contacts,sourceClaims:sources};
+ return {action:null,
+   label:'هر دو نوع ادعای پیگیری ثبت شده‌اند؛ هیچ خدمت یا تماس واقعی احراز نشده است.',
+   contactClaims:contacts,sourceClaims:sources};
 }
 export function CareCoordinationDemo(){
  const [caseRef,setCaseRef]=useState(newRef);
  const [memberRef,setMemberRef]=useState('test:member-claim');
  const [requestRef,setRequestRef]=useState('test:coordination-reason');
  const [coordinator,setCoordinator]=useState('test:claimed-coordinator');
- const [source,setSource]=useState('test:opaque-clinical-source');
+ const [contactNote,setContactNote]=useState('test:claimed-contact-note');
+ const [clinicalSource,setClinicalSource]=useState('test:opaque-clinical-source');
  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
+ const [asOf,setAsOf]=useState<number|null>(null);
+ const [historyPage,setHistoryPage]=useState<CareHistoryPage|null>(null);
+ const [historyFilter,setHistoryFilter]=useState<HistoryFilter>('ALL');
+ const [activity,setActivity]=useState<Event[]|null>(null);
  const [uncertain,setUncertain]=useState<{ref:string;body:string}|null>(null);
+ const [recoveryText,setRecoveryText]=useState('');
+ const [returnText,setReturnText]=useState('');
+ const [confirmedReturn,setConfirmedReturn]=useState<CareClaimReturn|null>(null);
  const [busy,setBusy]=useState(false);
+ // A single increment-only fence for every dismissible GET-only operation.
+ // Never use this to cancel a POST or the original uncertain-UUID latch.
+ const epoch=useRef(0);
+ const [readKind,setReadKind]=useState<'source'|'returnedClaim'|'history'|null>(null);
  const [status,setStatus]=useState('فقط شناسه‌های ساختگی؛ هیچ درخواست واقعی ارسال نشده است.');
+ function cancelRead(){
+  if(readKind===null)return;
+  epoch.current++;
+  setReadKind(null);setBusy(false);setSnapshot(null);setActivity(null);
+  setAsOf(null);setHistoryPage(null);setConfirmedReturn(null);
+  setStatus('خواندن آزمایشی لغو شد؛ پاسخ دیررس پذیرفته نمی‌شود. برای ادامه، دوباره به‌صورت دستی از منبع بخوانید.');
+ }
  function change(fn:(s:string)=>void,value:string){
-  fn(value);setSnapshot(null);setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
+  epoch.current++;
+  fn(value);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  setConfirmedReturn(null);
+  setStatus('ورودی تغییر کرد؛ تاریخچه باید مجدداً از منبع خوانده شود.');
+ }
+ async function verifyReturn(){
+  if(busy||uncertain)return;
+  const generation=++epoch.current;
+  const chosenCase=caseRef,chosenMember=memberRef;
+  // Import is a manual source locator, never a command or access grant.
+  // Clear the previous actionable state BEFORE parsing untrusted text.
+  setBusy(true);setReadKind('returnedClaim');setConfirmedReturn(null);
+  setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  try{
+   const ticket=parseCareClaimReturn(returnText);
+   if(!ticket||ticket.caseRef!==chosenCase||
+     ticket.memberRef!==chosenMember)throw Error('INVALID_RETURN');
+   const response=await fetch('/internal/demo/v1/care-coordination/'+
+     encodeURIComponent(chosenCase),{credentials:'omit',cache:'no-store'});
+   if(!response.ok)throw Error('JOURNAL_UNAVAILABLE');
+   const raw:unknown=await response.json();
+   if(!valid(raw,chosenCase)||raw.outcome!=='READ'||
+      !matchesCareClaimReturn(raw,ticket))
+    throw Error('UNATTESTED_RETURN');
+   if(epoch.current!==generation)return;
+   setSnapshot(raw);setConfirmedReturn(ticket);setReturnText('');
+   setStatus('آخرین ادعای هماهنگی با همان نسخه و UUID جداگانه از PostgreSQL بررسی شد؛ هیچ پیام یا تأیید واقعی دریافت نشده است.');
+  }catch{
+   if(epoch.current!==generation)return;
+   setSnapshot(null);setConfirmedReturn(null);
+   setStatus('رسید بازگشت ادعا با ژورنال مطابقت ندارد؛ هیچ ادعا یا تصمیمی تأیید نشد.');
+  }finally{
+   if(epoch.current===generation){setReadKind(null);setBusy(false);}
+  }
  }
  async function read(){
-  if(busy||uncertain)return;setBusy(true);setSnapshot(null);
+  if(busy||uncertain)return;
+  const previous=snapshot,pinnedCase=caseRef,generation=++epoch.current;
+  setBusy(true);setReadKind('source');
+  setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  setConfirmedReturn(null);
   try{
-   const response=await fetch('/internal/demo/v1/care-coordination/'+encodeURIComponent(caseRef),
+   const response=await fetch('/internal/demo/v1/care-coordination/'+encodeURIComponent(pinnedCase),
     {credentials:'omit',cache:'no-store'});
    if(!response.ok)throw Error('HTTP_DENIED');
    const data:unknown=await response.json();
-   if(!valid(data,caseRef))throw Error('INVALID_SOURCE');
-   setSnapshot(data);setStatus('تاریخچه ممیزی‌شده از PostgreSQL آزمایشی خوانده شد.');
-  }catch{setStatus('منبع قابل تأیید نیست؛ هیچ وضعیت موفقی نمایش داده نمی‌شود.');}
-  finally{setBusy(false);}
+   if(!valid(data,pinnedCase)||data.outcome!=='READ')throw Error('INVALID_SOURCE');
+   const fresh=previous&&previous.caseRef===pinnedCase?appended(previous,data):null;
+   if(previous&&previous.caseRef===pinnedCase&&fresh===null)
+    throw Error('HISTORICAL_JOURNAL_CHANGED_OR_STALE');
+   if(epoch.current!==generation)return;
+   setSnapshot(data);setActivity(fresh);
+   setStatus(fresh===null?'تاریخچه ممیزی‌شده از PostgreSQL آزمایشی خوانده شد.':
+    'رویدادهای تازه فقط با خواندن مستقل PostgreSQL بررسی شدند؛ هیچ خدمت واقعی احراز نشده است.');
+  }catch{
+   if(epoch.current===generation)
+    setStatus('منبع قابل تأیید نیست؛ هیچ وضعیت موفقی نمایش داده نمی‌شود.');
+  }finally{
+   if(epoch.current===generation){setReadKind(null);setBusy(false);}
+  }
  }
  async function send(original:{ref:string;body:string}){
-  if(busy)return;setBusy(true);setSnapshot(null);
+  if(busy)return;
+  epoch.current++;setReadKind(null);
+  setConfirmedReturn(null);setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
   try{
    const result=await fetch('/internal/demo/v1/care-coordination/'+
      encodeURIComponent(original.ref)+'/commands',{
@@ -72,16 +267,94 @@ export function CareCoordinationDemo(){
    if(!valid(x,original.ref)||!['RecordedUnverified','Replayed'].includes(x.outcome))
       throw Error('INVALID_ACK');
    const cmd=JSON.parse(original.body) as Command;
-   if(x.revision<cmd.expectedRevision+1)throw Error('STALE_ACK');
-   setSnapshot(x);setUncertain(null);setStatus(x.outcome==='Replayed'?
+   if(!acknowledged(x,cmd))throw Error('UNBOUND_ACK');
+   // A forged 200 response can describe a valid-looking event that has
+   // never been committed. Do not release the UUID latch until the exact
+   // event is seen in a separate independently validated PostgreSQL GET.
+   const check=await fetch('/internal/demo/v1/care-coordination/'+
+     encodeURIComponent(original.ref),{credentials:'omit',cache:'no-store'});
+   if(!check.ok)throw Error('SOURCE_READ_DENIED');
+   const persisted:unknown=await check.json();
+   if(!valid(persisted,original.ref)||persisted.outcome!=='READ'||
+      !acknowledged(persisted,cmd,true))throw Error('UNBOUND_SOURCE');
+   setSnapshot(persisted);setUncertain(null);setStatus(x.outcome==='Replayed'?
     'همان درخواست، بدون رویداد اضافی بازپخش شد.':
     'رویداد ادعایی ثبت شد؛ ارجاع، تماس واقعی یا نوبت تأیید نشده است.');
   }catch{
    setUncertain(original);setStatus('نتیجه ارسال نامشخص است؛ فقط بازپخش دستی دقیق مجاز است.');
   }finally{setBusy(false);}
  }
+ async function inspectUncertain(){
+  if(busy||!uncertain)return;
+  epoch.current++;setReadKind(null);
+  setConfirmedReturn(null);
+  const original=uncertain;
+  setBusy(true);setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  try{
+   const res=await fetch('/internal/demo/v1/care-coordination/'+
+     encodeURIComponent(original.ref),{credentials:'omit',cache:'no-store'});
+   if(!res.ok)throw Error('READ_DENIED');
+   const x:unknown=await res.json();
+   const c=JSON.parse(original.body) as Command;
+   if(!valid(x,original.ref)||x.outcome!=='READ'||!acknowledged(x,c,true))
+    throw Error('UNBOUND_JOURNAL_READ');
+   setSnapshot(x);setUncertain(null);
+   setStatus('همان فرمان در ژورنال آزمایشی پیدا شد؛ بدون بازپخش یا ثبت جدید بازیابی شد.');
+  }catch{
+   setStatus('ثبت همان فرمان با خواندن تأیید نشد؛ قفل و بازپخش دستی حفظ شد.');
+  }finally{setBusy(false);}
+ }
+ function loadRecovery(){
+  if(busy||uncertain)return;
+  setConfirmedReturn(null);
+  const imported=parseCareReceipt(recoveryText,'MEMBER');
+  if(!imported){
+   setStatus('رسید بازیابی هماهنگی نامعتبر است؛ هیچ فرمانی ارسال نشد.');
+   return;
+  }
+  // No POST, GET, identity or clinical claims on import. Lock first.
+  epoch.current++;setReadKind(null);
+  setCaseRef(imported.caseRef);
+  setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+  setUncertain({ref:imported.caseRef,body:imported.body});
+  setStatus('رسید معتبر آزمایشی بارگذاری شد؛ هیچ POST یا GET اجرا نشد. فرمان تازه قفل است.');
+ }
+ async function readHistory(after:number){
+  if(busy||uncertain||!snapshot||!Number.isSafeInteger(after)||
+     after<0||after>snapshot.revision)return;
+  const pinned=snapshot,selected=historyFilter,generation=++epoch.current;
+  setBusy(true);setReadKind('history');setHistoryPage(null);
+  try{
+   const url='/internal/demo/v1/care-coordination/'+
+    encodeURIComponent(pinned.caseRef)+'/history?afterRevision='+after+
+    '&limit='+HISTORY_LIMIT+'&expectedCurrentRevision='+pinned.revision+
+    '&claimType='+selected;
+   const response=await fetch(url,{credentials:'omit',cache:'no-store'});
+   if(!response.ok)throw Error('HISTORY_SOURCE_FAILED');
+   const page:unknown=await response.json();
+   if(!validHistoryPage(page,pinned,after,selected))throw Error('HISTORY_UNVERIFIED');
+   if(epoch.current!==generation)return;
+   setHistoryPage(page);
+   setStatus('صفحه تاریخچه با نسخه ثابت، جداگانه از PostgreSQL آزمایشی تأیید شد.');
+  }catch{
+   if(epoch.current!==generation)return;
+   setSnapshot(null);setActivity(null);setAsOf(null);setHistoryPage(null);
+   setStatus('تاریخچه صفحه‌بندی‌شده قابل تأیید نیست؛ داده قدیمی کنار گذاشته شد. پرونده را دوباره بخوانید.');
+  }finally{
+   if(epoch.current===generation){setReadKind(null);setBusy(false);}
+  }
+ }
+ function canIssue(action:Action|null):boolean{
+  // The selected historical version is NEVER a command source.
+  if(!snapshot||!action||snapshot.caseRef!==caseRef||busy||uncertain||
+    (asOf!==null&&asOf!==snapshot.revision))return false;
+  if(action==='REQUEST_NONCLINICAL_COORDINATION')
+   return snapshot.revision===0&&testRef(memberRef)&&testRef(requestRef);
+  const value=action==='RECORD_UNVERIFIED_COORDINATOR_CONTACT'?contactNote:clinicalSource;
+  return snapshot.revision>0&&testRef(coordinator)&&testRef(value);
+ }
  function issue(action:Action){
-  if(!snapshot||busy||uncertain)return;
+  if(!canIssue(action)||!snapshot)return;
   const origin=snapshot.events[0];
   if(action!=='REQUEST_NONCLINICAL_COORDINATION'&&!origin)return;
   const first=action==='REQUEST_NONCLINICAL_COORDINATION';
@@ -91,9 +364,26 @@ export function CareCoordinationDemo(){
    originalMemberRequestRef:first?requestRef:origin.originalMemberRequestRef,
    originalSubmissionRequestId:first?zero:origin.requestId,
    claimedActorRef:first?null:coordinator,
-   unverifiedNoteOrDocumentRef:first?null:source};
-  void send({ref:caseRef,body:JSON.stringify(cmd)});
+   unverifiedNoteOrDocumentRef:first?null:
+    action==='RECORD_UNVERIFIED_COORDINATOR_CONTACT'?contactNote:clinicalSource};
+  const original={ref:caseRef,body:JSON.stringify(cmd)};
+  // Make the exact UUID/payload manually exportable before HTTP ACK.
+  setUncertain(original);
+  void send(original);
  }
+ const suggestion=nextClaimStep(snapshot,caseRef);
+ const guideAction=uncertain?null:suggestion.action;
+ const chosenRevision=asOf??snapshot?.revision??0;
+ const historical=snapshot!==null&&chosenRevision!==snapshot.revision;
+ const asOfEvents=snapshot?.events.slice(0,chosenRevision)??[];
+ const afterEvents=snapshot?.events.slice(chosenRevision)??[];
+ const asOfContact=asOfEvents.filter(e=>
+  e.action==='RecordUnverifiedCoordinatorContact').length;
+ const asOfSource=asOfEvents.filter(e=>
+  e.action==='AttachUnverifiedClinicalSourceReference').length;
+ const eventLabel=(action:string)=>action==='RecordUnverifiedCoordinatorContact'
+  ?'ادعای تماس تأییدنشده':action==='AttachUnverifiedClinicalSourceReference'
+  ?'مرجع بالینی ادعایی تأییدنشده':'درخواست هماهنگی غیرتشخیصی';
  return <section className="care-demo" dir="rtl">
   <h1>هماهنگی غیرتشخیصی و پیگیری ادعایی عضو</h1>
   <p className="risk">فقط محیط آزمایشی: بدون احراز هویت، تماس واقعی، تعیین تیم درمان،
@@ -111,7 +401,9 @@ export function CareCoordinationDemo(){
       onChange={e=>change(setRequestRef,e.target.value)}/></label>
    <button disabled={busy||!!uncertain} onClick={()=>void read()}>
     خواندن پرونده هماهنگی</button>
-   <button disabled={busy||!!uncertain||!snapshot||snapshot.revision!==0}
+   {snapshot&&<button type="button" disabled={busy||!!uncertain}
+    onClick={()=>void read()}>بررسی دستی تغییرات هماهنگی عضو</button>}
+   <button disabled={!canIssue('REQUEST_NONCLINICAL_COORDINATION')}
     onClick={()=>issue('REQUEST_NONCLINICAL_COORDINATION')}>
     ثبت درخواست ادعایی هماهنگی</button>
   </fieldset>
@@ -119,26 +411,216 @@ export function CareCoordinationDemo(){
    <label>شناسه مدعی هماهنگ‌کننده
     <input dir="ltr" value={coordinator} disabled={busy||!!uncertain}
       onChange={e=>change(setCoordinator,e.target.value)}/></label>
-   <label>ارجاع یادداشت یا منبع بالینیِ تأییدنشده
-    <input dir="ltr" value={source} disabled={busy||!!uncertain}
-      onChange={e=>change(setSource,e.target.value)}/></label>
-   <button disabled={busy||!!uncertain||!snapshot||snapshot.revision===0}
+   <label>مرجع یادداشت تماس ادعایی، تأییدنشده
+    <input dir="ltr" value={contactNote} disabled={busy||!!uncertain}
+      onChange={e=>change(setContactNote,e.target.value)}/></label>
+   <button disabled={!canIssue('RECORD_UNVERIFIED_COORDINATOR_CONTACT')}
     onClick={()=>issue('RECORD_UNVERIFIED_COORDINATOR_CONTACT')}>
     ثبت ادعای تماس هماهنگ‌کننده</button>
-   <button disabled={busy||!!uncertain||!snapshot||snapshot.revision===0}
+   <label>مرجع منبع بالینی ادعایی، تأییدنشده
+    <input dir="ltr" value={clinicalSource} disabled={busy||!!uncertain}
+      onChange={e=>change(setClinicalSource,e.target.value)}/></label>
+   <button disabled={!canIssue('ATTACH_UNVERIFIED_CLINICAL_SOURCE')}
     onClick={()=>issue('ATTACH_UNVERIFIED_CLINICAL_SOURCE')}>
     پیوست ارجاع به منبع بالینیِ تأییدنشده</button>
+   <p>این دو ورودی صرفاً ادعاهای مجزا هستند؛ هیچ سند، اجازه درمان یا رضایت واقعی ایجاد نمی‌شود.</p>
   </fieldset>
+  <section role="region" aria-label="راهنمای پیگیری غیرتشخیصی آزمایشی"
+    data-testid="care-guided-workflow">
+   <h2>راهنمای پیگیری ادعایی عضو — بدون تصمیم بالینی</h2>
+   <p>گام پیشنهادی تنها از رویدادهای خوانده‌شده PostgreSQL به دست می‌آید.
+      ادعای تماس و ارجاع منبع الزاماً ترتیب حقوقی یا درمانی ندارند؛
+      هیچ فرمانی به‌صورت خودکار اجرا نمی‌شود.</p>
+   <p data-testid="care-guided-step" aria-live="polite">
+    {busy?'در حال بررسی؛ فرمان تازه مجاز نیست.':
+     uncertain?'پاسخ فرمان قبلی نامعلوم است؛ قبل از هر گام جدید همان درخواست را بازیابی کنید.':
+     suggestion.label}
+   </p>
+   {snapshot&&<p data-testid="care-guided-counts">
+     نسخه ژورنال: {snapshot.revision} |
+     ادعاهای تماس: {suggestion.contactClaims} |
+     ارجاعات تأییدنشده: {suggestion.sourceClaims}
+   </p>}
+   {guideAction&&<button type="button"
+     disabled={!canIssue(guideAction)}
+     onClick={()=>issue(guideAction)}>ثبت گام پیشنهادی با کلیک مستقل</button>}
+   <p>این راهنما مسئولیت پزشکی، تماس واقعی، ارجاع، درمان، نوبت،
+      رضایت یا دسترسی به پرونده ایجاد نمی‌کند. در موارد اضطراری
+      از مسیر خدمات اورژانس رسمی استفاده شود.</p>
+  </section>
   {uncertain&&<section role="alert"><p>ممکن است رویداد در سرور ثبت شده باشد.
    فرمان جدید قفل است؛ همان متن اصلی و UUID فقط با کلیک جداگانه تکرار می‌شود.</p>
+   <label>رسید متنیِ دستی هماهنگی عضو — فقط آزمایش، بدون مجوز
+    <textarea data-testid="care-recovery-export" readOnly
+     value={careReceipt('MEMBER',uncertain.ref,uncertain.body)} rows={4}/></label>
+   <p>پیش از بستن صفحه، متن رسید را خودتان نگه دارید؛ هیچ ذخیره خودکار وجود ندارد.</p>
+   <button disabled={busy} onClick={()=>void inspectUncertain()}>
+    بررسی فقط‌خواندنی فرمان قبلی</button>
    <button disabled={busy} onClick={()=>void send(uncertain)}>
     بازپخش دستی دقیق فرمان قبلی</button></section>}
+  <fieldset aria-label="بازیابی دستی هماهنگی عضو">
+   <legend>بازیابی دستی فرمان نامطمئن پس از بارگذاری مجدد</legend>
+   <label>متن رسید بازیابی هماهنگی عضو
+    <textarea value={recoveryText} maxLength={4096} rows={4}
+     disabled={busy||!!uncertain} onChange={e=>setRecoveryText(e.target.value)}/></label>
+   <button type="button" disabled={busy||!!uncertain}
+    onClick={loadRecovery}>بارگذاری رسید هماهنگی عضو بدون ارسال</button>
+   <p>رسید فقط شناسه و فرمان test: را برمی‌گرداند؛ فاقد هویت، رضایت، سند یا مجوز درمانی است.</p>
+  </fieldset>
+  <fieldset data-testid="member-care-claim-return">
+   <legend>بررسی دستی بازگشت آخرین ادعای هماهنگی از مرکز — فقط آزمایش</legend>
+   <p>این رسید فقط شناسه یک ادعای ثبت‌شده در ژورنال را حمل می‌کند؛
+    پیام واقعی، ارتباط با مرکز، رضایت، صحت سند یا نتیجه درمان نیست.</p>
+   <label>ورود رسید بازگشت ادعای هماهنگی مرکز
+    <textarea rows={4} maxLength={1400} dir="ltr"
+     value={returnText} disabled={busy||!!uncertain}
+     onChange={e=>{epoch.current++;setReturnText(e.target.value);
+      setConfirmedReturn(null);setSnapshot(null);setActivity(null);
+      setAsOf(null);setHistoryPage(null);}}/>
+   </label>
+   <button type="button" disabled={busy||!!uncertain||!returnText}
+    onClick={()=>void verifyReturn()}>
+    بررسی مستقل ادعای بازگشتی از PostgreSQL
+   </button>
+   {confirmedReturn&&snapshot&&
+    <p data-testid="member-care-claim-return-confirmed">
+     نسخه {confirmedReturn.revision}، رویداد
+     <code>{confirmedReturn.claimRequestId}</code> و مرجع ادعایی
+     <code>{confirmedReturn.claimRef}</code> با ژورنال آزمایشی تطبیق یافت؛
+     هیچ پاسخ رسمی، تماس واقعی، مجوز بالینی یا اعلان احراز نشده است.
+    </p>}
+  </fieldset>
   <p role="status" data-testid="care-status">{status}</p>
+  {readKind!==null&&<section data-testid="member-care-read-cancel" role="region"
+   aria-label="لغو خواندن فقط‌خواندنی">
+   <p>فقط خواندن مستقل پرونده، رسید بازگشتی یا صفحه تاریخچه در جریان است.
+    لغو آن هیچ POST انجام نمی‌دهد و فرمان نامطمئن را بازپخش نمی‌کند.</p>
+   <button type="button" onClick={cancelRead}>
+    لغو خواندن آزمایشی بدون ثبت فرمان
+   </button>
+  </section>}
+  {snapshot&&snapshot.outcome==='READ'&&snapshot.revision>=1&&!busy&&!uncertain&&
+   (asOf===null||asOf===snapshot.revision)&&
+   createCareHandoff(snapshot,caseRef,memberRef)!==''&&
+   <section data-testid="member-care-handoff" role="region"
+    aria-label="تحویل دستی درخواست هماهنگی آزمایشی">
+    <h2>تحویل دستی شناسه درخواست به مرکز — فقط آزمایش</h2>
+    <p>این رسید تنها به نسخه دقیق ژورنال تأییدنشده اشاره می‌کند.
+     رسید هویت، اجازه مشاهده پرونده پزشکی، انتقال درمان یا ارجاع نیست.
+     آن را فقط به صورت دستی منتقل کنید؛ مرورگر آن را ذخیره نمی‌کند.</p>
+    <label>رسید تحویل دستی هماهنگی عضو
+     <textarea readOnly rows={4} dir="ltr"
+      value={createCareHandoff(snapshot,caseRef,memberRef)}/></label>
+   </section>}
+  <CareSupportContinuation
+   source={snapshot&&snapshot.outcome==='READ'&&snapshot.revision>=1&&
+    !busy&&!uncertain&&(asOf===null||asOf===snapshot.revision)&&
+    snapshot.events[0]?.memberRef===memberRef
+    ?{caseRef,revision:snapshot.revision,memberRef,
+      rootRequestId:snapshot.events[0].requestId}:null}
+   verifyCare={(raw:unknown,pin:CarePin)=>valid(raw,pin.caseRef)&&
+    raw.outcome==='READ'&&raw.revision===pin.revision&&
+    raw.events[0]?.requestId===pin.rootRequestId&&
+    raw.events[0]?.memberRef===pin.memberRef}
+  />
+  <MemberCareSupportFollowUp
+   source={snapshot&&snapshot.outcome==='READ'&&snapshot.revision>=1&&
+    !busy&&!uncertain&&(asOf===null||asOf===snapshot.revision)&&
+    snapshot.events[0]?.memberRef===memberRef
+    ?{caseRef,revision:snapshot.revision,memberRef,
+      rootRequestId:snapshot.events[0].requestId}:null}
+   verifyCare={(raw:unknown,pin:CarePin)=>valid(raw,pin.caseRef)&&
+    raw.outcome==='READ'&&raw.revision===pin.revision&&
+    raw.events[0]?.requestId===pin.rootRequestId&&
+    raw.events[0]?.memberRef===pin.memberRef}
+  />
+  {activity!==null&&snapshot&&<section data-testid="member-care-activity" role="status">
+   <p>پس از خواندن قبلی همین صفحه {activity.length} رویداد ادعایی اضافه شده است.
+    این اعلان رسمی، رسید مشاهده، تماس واقعی یا تأیید پزشکی نیست.</p>
+   <ul>{activity.map(e=><li key={e.requestId}>
+    نسخه {e.revision}: {eventLabel(e.action)} — {e.unverifiedNoteOrDocumentRef??'بدون مرجع'}
+   </li>)}</ul>
+  </section>}
+  {snapshot&&<section data-testid="member-care-server-history"
+   role="region" aria-label="تاریخچه صفحه‌بندی‌شده PostgreSQL">
+   <h2>بازخوانی مستقل تاریخچه با نسخه ثابت</h2>
+   <p>این مسیر فقط با اقدام دستی و از همان ژورنال ممیزی‌شده PostgreSQL
+    رویدادهای تأییدنشده را در صفحات چهاررویدادی می‌خواند.
+    اگر نسخه بین صفحات تغییر کند، ادامه بدون بازخوانی پرونده رد می‌شود.</p>
+   <label>نوع ادعای تاریخچه نسخه‌ثابت
+    <select aria-label="فیلتر تاریخچه هماهنگی عضو" value={historyFilter}
+     disabled={busy||!!uncertain}
+     onChange={e=>{epoch.current++;setHistoryFilter(e.target.value as HistoryFilter);setHistoryPage(null);}}>
+     <option value="ALL">تمام رویدادها</option>
+     <option value="CONTACT">فقط ادعاهای تماس</option>
+     <option value="SOURCE">فقط ارجاع‌های منبع بالینی تأییدنشده</option>
+    </select>
+   </label>
+   <button type="button" disabled={busy||!!uncertain}
+    onClick={()=>void readHistory(0)}>خواندن نخستین صفحه تاریخچه</button>
+   {historyPage&&<div data-testid="member-care-server-history-page">
+    <p>نسخه پین‌شده: {historyPage.currentRevision}؛
+     شروع پس از نسخه: {historyPage.afterRevision}؛
+     نوع ادعا: {historyPage.claimType}</p>
+    <ol>{historyPage.events.map(e=><li key={e.requestId}>
+     نسخه {e.revision}: {eventLabel(e.action)} —
+     شناسه درخواست <code>{e.requestId}</code>،
+     مرجع ادعایی <code>{e.unverifiedNoteOrDocumentRef??'ثبت نشده'}</code>
+    </li>)}</ol>
+    {historyPage.hasMore&&historyPage.nextAfterRevision!==null&&
+     <button type="button" disabled={busy||!!uncertain}
+      onClick={()=>void readHistory(historyPage.nextAfterRevision!)}>
+      صفحه بعدی تاریخچه با همان نسخه</button>}
+   </div>}
+  </section>}
+  {snapshot&&<section data-testid="member-care-version-explorer"
+   role="region" aria-label="کاوش نسخه‌های تاریخی هماهنگی">
+   <h2>بررسی نسخه‌به‌نسخه ادعاهای هماهنگی — فقط خواندنی</h2>
+   <p>منبع این گزارش فقط آخرین GET معتبر ژورنال PostgreSQL آزمایشی است.
+    هیچ داده تاریخی بازنویسی نمی‌شود و نسخه گذشته برای فرمان جدید قابل استفاده نیست.</p>
+   <label>نسخه تاریخی برای مشاهده
+    <select aria-label="نسخه تاریخی برای مشاهده" value={chosenRevision}
+     disabled={busy||!!uncertain}
+     onChange={e=>setAsOf(Number(e.target.value))}>
+     {Array.from({length:snapshot.revision+1},(_,i)=>
+      <option key={i} value={i}>نسخه {i}</option>)}
+    </select>
+   </label>
+   {historical&&<button type="button" disabled={busy||!!uncertain}
+    onClick={()=>setAsOf(null)}>بازگشت به نسخه جاری هماهنگی</button>}
+   <p data-testid="member-care-as-of-counts">
+    نمای نسخه {chosenRevision} از {snapshot.revision} |
+    ادعاهای تماس تا این نسخه: {asOfContact} |
+    منابع بالینی ادعایی تا این نسخه: {asOfSource} |
+    رویدادهای ثبت‌شده بعد از نسخه منتخب: {afterEvents.length}
+   </p>
+   {historical&&<p>نمای تاریخی فعال است؛ هیچ فرمان تازه‌ای بر اساس این نسخه صادر نمی‌شود.
+    برای ادامه فقط به نسخه جاری بازگردید.</p>}
+   <h3>رویدادها تا نسخه انتخابی</h3>
+   <ol data-testid="member-care-as-of-events">
+    {asOfEvents.map(e=><li key={e.requestId}>
+     نسخه {e.revision}: {eventLabel(e.action)} — درخواست <code>{e.requestId}</code>؛
+     شناسه ادعایی عضو <code>{e.memberRef}</code>؛
+     مرجع درخواست اولیه <code>{e.originalMemberRequestRef}</code>؛
+     UUID درخواست اصلی <code>{e.originalSubmissionRequestId}</code>؛
+     مدعی هماهنگ‌کننده <code>{e.claimedActorRef??'ثبت نشده'}</code>؛
+     مرجع ادعایی <code>{e.unverifiedNoteOrDocumentRef??'ثبت نشده'}</code>
+    </li>)}
+   </ol>
+   <h3>رویدادهای پس از نسخه انتخابی</h3>
+   <ol data-testid="member-care-after-events">
+    {afterEvents.map(e=><li key={e.requestId}>
+     نسخه {e.revision}: {eventLabel(e.action)} — <code>{e.requestId}</code>
+    </li>)}
+   </ol>
+   <p>این تاریخچه، تأیید هویت، رضایت، تماس واقعی، صحت مدارک،
+    ارجاع پزشکی، ارائه خدمت یا مجوز درمانی ایجاد نمی‌کند.</p>
+  </section>}
   {snapshot&&<section className="timeline" role="region" aria-label="تاریخچه هماهنگی ادعایی">
    <p>نسخه پرونده: <strong>{snapshot.revision}</strong></p>
    <p>ارجاع پزشکی، تماس واقعی، نوبت و دسترسی به پرونده: <strong>هیچ‌کدام</strong></p>
    <ol>{snapshot.events.map(e=><li key={e.revision}>
-    نسخه {e.revision}: {e.action} — {e.unverifiedNoteOrDocumentRef??'بدون سند'}
+    نسخه {e.revision}: {eventLabel(e.action)} ({e.action}) — {e.unverifiedNoteOrDocumentRef??'بدون سند'}
    </li>)}</ol>
   </section>}
  </section>;

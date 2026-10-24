@@ -1,0 +1,5 @@
+# TRN-SP-188 — DRAFT / Claim-type-filtered, source-pinned care history
+
+Parent Draft/Open [Sprint 187 PR #201](https://github.com/mahdimarzooghi4-debug/taranom/pull/201), exact parent `b4d47be144f175a0fb48f06c4c06394c5b9d02f9`. Technical: [TRN-TECH-197](../technical/TRN-TECH-197-care-history-claim-filter.md).
+
+Deliver a real end-to-end nonclinical synthetic user function: in both Member and Center, deliberately filter independently verified PostgreSQL care history pages by recorded contact claims or unverified clinical-source references, while retaining a globally pinned case revision, original sparse event revision cursor, exact event/UUID/root and all thirteen real-world denials. Extend existing backend GET with optional allowlisted parameter and preserve three-parameter callers; no new endpoint, role, schema, event or clinical judgment. Five real Chromium/Kestrel/PostgreSQL tests, expanded HTTP API check, all 14 canonical full-CI jobs and technical COMMENTED review only. No merge/deployment, nationwide release DENIED_BY_DEFAULT.

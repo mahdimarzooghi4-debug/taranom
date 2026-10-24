@@ -1,0 +1,17 @@
+# TRN-TECH-193 — DRAFT / Human-triggered all-row audit of Center care worklist page
+
+Date: 2026-10-21. Business TRN-BIZ-046, with TRN-BIZ-035/036/043/047 authority boundaries. Existing sources: TRN-TECH-115/172/184/186/187/190/191/192.
+
+## Product gap and technical contract
+
+The Center test worklist already supports selecting one case, source-filtered keyset paging and manual page-local count deltas. But a Center tester cannot confirm that EVERY row shown in one page still matches each individual case's exact **canonical journal** revision, event lineage and counts without separately copying four case identifiers. Introduce one user-clicked **independent audit of the currently visible page** in the existing Center Persian React app, strictly for synthetic `test:` cases. Do not invent work assignments, urgency, clinician verification, clinical source status, member identity or notices.
+
+The existing `TRN-TECH-186` server source page comes from least-privileged read-only PostgreSQL REPEATABLE READ and source/audit SHA-256 reconstruction. On a deliberate human click, freeze this page's ordered rows and individually GET each ref through the **existing** `TRN-TECH-115` endpoint. Move its canonical read contract validator (expected source scope, all 13 false authority flags, revision and contiguous events, UUID4 uniqueness, original request/root and follow-up lineage, bounded synthetic refs, action shapes) from Center coordination into a single shared module also used by worklist. The independent GET must have `READ` outcome, the same caseRef and EXACT matching revision/contact/source counts. A concurrent append or forged/malformed/failed source read invalidates the WHOLE batch. Never accept a subset; clear old rows, activity and audit results and fail closed. Only a fresh human-clicked list GET re-establishes a baseline; do not silently update the page or retry.
+
+The page audit is not a cross-case atomic snapshot (the individual read transactions happen sequentially), nor an authentic clinical record proof. It attests each row independently at read time, failing if case history changed between list and individual GET. No POST, automatic polling, consent changes, member search, clinical conclusion, notifications, new roles/events/endpoints/tables or durable client storage. Browsers operate only on CI loopback synthetic data. Parent pending-command interlock still disables worklist selections when active.
+
+## Acceptance and gates
+
+Four new real Chromium/Kestrel/isolated PostgreSQL tests: (1) four source cases spanning both follow-up kinds independently match exact version/counters; 4 GET and 0 browser POST; changing filter clears audit. (2) Committed case revision after initial page read prevents partial batch acceptance, with manual re-baseline recovery. (3) Injected authority-positive read and subsequently broken root lineage deny all results. (4) HTTP failure denies and removes previous actionable rows. Run exact-head canonical full 14-job CI including member/center browser regressions, least-privilege PostgreSQL and restore. Preliminary technical COMMENTED review only, never independent human approval.
+
+No real identity, consent, patient record, provider license, professional decision, booking, referral, payments, insurer integration or external AI. National initial comprehensive three-market release stays `DENIED_BY_DEFAULT`; PR stays Draft/Open/Unmerged and no Stage/QA Gate/Release Approval/Production.

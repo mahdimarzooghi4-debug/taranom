@@ -26,6 +26,13 @@ jobs:
           python3 -m unittest discover -s tests/policy_checks -p 'test_epic_capability_progress.py' -v
           python3 tools/policy_checks/check_epic_capability_progress.py --root . --report-json TestResults/fullci-epic-progress.json
           python3 -c "import json; p=json.load(open('TestResults/fullci-epic-progress.json')); assert p['status']=='DRAFT_EVIDENCE_CATALOG_ONLY' and p['epic_count']==13 and p['provisional_capabilities']==39 and p['external_blockers_unverified']==17 and p['overall_implementation_completion_pct'] is None and not p['national_release_allowed']"
+      - name: Compile source-backed national dependency worklist without invented owners
+        run: |
+          python3 -m unittest discover -s tests/policy_checks -p 'test_release_dependency_worklist.py' -v
+          python3 tools/policy_checks/build_release_dependency_worklist.py --root . --report-json TestResults/fullci-release-dependency-worklist.json --report-md TestResults/fullci-release-dependency-worklist.md --report-csv TestResults/fullci-release-dependency-worklist.csv
+          python3 -c "import json; r=json.load(open('TestResults/fullci-release-dependency-worklist.json')); assert r['status']=='DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST' and r['blocked_domains']==17 and r['required_owners_unassigned'] == 18 and len(r['work_items'])==18 and r['candidate_capabilities']==39 and r['formal_approval_observed'] is False and r['production_ready'] is False and r['national_release_allowed'] is False"
+          test -s TestResults/fullci-release-dependency-worklist.md
+          test -s TestResults/fullci-release-dependency-worklist.csv
       - name: Build and security-test offline Epic delivery console and CSV
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_epic_progress_console.py' -v
@@ -72,14 +79,31 @@ jobs:
           dotnet-version: '10.0.401'
       - name: Reject known external AI SDK, inference endpoints and API credentials
         run: |
+          python3 -m unittest discover -s tests/ai -p 'test_*.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_external_ai_boundary.py' -v
           python3 tools/policy_checks/check_external_ai_boundary.py --root .
+          # TRN-TECH-158: inspect only an EMPTY provider-neutral template;
+          # real outside custody remains UNCONFIGURED, never CI-approved.
+          mkdir -p TestResults
+          python3 tools/qa/check_worker_external_custody.py --manifest docs/governance/ai-worker-external-custody-template.json --report-json TestResults/fullci-worker-external-custody-unconfigured.json
+          python3 -c "import json; r=json.load(open('TestResults/fullci-worker-external-custody-unconfigured.json')); assert r['status']=='EXTERNAL_CUSTODY_NOT_CONFIGURED' and not r['independent_custody_verified'] and not r['external_receipt_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
+          # TRN-TECH-159 receipt claims are never a trusted external receipt.
+          # All receipt integrity/replay/role-spoof attacks run in the
+          # canonical tests/ai discovery (same mandatory 14-job workflow).
       - name: Verify comprehensive national release blockers remain DENY-ONLY
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_national_launch_blockers.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_stage4_test_preflight.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_stage4_git_candidate.py' -v
           mkdir -p TestResults
           python3 tools/policy_checks/check_national_launch_blockers.py --root . --report-json TestResults/fullci-national-blockers.json
           test -s TestResults/fullci-national-blockers.json
+          python3 tools/policy_checks/check_stage4_test_preflight.py --root . --report-json TestResults/fullci-stage4-preflight.json
+          test -s TestResults/fullci-stage4-preflight.json
+      - name: Report exact unmerged Git candidate ancestry or explicit nonpush nonattestation
+        run: |
+          python3 tools/policy_checks/check_stage4_git_candidate.py --root . --report-json TestResults/fullci-stage4-git-candidate.json
+          python3 -c "import json,os; d=json.load(open('TestResults/fullci-stage4-git-candidate.json')); assert (d['status']=='PREMERGE_GIT_ANCESTRY_CONSISTENT' and d['local_git_ancestry_verified']) if os.environ.get('GITHUB_EVENT_NAME')=='push' and os.environ.get('GITHUB_REF_NAME')=='sprint-131-stage4-premerge-git-candidate' else (d['status']=='NOT_ATTESTED_NONPUSH_CONTEXT' and not d['local_git_ancestry_verified']); assert d['stage4_test_admission']=='DENIED' and not d['stage_deployment_authorized'] and not d['production_release_allowed']"
       - name: Build bounded member governance contract project
         run: |
           dotnet restore tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj
@@ -107,6 +131,8 @@ jobs:
           path: |
             TestResults/sprint03-governance.xml
             TestResults/fullci-national-blockers.json
+            TestResults/fullci-stage4-preflight.json
+            TestResults/fullci-stage4-git-candidate.json
             TestResults/fullci-public-history-safety.json
             TestResults/fullci-private-evidence-empty.json
             TestResults/fullci-workflow-trust.json
@@ -644,6 +670,18 @@ jobs:
           python3 tests/ops_status/test_three_market_entry_http.py
           python3 tests/ops_status/test_payer_scenario_http.py
           python3 tests/ops_status/test_unified_local_surfaces_http.py
+          export TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY
+          export TARANOM_AI_HTTP_TEST_ONLY=CI_EPHEMERAL_ONLY
+          ai_tmp=$(mktemp -d /tmp/taranom-ai-qa.XXXXXX)
+          python3 -m ai.taranom_internal.server --db "$ai_tmp/registry.sqlite3" > "$RUNNER_TEMP/taranom-ai-http.log" 2>&1 &
+          qa_pid=$!
+          trap 'kill "$qa_pid" "$server_pid" 2>/dev/null || true' EXIT
+          ai_ready=0
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail --max-time 2 http://127.0.0.1:4335/internal/ai-test/v1/health > /dev/null; then ai_ready=1; break; fi
+            sleep 1
+          done
+          test "$ai_ready" = "1"
           cd apps/ops-web
           CI=true npm run test:e2e
       - name: Upload local-only HTTP/browser QA records
@@ -692,14 +730,30 @@ jobs:
         run: |
           password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
           printf 'TARANOM_SUPPORT_READER_TEST_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
+      - name: Mint two unrelated ephemeral organization login credentials
+        run: |
+          support=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          corporate=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          printf 'TARANOM_ORG_SUPPORT_TEST_PASSWORD=%s\n' "$support" >> "$GITHUB_ENV"
+          printf 'TARANOM_ORG_CORPORATE_TEST_PASSWORD=%s\n' "$corporate" >> "$GITHUB_ENV"
+      - name: Mint independent ephemeral AI denial writer and reader credentials
+        run: |
+          writer=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          reader=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+          printf 'TARANOM_AI_AUDIT_WRITER_TEST_PASSWORD=%s\n' "$writer" >> "$GITHUB_ENV"
+          printf 'TARANOM_AI_AUDIT_READER_TEST_PASSWORD=%s\n' "$reader" >> "$GITHUB_ENV"
       - name: Build existing event-sourced center journal with isolated ASP.NET demo host
         run: |
           dotnet restore src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj
           dotnet build src/Taranom.CenterWorkflow.Demo/Taranom.CenterWorkflow.Demo.csproj --no-restore --configuration Release
+          dotnet run --project tests/Taranom.AiWorkerBoundary.Probe/Taranom.AiWorkerBoundary.Probe.csproj --configuration Release
+          dotnet run --project tests/Taranom.AiWorkerFault.Probe/Taranom.AiWorkerFault.Probe.csproj --configuration Release
+          dotnet run --project tests/Taranom.AiWorkerTelemetry.Probe/Taranom.AiWorkerTelemetry.Probe.csproj --configuration Release
+          TARANOM_AI_WORKER_EVIDENCE_TEST_ONLY=CI_EPHEMERAL_ONLY dotnet run --project tests/Taranom.AiWorkerEvidence.Probe/Taranom.AiWorkerEvidence.Probe.csproj --configuration Release
           cd apps/center-demo-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
-          npm run build
+          VITE_TARANOM_ORG_DRAFT_QA=1 npm run build
           mkdir -p ../../src/Taranom.CenterWorkflow.Demo/wwwroot
           cp -R dist/. ../../src/Taranom.CenterWorkflow.Demo/wwwroot/
           cd ../member-support-demo-web
@@ -738,8 +792,17 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Execute PostgreSQL-backed real HTTP, denied business authority and UI QA
         run: |
+          bridge_tmp=$(mktemp -d /tmp/taranom-worker-XXXXXX)
+          export TARANOM_AI_BRIDGE_TEST_DB="$bridge_tmp/registry.sqlite3"
+          export TARANOM_AI_WORKER_BRIDGE_TEST_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+          export TARANOM_AI_WORKER_REPO_ROOT="$GITHUB_WORKSPACE"
+          export TARANOM_AI_WORKER_QA=CI_EPHEMERAL_ONLY
+          export TARANOM_AI_RESTART_WITNESS="$bridge_tmp/epoch-witness.json"
+          export TARANOM_AI_WORKER_EVIDENCE_TEST_ONLY=CI_EPHEMERAL_ONLY
+          export TARANOM_AI_WORKER_EVIDENCE_FILE="$bridge_tmp/worker-evidence.jsonl"
+          TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY python3 -c 'import os; from ai.taranom_internal.registry import OfflineRegistry; OfflineRegistry(os.environ["TARANOM_AI_BRIDGE_TEST_DB"]).initialize()'
           cd src/Taranom.CenterWorkflow.Demo
-          TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
+          TARANOM_AI_ADMIN_QA=CI_EPHEMERAL_ONLY TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           cd "$GITHUB_WORKSPACE"
@@ -752,11 +815,20 @@ jobs:
             echo "Ephemeral test-only center host failed to start" >&2
             exit 1
           fi
+          python3 tests/center_demo/test_ai_admin_denial_http.py
+          python3 tests/center_demo/test_ai_worker_bridge_http.py
           python3 tests/center_demo/test_real_center_demo_http.py
           python3 tests/center_demo/test_proofing_correction_http.py
           python3 tests/center_demo/test_late_evidence_work_item_http.py
           python3 tests/center_demo/test_care_coordination_http.py
+          python3 tests/center_demo/test_synthetic_command_ingress_timeout.py
           python3 tests/center_demo/test_support_history_http.py
+          python3 tests/center_demo/test_support_worklist_http.py
+          # Actual PostgreSQL DDL admission/recovery; refuses changed versions.
+          dotnet run --project tests/Taranom.SupportSchemaAdmission.Probe/Taranom.SupportSchemaAdmission.Probe.csproj --configuration Release
+          # Separate bounded context: database-enforced org partition, no user IdP.
+          dotnet run --project tests/Taranom.OrgScope.Probe/Taranom.OrgScope.Probe.csproj --configuration Release
+          python3 tests/center_demo/test_org_draft_qa_http.py
           # TRN-TECH-109: genuine concurrent writer lock + unlocked read,
           # same synthetic PostgreSQL source and current loopback host.
           TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY dotnet run --project tests/Taranom.SupportJournal.MvccProbe/Taranom.SupportJournal.MvccProbe.csproj --configuration Release
@@ -785,6 +857,82 @@ jobs:
           test "$ready_ops" = "1"
           cd apps/ops-web
           TARANOM_CI_CROSS_PORTAL=1 CI=true npx playwright test tests/cross-portal-qa.spec.ts
+          # TRN-TECH-153: real Kestrel process restart under disposable CI.
+          # Show counter loss explicitly; NEVER declare continuity/audit success.
+          cd "$GITHUB_WORKSPACE"
+          test -s "$TARANOM_AI_RESTART_WITNESS"
+          # TRN-TECH-155: verifier-owned disposable checkpoint OUTSIDE
+          # Kestrel's process environment, before real SIGTERM.
+          anchor_tmp=$(mktemp -d /tmp/taranom-anchor-XXXXXX)
+          TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" python3 tools/qa/worker_evidence_anchor.py create
+          # TRN-TECH-157: an actual separate, UNPRIVILEGED Linux uid
+          # keeps a second checkpoint unreadable by the Worker host uid.
+          # The CI runner has sudo: this is a DAC rehearsal, not legal custody.
+          qa_custody=$(mktemp -d /tmp/taranom-anchor-XXXXXX)
+          qa_shared=$(mktemp -d /tmp/taranom-worker-XXXXXX)
+          qa_tools=$(mktemp -d /tmp/taranom-custody-tools-XXXXXX)
+          export TARANOM_QA_CUSTODY_DIR="$qa_custody"
+          export TARANOM_QA_SHARED_DIR="$qa_shared"
+          export TARANOM_QA_TOOLS_DIR="$qa_tools"
+          python3 tools/qa/worker_posix_custody_ci.py prepare
+          kill -TERM "$server_pid"
+          wait "$server_pid" || true
+          stopped=0
+          for attempt in $(seq 1 30); do
+            if ! curl --silent --fail --max-time 2 http://127.0.0.1:4320/internal/demo/v1/centers/test:readiness > /dev/null; then stopped=1; break; fi
+            sleep 1
+          done
+          test "$stopped" = "1"
+          cd "$GITHUB_WORKSPACE/src/Taranom.CenterWorkflow.Demo"
+          TARANOM_AI_ADMIN_QA=CI_EPHEMERAL_ONLY TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-restart-ephemeral.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$ops_pid" "$server_pid" 2>/dev/null || true' EXIT
+          cd "$GITHUB_WORKSPACE"
+          restart_ready=0
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail --max-time 2 http://127.0.0.1:4320/internal/demo/v1/centers/test:readiness > /dev/null; then restart_ready=1; break; fi
+            sleep 1
+          done
+          if test "$restart_ready" != "1"; then
+            echo "Disposable Kestrel restart failed" >&2
+            exit 1
+          fi
+          python3 tests/center_demo/test_ai_worker_restart_http.py
+          python3 tools/qa/verify_ai_worker_evidence.py
+          TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" python3 tools/qa/worker_evidence_anchor.py verify
+          # TRN-TECH-156: run a separate verifier-side export, copy ONLY
+          # the public synthetic ZIP to a disposable receiving directory,
+          # then verify it in another process using the independently held
+          # HMAC receipt. The custodian key NEVER accompanies the ZIP.
+          handoff_out=$(mktemp -d /tmp/taranom-handoff-XXXXXX)
+          handoff_in=$(mktemp -d /tmp/taranom-handoff-XXXXXX)
+          TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_out" python3 tools/qa/worker_evidence_handoff.py export
+          cp -- "$handoff_out/worker-evidence.zip" "$handoff_in/worker-evidence.zip"
+          TARANOM_AI_WORKER_ANCHOR_DIR="$anchor_tmp" TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_evidence_handoff.py receive
+          # The test-only Worker archive is structurally verifiable.
+          # An *absent* outside custodian receipt must remain unverified;
+          # never fabricate a signature, identity or provider acknowledgement.
+          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_external_receipt_denial.py --claim-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/external-receipt-denial.json"
+          python3 -c "import json,os; r=json.load(open(os.environ['TARANOM_AI_RESTART_WITNESS'].replace('epoch-witness.json','external-receipt-denial.json'))); assert r['status']=='EXTERNAL_RECEIPT_NOT_SUPPLIED' and not r['external_receipt_verified'] and not r['independent_custody_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
+          # TRN-TECH-160: no outside identity authority or trusted root.
+          # Even a perfectly matching synthetic claim remains unverified.
+          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_custodian_identity_boundary.py --identity-template docs/governance/ai-worker-custodian-identity-template.json --receipt-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/custodian-identity-denial.json"
+          python3 -c "import json,os,pathlib; r=json.loads((pathlib.Path(os.environ['TARANOM_AI_RESTART_WITNESS']).parent/'custodian-identity-denial.json').read_text()); assert r['status']=='EXTERNAL_CUSTODIAN_IDENTITY_NOT_CONFIGURED' and r['synthetic_archive_shape_checked'] and not r['custodian_identity_verified'] and not r['separate_admin_domain_verified'] and not r['trust_anchor_verified'] and not r['external_receipt_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
+          # TRN-TECH-161 synthetic key lifecycle remains unavailable:
+          # no real custodian/key registry, approved revocation or promotion.
+          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_trust_key_lifecycle_denial.py --lifecycle-template docs/governance/ai-worker-trust-key-lifecycle-template.json --identity-template docs/governance/ai-worker-custodian-identity-template.json --receipt-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/trust-key-lifecycle-denial.json"
+          python3 -c "import json,os,pathlib; r=json.loads((pathlib.Path(os.environ['TARANOM_AI_RESTART_WITNESS']).parent/'trust-key-lifecycle-denial.json').read_text()); assert r['status']=='EXTERNAL_TRUST_KEY_LIFECYCLE_NOT_CONFIGURED' and r['synthetic_archive_shape_checked'] and not r['trust_key_lifecycle_verified'] and not r['rotation_approved'] and not r['revocation_proven'] and not r['custodian_identity_verified'] and not r['external_receipt_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
+          # TRN-TECH-162: no trusted clock, validity policy or signing root.
+          # Evaluate only the EMPTY temporal claim fixture after real restart.
+          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_trust_temporal_denial.py --temporal-template docs/governance/ai-worker-trust-temporal-template.json --lifecycle-template docs/governance/ai-worker-trust-key-lifecycle-template.json --identity-template docs/governance/ai-worker-custodian-identity-template.json --receipt-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/trust-temporal-denial.json"
+          python3 -c "import json,os,pathlib; r=json.loads((pathlib.Path(os.environ['TARANOM_AI_RESTART_WITNESS']).parent/'trust-temporal-denial.json').read_text()); assert r['status']=='TRUST_TEMPORAL_CLAIMS_NOT_CONFIGURED' and r['synthetic_archive_shape_checked'] and not r['trusted_clock_verified'] and not r['validity_window_authorized'] and not r['expiration_verified'] and not r['revocation_time_authenticated'] and not r['custodian_identity_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
+          # TRN-TECH-163: claim digests do not prove a trusted clock,
+          # independent signer or authentic revocation origin.
+          TARANOM_AI_WORKER_HANDOFF_DIR="$handoff_in" python3 tools/qa/worker_time_revocation_provenance_denial.py --source-template docs/governance/ai-worker-time-revocation-source-template.json --temporal-template docs/governance/ai-worker-trust-temporal-template.json --lifecycle-template docs/governance/ai-worker-trust-key-lifecycle-template.json --identity-template docs/governance/ai-worker-custodian-identity-template.json --receipt-template docs/governance/ai-worker-external-receipt-template.json --report-json "$bridge_tmp/time-revocation-origin-denial.json"
+          python3 -c "import json,os,pathlib; r=json.loads((pathlib.Path(os.environ['TARANOM_AI_RESTART_WITNESS']).parent/'time-revocation-origin-denial.json').read_text()); assert r['status']=='TIME_REVOCATION_SOURCES_NOT_CONFIGURED' and r['synthetic_archive_shape_checked'] and not r['clock_source_authenticated'] and not r['revocation_source_authenticated'] and not r['attestation_signature_verified'] and not r['revocation_notice_verified'] and not r['trusted_clock_verified'] and not r['human_release_approved'] and not r['production_ready'] and not r['national_release_allowed']"
+          # Independently verify full chain after real restart under the
+          # verifier-only POSIX account and prove requester DAC denial.
+          python3 tools/qa/worker_posix_custody_ci.py finish
       - name: Rehearse real isolated PostgreSQL dump and restored journal integrity
         env:
           CI: 'true'

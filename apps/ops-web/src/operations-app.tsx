@@ -118,6 +118,7 @@ export function OperationsApp() {
     <header><p>ترنم | عملیات فنی توسعه</p><h1>اتصال واقعی محلی، بدون ادعای آمادگی انتشار</h1>
       <p>این صفحه از سرویس .NET محلی پاسخ واقعی HTTP می‌گیرد؛ این کار اثبات احراز هویت، سلامت خدمت یا آمادگی Production نیست.</p></header>
     <main id="content">
+      <nav aria-label="ناوبری عملیات"><a href="/operations/progress">فهرست قابلیت‌های پیشنهادی</a> | <a href="/operations/dependencies">صف وابستگی‌های مسدود انتشار</a></nav>
       <section className="notice" role="note"><strong>عرضه رسمی ملی سه بازار: DENIED_BY_DEFAULT</strong>
         <p>۱۳ Epic، سه بازار و پوشش ملی مستقل‌اند. هیچ داده عضو، پزشک، کیف پول یا بیمه به این ابزار ارسال نمی‌شود.</p></section>
       <section className="panel"><div className="heading"><h2>اتصال Backend ↔ Frontend</h2>

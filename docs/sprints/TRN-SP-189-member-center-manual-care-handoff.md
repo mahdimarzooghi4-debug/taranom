@@ -1,0 +1,5 @@
+# TRN-SP-189 — DRAFT / Manual Member-to-Center care coordination source handoff
+
+Parent Draft/Open [Sprint 188 PR #202](https://github.com/mahdimarzooghi4-debug/taranom/pull/202) at exact `c4327d397eab35e2d9283b2939e563e2760c29fe`. Technical: [TRN-TECH-198](../technical/TRN-TECH-198-member-center-manual-care-handoff.md).
+
+Deliver a **new operational cross-workspace function** rather than another history filter: Member can hand-carry a strictly synthetic source-pinned reference to the original nonclinical request; Center independently validates the full existing PostgreSQL journal at exactly the claimed version and tip UUID before selecting the case. Human must still explicitly issue a separate existing unverified contact/source claim. No new server endpoint, table, identity, consent, medicine, real care coordination or permission; all 13 real-authority denial flags and uncertain exact-UUID recovery are preserved. Five real Chromium/Kestrel/PostgreSQL tests, entire 14-job exact-head CI and preliminary technical COMMENTED review only. PR Draft/Open/Unmerged, all national release dimensions unverified and release DENIED_BY_DEFAULT.

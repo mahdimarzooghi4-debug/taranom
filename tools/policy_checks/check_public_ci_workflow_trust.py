@@ -223,6 +223,314 @@ DISPATCHER_BRANCHES = {
         "sprint-119-support-reader-writer-db-isolation",
         "main",
     ),
+    "sprint-120-internal-support-worklist.yml": (
+        "sprint-120-internal-support-worklist",
+        "main",
+    ),
+    "sprint-121-support-schema-admission.yml": (
+        "sprint-121-support-schema-admission",
+        "main",
+    ),
+    "sprint-122-org-scope-postgres-isolation.yml": (
+        "sprint-122-org-scope-postgres-isolation",
+        "main",
+    ),
+    "sprint-123-org-draft-workspace.yml": (
+        "sprint-123-org-draft-workspace",
+        "main",
+    ),
+    "sprint-124-org-draft-audit-integrity.yml": (
+        "sprint-124-org-draft-audit-integrity",
+        "main",
+    ),
+    "sprint-125-org-draft-activity-journal.yml": (
+        "sprint-125-org-draft-activity-journal",
+        "main",
+    ),
+    "sprint-126-org-draft-qa-vertical-slice.yml": (
+        "sprint-126-org-draft-qa-vertical-slice",
+        "main",
+    ),
+    "sprint-127-org-draft-coherent-workqueue.yml": (
+        "sprint-127-org-draft-coherent-workqueue",
+        "main",
+    ),
+    "sprint-128-org-draft-pinned-activity-timeline.yml": (
+        "sprint-128-org-draft-pinned-activity-timeline",
+        "main",
+    ),
+    "sprint-129-stage4-synthetic-test-preflight.yml": (
+        "sprint-129-stage4-synthetic-test-preflight",
+        "main",
+    ),
+    "sprint-130-stage4-recovery-security-parity.yml": (
+        "sprint-130-stage4-recovery-security-parity",
+        "main",
+    ),
+    "sprint-131-stage4-premerge-git-candidate.yml": (
+        "sprint-131-stage4-premerge-git-candidate",
+        "main",
+    ),
+    "sprint-132-internal-ai-offline-registry-dataset-eval.yml": (
+        "sprint-132-internal-ai-offline-registry-dataset-eval",
+        "main",
+    ),
+    "sprint-133-offline-ai-admin-qa-http-ui.yml": (
+        "sprint-133-offline-ai-admin-qa-http-ui",
+        "main",
+    ),
+    "sprint-134-synthetic-ai-shadow-training-benchmark.yml": (
+        "sprint-134-synthetic-ai-shadow-training-benchmark",
+        "main",
+    ),
+    "sprint-135-shadow-qa-workspace-e2e.yml": (
+        "sprint-135-shadow-qa-workspace-e2e",
+        "main",
+    ),
+    "sprint-136-ai-source-provenance-retirement.yml": (
+        "sprint-136-ai-source-provenance-retirement",
+        "main",
+    ),
+    "sprint-137-ai-admin-cryptographic-identity-gate.yml": (
+        "sprint-137-ai-admin-cryptographic-identity-gate",
+        "main",
+    ),
+    "sprint-138-ai-admin-audited-deny-gateway.yml": (
+        "sprint-138-ai-admin-audited-deny-gateway",
+        "main",
+    ),
+    "sprint-139-ai-audit-restricted-db-roles.yml": (
+        "sprint-139-ai-audit-restricted-db-roles",
+        "main",
+    ),
+    "sprint-140-internal-ai-worker-isolated-ipc.yml": (
+        "sprint-140-internal-ai-worker-isolated-ipc",
+        "main",
+    ),
+    "sprint-141-ai-worker-boundary-adversarial-hardening.yml": (
+        "sprint-141-ai-worker-boundary-adversarial-hardening",
+        "main",
+    ),
+    "sprint-142-ai-worker-fault-recovery-controls.yml": (
+        "sprint-142-ai-worker-fault-recovery-controls",
+        "main",
+    ),
+    "sprint-143-ai-worker-operational-fault-telemetry.yml": (
+        "sprint-143-ai-worker-operational-fault-telemetry",
+        "main",
+    ),
+    "sprint-144-ai-worker-lifecycle-epoch-restart.yml": (
+        "sprint-144-ai-worker-lifecycle-epoch-restart",
+        "main",
+    ),
+    "sprint-145-ai-worker-synthetic-evidence-ledger.yml": (
+        "sprint-145-ai-worker-synthetic-evidence-ledger",
+        "main",
+    ),
+    "sprint-146-ai-worker-independent-anchor.yml": (
+        "sprint-146-ai-worker-independent-anchor",
+        "main",
+    ),
+    "sprint-147-ai-worker-offline-handoff.yml": (
+        "sprint-147-ai-worker-offline-handoff",
+        "main",
+    ),
+    "sprint-148-worker-posix-custody-qa.yml": (
+        "sprint-148-worker-posix-custody-qa",
+        "main",
+    ),
+    "sprint-149-worker-external-custody-gate.yml": (
+        "sprint-149-worker-external-custody-gate",
+        "main",
+    ),
+    "sprint-150-worker-external-receipt-denial.yml": (
+        "sprint-150-worker-external-receipt-denial",
+        "main",
+    ),
+    "sprint-151-worker-custodian-identity-trust-boundary.yml": (
+        "sprint-151-worker-custodian-identity-trust-boundary",
+        "main",
+    ),
+    "sprint-152-worker-trust-key-lifecycle-denial.yml": (
+        "sprint-152-worker-trust-key-lifecycle-denial",
+        "main",
+    ),
+    "sprint-153-worker-trust-temporal-denial.yml": (
+        "sprint-153-worker-trust-temporal-denial",
+        "main",
+    ),
+    "sprint-154-worker-time-revocation-provenance-denial.yml": (
+        "sprint-154-worker-time-revocation-provenance-denial",
+        "main",
+    ),
+    "sprint-155-release-blocker-dependency-worklist.yml": (
+        "sprint-155-release-blocker-dependency-worklist",
+        "main",
+    ),
+    "sprint-156-operations-dependency-worklist-ui.yml": (
+        "sprint-156-operations-dependency-worklist-ui",
+        "main",
+    ),
+    "sprint-157-epic-engineering-gap-workbench.yml": (
+        "sprint-157-epic-engineering-gap-workbench",
+        "main",
+    ),
+    "sprint-158-synthetic-command-ingress-deadline.yml": (
+        "sprint-158-synthetic-command-ingress-deadline",
+        "main",
+    ),
+    "sprint-159-dependency-capability-drilldown.yml": (
+        "sprint-159-dependency-capability-drilldown",
+        "main",
+    ),
+    "sprint-160-unverified-evidence-review-packets.yml": (
+        "sprint-160-unverified-evidence-review-packets",
+        "main",
+    ),
+    "sprint-161-synthetic-command-ack-lineage.yml": (
+        "sprint-161-synthetic-command-ack-lineage",
+        "main",
+    ),
+    "sprint-162-read-only-uncertain-command-reconciliation.yml": (
+        "sprint-162-read-only-uncertain-command-reconciliation",
+        "main",
+    ),
+    "sprint-163-care-postgres-least-privilege.yml": (
+        "sprint-163-care-postgres-least-privilege",
+        "main",
+    ),
+    "sprint-164-proofing-postgres-role-isolation.yml": (
+        "sprint-164-proofing-postgres-role-isolation",
+        "main",
+    ),
+    "sprint-165-late-evidence-role-isolation.yml": (
+        "sprint-165-late-evidence-role-isolation",
+        "main",
+    ),
+    "sprint-166-center-manual-department-adjustment.yml": (
+        "sprint-166-center-manual-department-adjustment",
+        "main",
+    ),
+    "sprint-167-guided-nonclinical-coordination.yml": (
+        "sprint-167-guided-nonclinical-coordination",
+        "main",
+    ),
+    "sprint-168-org-activity-ack-reconciliation.yml": (
+        "sprint-168-org-activity-ack-reconciliation",
+        "main",
+    ),
+    "sprint-169-cost-followup-journal-reconciliation.yml": (
+        "sprint-169-cost-followup-journal-reconciliation",
+        "main",
+    ),
+    "sprint-170-member-case-continuation.yml": (
+        "sprint-170-member-case-continuation",
+        "main",
+    ),
+    "sprint-171-member-center-support-handoff.yml": (
+        "sprint-171-member-center-support-handoff",
+        "main",
+    ),
+    "sprint-172-support-topic-worklist.yml": (
+        "sprint-172-support-topic-worklist",
+        "main",
+    ),
+    "sprint-173-member-followup-return.yml": (
+        "sprint-173-member-followup-return",
+        "main",
+    ),
+    "sprint-174-verified-topic-worklist.yml": (
+        "sprint-174-verified-topic-worklist",
+        "main",
+    ),
+    "sprint-175-center-care-coordination.yml": (
+        "sprint-175-center-care-coordination",
+        "main",
+    ),
+    "sprint-176-member-care-journal-attestation.yml": (
+        "sprint-176-member-care-journal-attestation",
+        "main",
+    ),
+    "sprint-177-care-coordination-worklist.yml": (
+        "sprint-177-care-coordination-worklist",
+        "main",
+    ),
+    "sprint-178-center-clinical-source-claim.yml": (
+        "sprint-178-center-clinical-source-claim",
+        "main",
+    ),
+    "sprint-179-member-distinct-care-claims.yml": (
+        "sprint-179-member-distinct-care-claims",
+        "main",
+    ),
+    "sprint-180-care-command-recovery-receipts.yml": (
+        "sprint-180-care-command-recovery-receipts",
+        "main",
+    ),
+    "sprint-181-care-journal-manual-activity-delta.yml": (
+        "sprint-181-care-journal-manual-activity-delta",
+        "main",
+    ),
+    "sprint-182-care-claim-worklist-filter.yml": (
+        "sprint-182-care-claim-worklist-filter",
+        "main",
+    ),
+    "sprint-183-care-worklist-manual-delta.yml": (
+        "sprint-183-care-worklist-manual-delta",
+        "main",
+    ),
+    "sprint-184-care-worklist-audited-page-inspection.yml": (
+        "sprint-184-care-worklist-audited-page-inspection",
+        "main",
+    ),
+    "sprint-185-member-care-version-explorer.yml": (
+        "sprint-185-member-care-version-explorer",
+        "main",
+    ),
+    "sprint-186-care-pinned-journal-history.yml": (
+        "sprint-186-care-pinned-journal-history",
+        "main",
+    ),
+    "sprint-187-center-pinned-care-history.yml": (
+        "sprint-187-center-pinned-care-history",
+        "main",
+    ),
+    "sprint-188-care-history-claim-type-filter.yml": (
+        "sprint-188-care-history-claim-type-filter",
+        "main",
+    ),
+    "sprint-189-member-center-care-handoff.yml": (
+        "sprint-189-member-center-care-handoff",
+        "main",
+    ),
+    "sprint-190-care-claim-manual-return.yml": (
+        "sprint-190-care-claim-manual-return",
+        "main",
+    ),
+    "sprint-191-member-care-read-cancel-isolation.yml": (
+        "sprint-191-member-care-read-cancel-isolation",
+        "main",
+    ),
+    "sprint-192-center-worklist-read-cancel.yml": (
+        "sprint-192-center-worklist-read-cancel",
+        "main",
+    ),
+    "sprint-193-support-exact-source-reconciliation.yml": (
+        "sprint-193-support-exact-source-reconciliation",
+        "main",
+    ),
+    "sprint-194-member-care-support-continuation.yml": (
+        "sprint-194-member-care-support-continuation",
+        "main",
+    ),
+    "sprint-195-center-care-linked-support-followup.yml": (
+        "sprint-195-center-care-linked-support-followup",
+        "main",
+    ),
+    "sprint-196-member-care-support-followup.yml": (
+        "sprint-196-member-care-support-followup",
+        "main",
+    ),
 }
 REUSABLE_SOURCE = "./.github/workflows/" + REUSABLE_NAME
 REQUIRED_FULL_JOBS = frozenset({

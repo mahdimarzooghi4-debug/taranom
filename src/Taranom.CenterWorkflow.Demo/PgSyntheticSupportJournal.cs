@@ -212,9 +212,84 @@ internal sealed class PgSyntheticSupportJournal(NpgsqlDataSource database)
                 BEFORE UPDATE OR DELETE ON internal_test_support_audit
                 FOR EACH ROW EXECUTE FUNCTION internal_test_support_history_guard();
             """;
-        await using var connection = await data.OpenConnectionAsync();
-        await using var cmd = new NpgsqlCommand(sql, connection);
-        await cmd.ExecuteNonQueryAsync();
+        await SupportSchemaAdmission.EnsureAsync(data, sql);
+    }
+
+    // TRN-TECH-129: opt-in, anonymous and synthetic-only *local test* worklist.
+    // This is NOT an operational member directory or real user authorization.
+    // Reuse the reader's distinct SELECT-only PostgreSQL principal and verify
+    // each listed case using its canonical event + paired audit lineage.
+    internal async Task<(IReadOnlyList<(string CaseRef, long Revision, int FollowUps)> Rows,
+        bool HasMore)> ReadWorklistAsync(string? afterCaseRef, int limit,
+            SyntheticSupportTopic? topic = null)
+    {
+        if (limit is < 1 or > 10 ||
+            (topic is not null && topic is not
+                (SyntheticSupportTopic.MedicalServiceComplaint or
+                 SyntheticSupportTopic.InsuranceCoverageDispute)) ||
+            (afterCaseRef is not null && !IsSynthetic(afterCaseRef)))
+            throw new InvalidOperationException("INVALID_TEST_WORKLIST_CURSOR");
+
+        await using var conn = await database.OpenConnectionAsync();
+        await using var tx = await conn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead);
+        await using (var readOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", conn, tx))
+            await readOnly.ExecuteNonQueryAsync();
+
+        // TRN-TECH-183: never make a visibility / pagination decision using
+        // unverified command_json. A damaged first event could change its
+        // apparent Topic and silently disappear from the WHERE predicate.
+        // Scan ordered, small bounded SQL batches, fully rehydrate + verify
+        // each scanned row (including nonmatching topics), and only then
+        // apply the domain Topic filter and logical keyset page limit.
+        // All batches and event/audit reads share ONE read-only MVCC snapshot.
+        const int batchSize = 64; // transport batch, not a business threshold
+        var after = afterCaseRef ?? string.Empty;
+        var verified = new List<(string CaseRef, long Revision, int FollowUps)>();
+        while (verified.Count <= limit)
+        {
+            var refs = new List<string>(batchSize);
+            await using (var cmd = new NpgsqlCommand("""
+                SELECT c.case_ref FROM internal_test_support_case c
+                WHERE c.current_revision > 0
+                  AND (@after = '' OR c.case_ref COLLATE "C" > @after COLLATE "C")
+                ORDER BY c.case_ref COLLATE "C"
+                LIMIT @count
+                """, conn, tx))
+            {
+                cmd.Parameters.AddWithValue("after", after);
+                cmd.Parameters.AddWithValue("count", batchSize);
+                await using var rows = await cmd.ExecuteReaderAsync();
+                while (await rows.ReadAsync())
+                {
+                    var reference = rows.GetString(0);
+                    if (!IsSynthetic(reference))
+                        throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIED_REFERENCE");
+                    refs.Add(reference);
+                }
+            }
+            if (refs.Count == 0) break;
+            foreach (var reference in refs)
+            {
+                // Rehydrate performs SHA-256 digest verification, original
+                // requestRef match and independent paired-audit validation.
+                // Even excluded topic rows must pass these checks.
+                var state = await RehydrateAsync(conn, tx, reference, lockCaseRow: false);
+                if (state.Revision <= 0 ||
+                    state.History.Length != state.Revision ||
+                    state.History.Length - 1 > int.MaxValue)
+                    throw new InvalidOperationException("TEST_WORKLIST_UNVERIFIABLE");
+                if (topic is null || state.History[0].Command.Topic == topic)
+                {
+                    verified.Add((reference, state.Revision, state.History.Length - 1));
+                    if (verified.Count > limit) break;
+                }
+            }
+            after = refs[^1];
+            if (refs.Count < batchSize) break;
+        }
+        await tx.CommitAsync();
+        return (verified.Take(limit).ToArray(), verified.Count > limit);
     }
 
     internal async Task<SyntheticSupportSnapshot> ReadAsync(string caseRef)

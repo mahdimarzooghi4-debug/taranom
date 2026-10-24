@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Npgsql;
+using Taranom.OrgScope.Foundation;
 using Taranom.ClinicalCenterGovernance;
 using Taranom.ClinicalCenterJournal.Postgres;
 using Taranom.ProofingJournal.Postgres;
@@ -27,6 +28,21 @@ await PgLateEvidenceWorkItemJournal.InitializeIsolatedTestSchemaAsync(dataSource
 await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
     .InitializeAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
+// TRN-TECH-174: late-evidence HTTP may use only isolated writer/reader.
+var lateSources=await PgLateEvidenceWorkItemJournal.RestrictedTestSourcesAsync(
+    dataSource,connection);
+await using var lateWriter=lateSources.Writer;
+await using var lateReader=lateSources.Reader;
+// TRN-TECH-173: separate reader/writer from schema owner and all other journals.
+var proofingSources=await PgProofingCaseJournal.RestrictedTestSourcesAsync(
+    dataSource,connection);
+await using var proofingWriter=proofingSources.Writer;
+await using var proofingReader=proofingSources.Reader;
+// TRN-TECH-172: care journal HTTP no longer receives owner-level access.
+var careSources=await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
+    .RestrictedSourcesAsync(dataSource,connection);
+await using var careWriter=careSources.Writer;
+await using var careReader=careSources.Reader;
 // TRN-TECH-110: support HTTP must never inherit the schema-owner connection;
 // the support journal gets only bounded DML on its three synthetic tables.
 await using var supportRuntime = await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal
@@ -39,11 +55,52 @@ if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEM
     await PgSyntheticCostAwarenessJournal.InitializeIsolatedTestSchemaAsync(dataSource);
 var store = new PgClinicalCenterJournal(dataSource);
 Taranom.CenterWorkflow.Demo.ProofingDemoHttp.Store =
-    new PgProofingCaseJournal(dataSource);
+    new PgProofingCaseJournal(proofingWriter,proofingReader);
 Taranom.CenterWorkflow.Demo.LateEvidenceHttp.Store =
-    new PgLateEvidenceWorkItemJournal(dataSource);
+    new PgLateEvidenceWorkItemJournal(lateWriter,lateReader);
 Taranom.CenterWorkflow.Demo.CareCoordinationHttp.Store =
-    new Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal(dataSource);
+    new Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal(careWriter,careReader);
+
+// TRN-TECH-135: opt-in localhost technical QA only; the HTTP endpoint has
+// precisely ONE support-scoped restricted PostgreSQL login. No browser tenant
+// selection and no real organization authentication.
+var orgQaEnabled = Environment.GetEnvironmentVariable("TARANOM_ORG_DRAFT_QA") ==
+    "CI_EPHEMERAL_ONLY";
+NpgsqlDataSource? orgQaDatabase = null;
+if (orgQaEnabled)
+{
+    var supportSecret = Environment.GetEnvironmentVariable(
+        "TARANOM_ORG_SUPPORT_TEST_PASSWORD");
+    var corporateSecret = Environment.GetEnvironmentVariable(
+        "TARANOM_ORG_CORPORATE_TEST_PASSWORD");
+    await PgSyntheticOrganizationScope.InitializeAsync(
+        dataSource, supportSecret, corporateSecret);
+    orgQaDatabase = PgSyntheticOrganizationScope.ScopedSource(connection,
+        PgSyntheticOrganizationScope.SupportRole, supportSecret!);
+    Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Drafts =
+        new PgScopedDraftWorkspace(orgQaDatabase);
+    Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Activity =
+        new PgScopedDraftActivity(orgQaDatabase);
+    Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.QueueStore =
+        new PgScopedDraftWorkQueue(orgQaDatabase);
+}
+
+// TRN-TECH-147: opt-in ephemeral AI admin DENIAL journal only.
+var aiAdminQaEnabled = Environment.GetEnvironmentVariable("TARANOM_AI_ADMIN_QA") ==
+    "CI_EPHEMERAL_ONLY";
+NpgsqlDataSource? aiAuditWriter = null;
+NpgsqlDataSource? aiAuditReader = null;
+if (aiAdminQaEnabled)
+{
+    await Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial.InitializeAsync(dataSource);
+    aiAuditWriter = await Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial
+        .RestrictedAsync(dataSource, connection, write: true);
+    aiAuditReader = await Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial
+        .RestrictedAsync(dataSource, connection, write: false);
+    Taranom.CenterWorkflow.Demo.AiAdminQaHttp.Journal =
+        new Taranom.CenterWorkflow.Demo.PgSyntheticAiAdminDenial(
+            aiAuditWriter, aiAuditReader);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(4320));
@@ -88,6 +145,27 @@ app.Use(async (context, next) =>
     }
     await next();
 });
+
+if (aiAdminQaEnabled &&
+    Environment.GetEnvironmentVariable("TARANOM_AI_WORKER_QA") ==
+    "CI_EPHEMERAL_ONLY")
+{
+    // TRN-TECH-154: isolated non-authorizing persistence preflight at boot.
+    Taranom.CenterWorkflow.Demo.AiWorkerQaHttp.InitializeEvidence();
+    // TRN-TECH-149: disposable read-only child-process inventory probe.
+    app.MapPost("/internal/demo/v1/ai-worker/inventory",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AiWorkerQaHttp.Read);
+    app.MapGet("/internal/demo/v1/ai-worker/telemetry",
+        (Func<HttpContext,IResult>)Taranom.CenterWorkflow.Demo.AiWorkerQaHttp.Telemetry);
+}
+
+if (aiAdminQaEnabled)
+{
+    app.MapPost("/internal/demo/v1/ai-admin/denials",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AiAdminQaHttp.Record);
+    app.MapGet("/internal/demo/v1/ai-admin/denials/{requestRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AiAdminQaHttp.Read);
+}
 
 CenterHttp.Store = store;
 app.MapGet("/internal/demo/v1/centers/{centerRef}",
@@ -136,6 +214,10 @@ Taranom.CenterWorkflow.Demo.SupportHttp.Store =
     new Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal(supportRuntime);
 Taranom.CenterWorkflow.Demo.SupportHttp.ReadStore =
     new Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal(supportReaderRuntime);
+// Read-only, bounded synthetic case metadata list. The same reader-only
+// PostgreSQL principal verifies every event+audit record before inclusion.
+app.MapGet("/internal/demo/v1/support-worklist",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportWorklistHttp.ListAsync);
 app.MapGet("/internal/demo/v1/support/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SupportHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/support/{caseRef}/commands",
@@ -160,11 +242,37 @@ app.MapGet("/internal/demo/v1/late-evidence/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/late-evidence/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.WriteAsync);
+app.MapGet("/internal/demo/v1/care-coordination-worklist",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareWorklistHttp.ListAsync);
+app.MapGet("/internal/demo/v1/care-coordination/{caseRef}/history",
+    (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareHistoryHttp.ListAsync);
 app.MapGet("/internal/demo/v1/care-coordination/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareCoordinationHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/care-coordination/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareCoordinationHttp.WriteAsync);
 
+// No non-test build is allowed to register these routes or page. This demo
+// binds ONLY to loopback, still makes no trusted operator-authentication claim.
+if (orgQaEnabled)
+{
+    app.MapGet("/internal/demo/v1/org-draft-queue",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Queue);
+    app.MapGet("/internal/demo/v1/org-drafts",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.List);
+    app.MapPost("/internal/demo/v1/org-drafts",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Create);
+    app.MapGet("/internal/demo/v1/org-drafts/{itemRef}",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Read);
+    app.MapGet("/internal/demo/v1/org-drafts/{itemRef}/activity",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.History);
+    app.MapGet("/internal/demo/v1/org-drafts/{itemRef}/activity-page",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.ActivityPage);
+    app.MapPost("/internal/demo/v1/org-drafts/{itemRef}/activity",
+        (Func<HttpContext,Task<IResult>>)Taranom.CenterWorkflow.Demo.OrgDraftQaHttp.Append);
+    app.MapGet("/org-drafts-qa", () =>
+        Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+            "index.html"),"text/html; charset=utf-8"));
+}
 app.MapFallback("/internal/demo/{**rest}", () => Results.NotFound());
 // Exact local member entrypoint is required: the generic root fallback must
 // never silently render the CENTER HTML for a MEMBER browser path.
@@ -197,6 +305,9 @@ app.UseStaticFiles();
 // Explicit root default file and explicit member entrypoint remain available.
 app.MapFallback(() => Results.NotFound());
 app.Run();
+if (aiAuditWriter is not null) await aiAuditWriter.DisposeAsync();
+if (aiAuditReader is not null) await aiAuditReader.DisposeAsync();
+if (orgQaDatabase is not null) await orgQaDatabase.DisposeAsync();
 
 // Handler methods deliberately use HttpContext RequestDelegate bindings;
 // this avoids generated analyzer fragility for captured route lambdas.

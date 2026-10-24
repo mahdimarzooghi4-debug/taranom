@@ -38,18 +38,11 @@ internal static class CareCoordinationHttp
         if(req.Query.Count>0||req.ContentType is null||
            !req.ContentType.StartsWith("application/json",StringComparison.OrdinalIgnoreCase)||
            req.ContentLength is >1200)return Reply(400,"INVALID_TEST_INPUT",c,null);
-        var buffer=new byte[1201];
-        var len=0;
         try
         {
-            while(len<buffer.Length)
-            {
-                var n=await req.Body.ReadAsync(buffer.AsMemory(len));
-                if(n==0)break;
-                len+=n;
-            }
-            if(len is <2 or >1200)return Reply(400,"INVALID_TEST_INPUT",c,null);
-            using var doc=JsonDocument.Parse(buffer.AsMemory(0,len),
+            var body=await SyntheticCommandIngress.ReadAsync(req,1200);
+            if(body is null)return Reply(400,"INVALID_TEST_INPUT",c,null);
+            using var doc=JsonDocument.Parse(body.AsMemory(),
                 new JsonDocumentOptions{MaxDepth=3});
             var root=doc.RootElement;
             if(root.ValueKind!=JsonValueKind.Object||
@@ -115,6 +108,8 @@ internal static class CareCoordinationHttp
         }
         catch(Exception ex)when(ex is JsonException or IOException)
         {return Reply(400,"INVALID_TEST_INPUT",c,null);}
+        catch(OperationCanceledException)
+        {return Reply(503,"SOURCE_UNVERIFIABLE",c,null);}
         catch(Exception ex)when(ex is NpgsqlException or InvalidOperationException
                                or OverflowException)
         {return Reply(503,"SOURCE_UNVERIFIABLE",c,null);}

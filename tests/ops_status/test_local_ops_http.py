@@ -39,6 +39,50 @@ def run():
 
 
 
+def verify_release_dependencies():
+    """Actually served .NET source-backed dependency worklist; no release authority."""
+    status, headers, raw = call("/internal/ops/v1/dependencies")
+    assert status == 200, status
+    body = json.loads(raw)
+    assert body["contract"] == "TRN-TECH-165"
+    assert body["status"] == "DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST"
+    assert body["releaseAdmission"] == "DENIED_BY_DEFAULT"
+    assert body["productionReady"] is False
+    assert body["nationalReleaseAllowed"] is False
+    assert body["formalApprovalObserved"] is False
+    assert body["blockedDomains"] == 17
+    assert body["candidateCapabilities"] == 39
+    assert body["requiredOwnersUnassigned"] == 18
+    assert len(body["workItems"]) == 18
+    assert len(body["engineeringCandidates"]) == 39
+    assert body["technicalReferencesPresent"] == 26
+    assert body["technicalReferencesMissing"] == 13
+    assert len([x for x in body["engineeringCandidates"]
+                if x["evidenceLane"] == "MISSING_CODE_TEST_REFERENCE"]) == 13
+    assert all(x["engineeringReadiness"] == "NOT_ESTABLISHED"
+               and x["formalAcceptanceObserved"] is False
+               and x["relatedUnverifiedRequirements"] for x in body["engineeringCandidates"])
+    assert len({x["id"] for x in body["engineeringCandidates"]}) == 39
+    assert len({x["requirement"] for x in body["workItems"]}) == 18
+    assert len(body["sourceFingerprint"]) == 64
+    assert all(x["decisionOwner"] == "NOT_ASSIGNED"
+               and x["evidenceStatus"] == "BLOCKED_UNVERIFIED"
+               and x["humanDecisionStatus"] == "NOT_OBSERVED"
+               and x["formalAcceptanceObserved"] is False
+               and x["blockedDomainIds"]
+               and x["policyRefs"] for x in body["workItems"])
+    domains = {x for row in body["workItems"] for x in row["blockedDomainIds"]}
+    assert len(domains) == 17
+    assert headers.get("Cache-Control") == "no-store"
+    assert headers.get("Access-Control-Allow-Origin") is None
+    assert call("/internal/ops/v1/dependencies", "POST")[0] == 405
+    assert call("/internal/ops/v1/dependencies/approve")[0] == 404
+    assert call("/operations/dependencies")[0] == 200
+    assert call("/operations/dependencies", "POST")[0] == 405
+    assert call("/operations/dependencies/approve")[0] == 404
+    print("PASS: real .NET 17-domain/18-requirement read-only unapproved dependency worklist")
+
+
 def verify_epic_progress():
     """Source-linked DRAFT evidence catalogue, never Product-Done."""
     status, headers, raw = call("/internal/ops/v1/epic-progress")
@@ -215,6 +259,7 @@ if __name__ == "__main__":
     try:
         run()
         verify_epic_progress()
+        verify_release_dependencies()
         verify_waiting_preview()
         verify_ops_host_and_route_denial()
         verify_ops_denial_not_overridden_by_browser_claims()

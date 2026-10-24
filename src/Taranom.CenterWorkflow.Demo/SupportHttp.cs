@@ -56,6 +56,10 @@ internal static class SupportHttp
             return Results.Json(ToResponse(change.Snapshot, caseRef!, change.Outcome.ToString()),
                 statusCode: status);
         }
+        catch (OperationCanceledException)
+        {
+            return Denied(503, "TEST_SUPPORT_JOURNAL_UNVERIFIABLE");
+        }
         catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or IOException)
         {
             return Denied(503, "TEST_SUPPORT_JOURNAL_UNVERIFIABLE");
@@ -87,6 +91,7 @@ internal static class SupportHttp
             followUps = state.History.Skip(1).Select(x => new
             {
                 revision = x.Revision,
+                requestId = x.Command.RequestId,
                 noteRef = x.Command.UnverifiedFollowUpNoteRef,
                 claimedActorRef = x.Command.ClaimedFollowUpActorRef
             }).ToArray()
@@ -107,18 +112,11 @@ internal static class SupportHttp
 
     private static async Task<SyntheticSupportCommand?> ParseAsync(HttpRequest request, string caseRef)
     {
-        var bytes = new byte[1401];
-        var len = 0;
-        while (len < bytes.Length)
-        {
-            var n = await request.Body.ReadAsync(bytes.AsMemory(len));
-            if (n == 0) break;
-            len += n;
-        }
-        if (len is < 2 or > 1400) return null;
+        var bytes = await SyntheticCommandIngress.ReadAsync(request,1400);
+        if (bytes is null) return null;
         try
         {
-            using var json = JsonDocument.Parse(bytes.AsMemory(0, len),
+            using var json = JsonDocument.Parse(bytes.AsMemory(),
                 new JsonDocumentOptions { MaxDepth = 4 });
             var v = json.RootElement;
             if (v.ValueKind != JsonValueKind.Object ||
