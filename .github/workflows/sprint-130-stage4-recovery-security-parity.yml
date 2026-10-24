@@ -2,8 +2,6 @@ name: Sprint 130 Stage4 Recovery Security Parity Full Regression
 on:
   push:
     branches: [sprint-130-stage4-recovery-security-parity]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

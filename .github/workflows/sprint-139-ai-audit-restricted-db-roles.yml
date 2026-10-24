@@ -2,8 +2,6 @@ name: Sprint 139 Restricted PostgreSQL AI Audit Roles Full Regression
 on:
   push:
     branches: [sprint-139-ai-audit-restricted-db-roles]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

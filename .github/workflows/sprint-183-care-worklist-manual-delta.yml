@@ -2,8 +2,6 @@ name: Sprint 183 Care Worklist Manual Delta Full Regression
 on:
   push:
     branches: [sprint-183-care-worklist-manual-delta]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
