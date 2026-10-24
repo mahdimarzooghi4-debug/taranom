@@ -1,4 +1,5 @@
 import {useRef,useState} from 'react';
+import {CareSupportContinuation,type CarePin} from './care-support-continuation';
 import {careReceipt,parseCareReceipt} from './care-command-recovery';
 import {createCareHandoff} from './care-handoff';
 import {type CareClaimReturn,parseCareClaimReturn,matchesCareClaimReturn} from './care-claim-return';
@@ -510,6 +511,17 @@ export function CareCoordinationDemo(){
      <textarea readOnly rows={4} dir="ltr"
       value={createCareHandoff(snapshot,caseRef,memberRef)}/></label>
    </section>}
+  <CareSupportContinuation
+   source={snapshot&&snapshot.outcome==='READ'&&snapshot.revision>=1&&
+    !busy&&!uncertain&&(asOf===null||asOf===snapshot.revision)&&
+    snapshot.events[0]?.memberRef===memberRef
+    ?{caseRef,revision:snapshot.revision,memberRef,
+      rootRequestId:snapshot.events[0].requestId}:null}
+   verifyCare={(raw:unknown,pin:CarePin)=>valid(raw,pin.caseRef)&&
+    raw.outcome==='READ'&&raw.revision===pin.revision&&
+    raw.events[0]?.requestId===pin.rootRequestId&&
+    raw.events[0]?.memberRef===pin.memberRef}
+  />
   {activity!==null&&snapshot&&<section data-testid="member-care-activity" role="status">
    <p>پس از خواندن قبلی همین صفحه {activity.length} رویداد ادعایی اضافه شده است.
     این اعلان رسمی، رسید مشاهده، تماس واقعی یا تأیید پزشکی نیست.</p>

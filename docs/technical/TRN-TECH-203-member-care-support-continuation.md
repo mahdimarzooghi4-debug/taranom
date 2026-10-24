@@ -1,0 +1,9 @@
+# TRN-TECH-203 — DRAFT / Member care-to-support continuation
+
+Parent Sprint 193 / PR #207 exact HEAD `7002afaeba6dc5ad50821b2eea9a847c168ddd9d`.
+
+Add one meaningful human-clicked synthetic-only workflow: after accepted `test:` care case (nonclinical coordination journal), a member may record one entirely **unverified** support submission through the existing `SUBMIT_UNVERIFIED`/MEDICAL_SERVICE_COMPLAINT journal action. The support's unverified evidence reference is only the `test:` care-case identifier, NOT clinical evidence, legal complaint, consent or an authoritative cross-system identity. No automatic dispatch or real support case.
+
+Read complete source care journal independently and require exact current version/root UUID/member, current-source continuity, all authority-denial flags. Independently read new empty support journal; fail closed before POST if case already exists or care source changed. No cross-journal atomic snapshot or real linkage is claimed. Persist the immutable support UUID/payload in browser pending state **before** POST; after plausible success require independent source-attested GET from existing restricted PostgreSQL journal with exact original UUID (TRN-TECH-202). After lost ACK, manually GET-only reconcile or exact replay, using already-existing TRN-TECH-092 recovery format; no new table, HTTP route, BFF, secret, identity provider, medical record or clinical/financial action.
+
+Real Chromium/Kestrel/PostgreSQL: source-preserving submission; competing care append before preflight; lost ACK with zero additional POST; plausible forged ACK without commit retaining lock. Full exact-head 14-job CI and COMMENTED technical review. All PRs Draft/Open/Unmerged, no Ready/Merge/Stage/QA Gate/Release Approval/Production. All 17 external national blockers unverified, comprehensive simultaneous three-market official launch DENIED_BY_DEFAULT.
