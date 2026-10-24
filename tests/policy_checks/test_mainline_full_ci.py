@@ -105,12 +105,12 @@ class MainlineFullCiTests(unittest.TestCase):
         self.assertEqual(84, len(historical))
         for name, push in historical.items():
             text = (ROOT / ".github/workflows" / name).read_text()
-            self.assertIn("  push:\\n    branches: [" + push + "]", text)
+            self.assertIn("  push:\n    branches: [" + push + "]", text)
             self.assertIn("  workflow_dispatch:", text)
             self.assertNotIn("  pull_request:", text)
         root_dir = ROOT / ".github/workflows"
         triggers = sum(
-            "  pull_request:\\n    branches: [main]" in path.read_text()
+            "  pull_request:\n    branches: [main]" in path.read_text()
             for path in root_dir.glob("*.yml")
         )
         self.assertEqual(1, triggers)
@@ -129,7 +129,7 @@ class MainlineFullCiTests(unittest.TestCase):
         self.assertIn("  workflow_dispatch:", original)
         path.write_text(original.replace(
             "  workflow_dispatch:",
-            "  pull_request:\\n    branches: [main]\\n  workflow_dispatch:",
+            "  pull_request:\n    branches: [main]\n  workflow_dispatch:",
         ))
         self.deny("DISPATCHER_TRIGGERS_CHANGED")
 
