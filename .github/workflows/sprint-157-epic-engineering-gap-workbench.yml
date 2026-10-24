@@ -2,8 +2,6 @@ name: Sprint 157 Epic Engineering Gap Full Regression
 on:
   push:
     branches: [sprint-157-epic-engineering-gap-workbench]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

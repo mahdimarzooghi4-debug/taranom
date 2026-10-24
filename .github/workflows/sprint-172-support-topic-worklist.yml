@@ -2,8 +2,6 @@ name: Sprint 172 Source-filtered Support Topic Worklist Full Regression
 on:
   push:
     branches: [sprint-172-support-topic-worklist]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
