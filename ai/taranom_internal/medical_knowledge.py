@@ -244,3 +244,60 @@ def suggest_test_options(index, query):
         "rights_verified": False, "provider_verified": False,
         "production_allowed": False, "inference_supported": False,
     }
+
+
+def search_bibliography(manifest, query):
+    """Search only titles/publishers of frozen public metadata; NEVER clinical advice.
+
+    No URL retrieval, abstract/body indexing, rights approval, or patient matching.
+    The returned citation metadata remains explicitly unverified.
+    """
+    expected = {"schema_version", "kind", "sources", "manifest_sha256",
+                "rights_verified", "clinical_use_allowed",
+                "training_allowed", "production_allowed"}
+    if type(manifest) is not dict or set(manifest) != expected:
+        raise KnowledgeRejected("FROZEN_MANIFEST_REQUIRED")
+    body = {key: manifest[key] for key in ("schema_version", "kind", "sources")}
+    if (body["schema_version"] != 1
+            or body["kind"] != "BIBLIOGRAPHY_METADATA_ONLY"
+            or type(body["sources"]) is not list
+            or not 1 <= len(body["sources"]) <= MAX_SOURCES
+            or manifest["manifest_sha256"] != _digest(body)
+            or any(manifest[key] is not False for key in (
+                "rights_verified", "clinical_use_allowed",
+                "training_allowed", "production_allowed"))):
+        raise KnowledgeRejected("UNTRUSTED_BIBLIOGRAPHY")
+    q = _words(query)
+    matches = []
+    seen = set()
+    stored_fields = SOURCE_FIELDS | {
+        "rights_verified", "scientifically_reviewed", "training_allowed"
+    }
+    for source in body["sources"]:
+        _fields(source, stored_fields)
+        ref = _ref(source["source_ref"], SOURCE_REF)
+        if ref in seen or any(source[k] is not False for k in (
+                "rights_verified", "scientifically_reviewed", "training_allowed")):
+            raise KnowledgeRejected("INVALID_SOURCE_LINEAGE_OR_AUTHORITY")
+        seen.add(ref)
+        for field in ("title", "publisher"):
+            words = _words(source[field])
+            if any(words[i:i + len(q)] == q
+                   for i in range(len(words) - len(q) + 1)):
+                matches.append({
+                    "source_ref": ref,
+                    "title": source["title"],
+                    "publisher": source["publisher"],
+                    "canonical_url": source["canonical_url"],
+                    "license_label_unverified": source["license_label"],
+                    "rights_verified": False,
+                })
+                break
+    matches.sort(key=lambda x: x["source_ref"])
+    return {
+        "status": "BIBLIOGRAPHIC_METADATA_RESULTS_ONLY",
+        "manifest_sha256": manifest["manifest_sha256"],
+        "sources": matches[:20], "truncated": len(matches) > 20,
+        "clinical_use_allowed": False, "training_allowed": False,
+        "rights_verified": False, "production_allowed": False,
+    }

@@ -19,3 +19,6 @@ The member may receive **non-diagnostic support choosing an appropriate physicia
 
 ## Evidence and limits
 This change is a **meaningful executable library and test package**, not a deployed AI assistant or clinically approved physician-matching capability. Rights evidence is a declaration; source hashes are declarations unless checked against bytes by a separate authorized operation. Human-reviewed schema and real scholarly source imports can be implemented next without collecting any patients' medical data.
+
+## Metadata-only search
+`search_bibliography(snapshot, phrase)` now searches **only frozen bibliographic titles and publishers**, returning deterministic bounded references to catalogued source URLs, not medical recommendations. Search never fetches article content or stores query history; rights and clinical approvals remain false. The synthetic routing harness is a separate and stricter test-only boundary.

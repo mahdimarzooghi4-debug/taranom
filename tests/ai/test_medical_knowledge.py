@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from ai.taranom_internal.medical_knowledge import (
     KnowledgeRejected, build_synthetic_route_index,
-    freeze_bibliography, suggest_test_options,
+    freeze_bibliography, search_bibliography, suggest_test_options,
 )
 
 SOURCE = {
@@ -64,6 +64,29 @@ class BibliographyTests(unittest.TestCase):
         ):
             with self.subTest(bad=bad), self.assertRaises(KnowledgeRejected):
                 freeze_bibliography(bad)
+
+    def test_search_real_metadata_stays_bibliographic_and_unverified(self):
+        item = dict(SOURCE, source_ref="pub:metadata-a")
+        snapshot = freeze_bibliography([item])
+        result = search_bibliography(snapshot, "fictional literature")
+        self.assertEqual(result["status"], "BIBLIOGRAPHIC_METADATA_RESULTS_ONLY")
+        self.assertEqual(len(result["sources"]), 1)
+        self.assertEqual(result["sources"][0]["source_ref"], "pub:metadata-a")
+        self.assertFalse(result["rights_verified"])
+        self.assertFalse(result["training_allowed"])
+        self.assertFalse(result["clinical_use_allowed"])
+        self.assertFalse(result["production_allowed"])
+        self.assertEqual(search_bibliography(snapshot, "not present")["sources"], [])
+
+    def test_search_denies_source_or_authority_tampering(self):
+        snapshot = freeze_bibliography([SOURCE])
+        for bad in (
+            dict(snapshot, rights_verified=True),
+            dict(snapshot, manifest_sha256="0" * 64),
+        ):
+            with self.assertRaises(KnowledgeRejected):
+                search_bibliography(bad, "fictional")
+        self.assertRaises(KnowledgeRejected, search_bibliography, snapshot, "")
 
     def test_non_test_public_bibliography_is_metadata_only(self):
         result = freeze_bibliography([dict(
