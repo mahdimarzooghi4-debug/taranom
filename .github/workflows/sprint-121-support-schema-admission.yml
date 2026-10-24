@@ -2,8 +2,6 @@ name: Sprint 121 Support Schema Version Admission Full Regression
 on:
   push:
     branches: [sprint-121-support-schema-admission]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -2,8 +2,6 @@ name: Sprint 112 Private Evidence Custody Output Safety Full Regression
 on:
   push:
     branches: [sprint-111-private-evidence-custody-output-safety]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
