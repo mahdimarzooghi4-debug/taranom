@@ -2,8 +2,6 @@ name: Sprint 126 Organization Draft QA Vertical Slice Full Regression
 on:
   push:
     branches: [sprint-126-org-draft-qa-vertical-slice]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

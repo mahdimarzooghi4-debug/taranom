@@ -2,8 +2,6 @@ name: Sprint 134 Synthetic Offline AI Shadow Training Full Regression
 on:
   push:
     branches: [sprint-134-synthetic-ai-shadow-training-benchmark]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

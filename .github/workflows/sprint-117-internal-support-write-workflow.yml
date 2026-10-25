@@ -2,8 +2,6 @@ name: Sprint 117 Internal Support Write Workflow Full Regression
 on:
   push:
     branches: [sprint-117-internal-support-write-workflow]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -96,6 +96,43 @@ class MainlineFullCiTests(unittest.TestCase):
                   "\n  additional:\n    runs-on: ubuntu-latest")
         self.deny("UNSAFE_OR_INVALID_REUSABLE_CALL")
 
+    def test_history_retains_push_manual_without_duplicate_main_pr(self):
+        from check_public_ci_workflow_trust import DISPATCHER_BRANCHES
+        historical = {
+            name: push for name, (push, target) in DISPATCHER_BRANCHES.items()
+            if name != MAINLINE_DISPATCHER_NAME and target == "main"
+        }
+        self.assertEqual(84, len(historical))
+        for name, push in historical.items():
+            text = (ROOT / ".github/workflows" / name).read_text()
+            self.assertIn("  push:\n    branches: [" + push + "]", text)
+            self.assertIn("  workflow_dispatch:", text)
+            self.assertNotIn("  pull_request:", text)
+        root_dir = ROOT / ".github/workflows"
+        triggers = sum(
+            "  pull_request:\n    branches: [main]" in path.read_text()
+            for path in root_dir.glob("*.yml")
+        )
+        self.assertEqual(1, triggers)
+
+    def test_historical_main_pr_trigger_backdoor_is_denied(self):
+        from check_public_ci_workflow_trust import DISPATCHER_BRANCHES
+        name = next(
+            n for n, (_, target) in DISPATCHER_BRANCHES.items()
+            if n != MAINLINE_DISPATCHER_NAME and target == "main"
+        )
+        path = self.workflows / name
+        shutil.copy2(ROOT / ".github/workflows" / name, path)
+        report = scan(self.root)
+        self.assertEqual("PASS_LIMITED_STATIC_SCOPE", report["status"], report)
+        original = path.read_text()
+        self.assertIn("  workflow_dispatch:", original)
+        path.write_text(original.replace(
+            "  workflow_dispatch:",
+            "  pull_request:\n    branches: [main]\n  workflow_dispatch:",
+        ))
+        self.deny("DISPATCHER_TRIGGERS_CHANGED")
+
     def test_real_repository_has_mandatory_ci(self):
         result = scan(ROOT)
         self.assertEqual("PASS_LIMITED_STATIC_SCOPE", result["status"], result)
