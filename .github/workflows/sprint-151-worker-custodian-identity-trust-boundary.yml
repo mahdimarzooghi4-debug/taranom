@@ -2,8 +2,6 @@ name: Sprint 151 Worker Custodian Identity Trust Boundary Full Regression
 on:
   push:
     branches: [sprint-151-worker-custodian-identity-trust-boundary]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

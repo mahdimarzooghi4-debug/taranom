@@ -2,8 +2,6 @@ name: Sprint 194 Member Care to Support Continuation Full Regression
 on:
   push:
     branches: [sprint-194-member-care-support-continuation]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
