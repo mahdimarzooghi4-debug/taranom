@@ -2,8 +2,6 @@ name: Sprint 163 Care PostgreSQL Least Privilege Full Regression
 on:
   push:
     branches: [sprint-163-care-postgres-least-privilege]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
