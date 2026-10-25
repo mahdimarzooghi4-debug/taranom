@@ -2,8 +2,6 @@ name: Sprint 143 AI Worker Operational Fault Telemetry Full Regression
 on:
   push:
     branches: [sprint-143-ai-worker-operational-fault-telemetry]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
