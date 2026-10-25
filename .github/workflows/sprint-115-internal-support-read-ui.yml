@@ -2,8 +2,6 @@ name: Sprint 115 Internal Support Read UI Full Regression
 on:
   push:
     branches: [sprint-115-internal-support-read-ui]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
