@@ -2,8 +2,6 @@ name: Sprint 140 Isolated .NET Python Worker Full Regression
 on:
   push:
     branches: [sprint-140-internal-ai-worker-isolated-ipc]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

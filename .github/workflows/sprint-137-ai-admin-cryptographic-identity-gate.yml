@@ -2,8 +2,6 @@ name: Sprint 137 Internal AI Admin Identity Boundary Full Regression
 on:
   push:
     branches: [sprint-137-ai-admin-cryptographic-identity-gate]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

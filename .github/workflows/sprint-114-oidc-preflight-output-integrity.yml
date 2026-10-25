@@ -2,8 +2,6 @@ name: Sprint 114 OIDC Preflight Output Integrity Full Regression
 on:
   push:
     branches: [sprint-114-oidc-preflight-output-integrity]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

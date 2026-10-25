@@ -14,7 +14,8 @@ import sys
 
 WORKFLOW_DIR = Path(".github/workflows")
 # These two special source files are the entire local reusable-workflow trust
-# envelope; all historical workflows retain their original strict step rules.
+# envelope; historical main-target Sprint dispatchers retain push/manual only,
+# while the canonical mainline dispatcher is the sole owner of main PR CI.
 REUSABLE_NAME = "taranom-full-regression-reusable.yml"
 DISPATCHER_NAME = "sprint-71-shared-secure-ci-gates.yml"
 MAINLINE_DISPATCHER_NAME = "taranom-mainline-full-regression.yml"
@@ -611,8 +612,16 @@ def inspect_workflow(path: Path) -> list[str]:
         violations.add("UNAUTHORIZED_WORKFLOW_CALL")
     if path.name == REUSABLE_NAME and triggers != {"workflow_call"}:
         violations.add("REUSABLE_TRIGGER_NOT_ISOLATED")
-    if path.name in DISPATCHER_BRANCHES and triggers != {
-            "push", "pull_request", "workflow_dispatch"}:
+    historical_main_target = (
+        path.name in DISPATCHER_BRANCHES
+        and path.name != MAINLINE_DISPATCHER_NAME
+        and DISPATCHER_BRANCHES[path.name][1] == "main"
+    )
+    dispatcher_events = (
+        {"push", "workflow_dispatch"} if historical_main_target else
+        {"push", "pull_request", "workflow_dispatch"}
+    )
+    if path.name in DISPATCHER_BRANCHES and triggers != dispatcher_events:
         violations.add("DISPATCHER_TRIGGERS_CHANGED")
     if any(UNSAFE_EVENT.match(s) for s in active):
         violations.add("PRIVILEGED_OR_UNSAFE_WORKFLOW_EVENT")
@@ -637,11 +646,15 @@ def inspect_workflow(path: Path) -> list[str]:
     # explicitly named Sprint71 dispatcher; no with/secrets/if/runner/steps.
     if path.name in DISPATCHER_BRANCHES:
         branch, base = DISPATCHER_BRANCHES[path.name]
-        if trigger_lines != [
+        expected_triggers = [
             "  push:", "    branches: [" + branch + "]",
-            "  pull_request:", "    branches: [" + base + "]",
-            "  workflow_dispatch:",
-        ]:
+        ]
+        if not historical_main_target:
+            expected_triggers.extend([
+                "  pull_request:", "    branches: [" + base + "]",
+            ])
+        expected_triggers.append("  workflow_dispatch:")
+        if trigger_lines != expected_triggers:
             violations.add("DISPATCHER_TARGET_BRANCHES_CHANGED")
         if job_lines != [
             "  full-regression:",
