@@ -52,7 +52,7 @@ class LocalModelArtifactTests(unittest.TestCase):
             root = Path(temp)
             (root / "real.part").write_bytes(b"synthetic-model-bytes")
             (root / "weights.part").symlink_to(root / "real.part")
-            with self.assertRaisesRegex(ArtifactRejected, "SYMLINK_ARTIFACT_PATH"):
+            with self.assertRaisesRegex(ArtifactRejected, "UNSAFE_ARTIFACT_PATH_COMPONENT"):
                 verify_local_model_manifest(manifest(), root)
             duplicate = manifest()
             duplicate["files"] = duplicate["files"] * 2
@@ -100,7 +100,7 @@ class LocalModelArtifactTests(unittest.TestCase):
             (outside / "weights.part").write_bytes(b"synthetic-model-bytes")
             (root / "nested").symlink_to(outside, target_is_directory=True)
             with self.assertRaisesRegex(
-                    ArtifactRejected, "SYMLINK_ARTIFACT_PATH"):
+                    ArtifactRejected, "UNSAFE_ARTIFACT_PATH_COMPONENT"):
                 verify_local_model_manifest(manifest("nested/weights.part"), root)
 
 
