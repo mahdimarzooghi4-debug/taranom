@@ -2,7 +2,7 @@
 import unittest
 
 from ai.taranom_internal.medical_assistant_eval import (
-    EvaluationRejected, check_candidate_output, summarize, validate_case,
+    EvaluationRejected, check_candidate_output, evaluate_batch, summarize, validate_case,
 )
 
 
@@ -81,6 +81,26 @@ class MedicalAssistantEvaluationTests(unittest.TestCase):
         bad_output["emergency_action"] = []
         with self.assertRaisesRegex(EvaluationRejected, "UNKNOWN_EMERGENCY_OUTPUT"):
             check_candidate_output(c, bad_output)
+
+    def test_batch_evaluator_aggregates_only_synthetic_contract_results(self):
+        cases = [case("test:case-1"), case("test:case-2", clarification=False)]
+        validated = [validate_case(item) for item in cases]
+        outputs = [output(validated[0]), output(validated[1], clarification=False)]
+        report = evaluate_batch(cases, outputs)
+        self.assertEqual(2, report["summary"]["case_count"])
+        self.assertEqual(2, report["summary"]["passed_case_count"])
+        self.assertEqual("NOT_EVALUATED_NO_QUALIFIED_GOLD_SET", report["diagnostic_accuracy"])
+        self.assertFalse(report["clinical_use_allowed"])
+        self.assertFalse(report["production_allowed"])
+
+    def test_batch_rejects_mismatch_empty_and_duplicate_refs(self):
+        with self.assertRaisesRegex(EvaluationRejected, "BATCH_LENGTH_MISMATCH"):
+            evaluate_batch([case()], [])
+        with self.assertRaisesRegex(EvaluationRejected, "NONEMPTY_SYNTHETIC_BATCH"):
+            evaluate_batch([], [])
+        duplicate = [case("test:same"), case("test:same")]
+        with self.assertRaisesRegex(EvaluationRejected, "DUPLICATE_SYNTHETIC_CASE_REF"):
+            evaluate_batch(duplicate, [output(validate_case(duplicate[0]))] * 2)
 
     def test_emergency_cannot_be_defined_without_human_referral(self):
         with self.assertRaisesRegex(EvaluationRejected, "EMERGENCY_REQUIRES"):

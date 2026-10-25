@@ -141,3 +141,32 @@ def summarize(results: list[dict[str, object]]) -> dict[str, object]:
         "training_allowed": False,
         "production_allowed": False,
     }
+
+
+def evaluate_batch(cases: list[object], outputs: list[object]) -> dict[str, object]:
+    """Evaluate one candidate's outputs against a bounded synthetic case batch.
+
+    Run this once per locally hosted model candidate to compare only interaction
+    contract behavior. The helper performs no model loading, inference, or I/O.
+    """
+    if type(cases) is not list or type(outputs) is not list or not cases:
+        raise EvaluationRejected("NONEMPTY_SYNTHETIC_BATCH_REQUIRED")
+    if len(cases) != len(outputs):
+        raise EvaluationRejected("CASE_OUTPUT_BATCH_LENGTH_MISMATCH")
+    validated = [validate_case(case) for case in cases]
+    refs = [case.case_ref for case in validated]
+    if len(set(refs)) != len(refs):
+        raise EvaluationRejected("DUPLICATE_SYNTHETIC_CASE_REF")
+    results = [
+        check_candidate_output(case, output)
+        for case, output in zip(validated, outputs)
+    ]
+    return {
+        "status": "SYNTHETIC_INTERACTION_CONTRACT_ONLY",
+        "case_results": results,
+        "summary": summarize(results),
+        "diagnostic_accuracy": "NOT_EVALUATED_NO_QUALIFIED_GOLD_SET",
+        "clinical_use_allowed": False,
+        "training_allowed": False,
+        "production_allowed": False,
+    }
