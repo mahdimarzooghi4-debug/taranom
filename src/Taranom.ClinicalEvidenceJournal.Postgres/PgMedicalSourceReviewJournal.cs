@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +18,7 @@ internal sealed record MedicalSourceReviewSnapshot(long Revision,string HeadSha2
 internal readonly record struct MedicalSourceReviewAppendResult(MedicalSourceReviewOutcome Outcome,long CurrentRevision);
 
 // Synthetic-only durable journal. Caller identity/evidence references remain claims.
-internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource dataSource)
+internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioningDataSource, NpgsqlDataSource writerDataSource, NpgsqlDataSource readerDataSource)
 {
     private static readonly HashSet<string> Lanes=["RIGHTS","SCIENCE","TAXONOMY"];
     private static readonly HashSet<string> Recommendations=["REQUEST_EVIDENCE","RECOMMEND_ACCEPT","RECOMMEND_REJECT"];
@@ -82,7 +83,7 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource dataSource)
            sources.Select(x=>x.SourceRef).Distinct(StringComparer.Ordinal).Count()!=sources.Count)
             throw new ArgumentException("Invalid synthetic medical review catalog.");
         var genesis=Digest($"genesis\n{catalog}\n{taxonomy}");
-        await using var cn=await dataSource.OpenConnectionAsync(ct);
+        await using var cn=await provisioningDataSource.OpenConnectionAsync(ct);
         await using var tx=await cn.BeginTransactionAsync(ct);
         await using(var insert=new NpgsqlCommand("""
           INSERT INTO internal_test_medical_review_head(catalog_sha256,taxonomy_sha256,head_sha256)
@@ -143,7 +144,7 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource dataSource)
         MedicalSourceReviewCommand input,CancellationToken ct=default)
     {
         if(!Sha(catalog)||!Sha(taxonomy)||!Valid(input))return new(MedicalSourceReviewOutcome.Invalid,0);
-        await using var cn=await dataSource.OpenConnectionAsync(ct);
+        await using var cn=await writerDataSource.OpenConnectionAsync(ct);
         await using var tx=await cn.BeginTransactionAsync(ct);
         long revision;string head;string storedTaxonomy;
         await using(var query=new NpgsqlCommand("""
@@ -157,7 +158,7 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource dataSource)
             revision=reader.GetInt64(0);head=reader.GetString(1);storedTaxonomy=reader.GetString(2);
         }
         if(storedTaxonomy!=taxonomy)return await Rollback<MedicalSourceReviewAppendResult>(tx,new(MedicalSourceReviewOutcome.ScopeDenied,revision),ct);
-        var state=await ReadLockedAsync(cn,tx,catalog,taxonomy,ct);
+        var state=await ReadLockedAsync(cn,tx,catalog,taxonomy,ct,lockHead:false);
         var replay=state.Events.FirstOrDefault(x=>x.Command.RequestId==input.RequestId);
         if(replay is not null)return await Rollback<MedicalSourceReviewAppendResult>(tx,new(replay.Command==input?
             MedicalSourceReviewOutcome.Replayed:MedicalSourceReviewOutcome.ConflictingReplay,revision),ct);
@@ -202,21 +203,22 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource dataSource)
     internal async Task<MedicalSourceReviewSnapshot> ReadAsync(string catalog,string taxonomy,CancellationToken ct=default)
     {
         if(!Sha(catalog)||!Sha(taxonomy))throw new ArgumentException("Invalid synthetic review scope.");
-        await using var cn=await dataSource.OpenConnectionAsync(ct);
-        await using var tx=await cn.BeginTransactionAsync(ct);
-        var state=await ReadLockedAsync(cn,tx,catalog,taxonomy,ct);
+        await using var cn=await readerDataSource.OpenConnectionAsync(ct);
+        await using var tx=await cn.BeginTransactionAsync(IsolationLevel.RepeatableRead,ct);
+        var state=await ReadLockedAsync(cn,tx,catalog,taxonomy,ct,lockHead:true);
         await tx.CommitAsync(ct);
         return new(state.Revision,state.HeadSha256,state.Events.AsReadOnly(),false,false,false,false,false,false,false,false);
     }
 
     private sealed record ReadState(long Revision,string HeadSha256,List<MedicalSourceReviewEvent> Events,Dictionary<string,string> Sources);
-    private static async Task<ReadState> ReadLockedAsync(NpgsqlConnection cn,NpgsqlTransaction tx,string catalog,string taxonomy,CancellationToken ct)
+    private static async Task<ReadState> ReadLockedAsync(NpgsqlConnection cn,NpgsqlTransaction tx,string catalog,string taxonomy,CancellationToken ct,bool lockHead)
     {
         long revision;string head;
-        await using(var q=new NpgsqlCommand("""
+        var headSql="""
           SELECT current_revision,head_sha256,taxonomy_sha256 FROM internal_test_medical_review_head
-          WHERE catalog_sha256=@c FOR UPDATE
-          """,cn,tx))
+          WHERE catalog_sha256=@c
+          """;
+        await using(var q=new NpgsqlCommand(lockHead?headSql+" FOR UPDATE":headSql,cn,tx))
         {
             q.Parameters.AddWithValue("c",catalog);
             await using var r=await q.ExecuteReaderAsync(ct);

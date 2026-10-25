@@ -48,6 +48,25 @@ internal static class ReviewJournalTestSchema
             GRANT USAGE ON SCHEMA public TO taranom_sprint23_receipt_auditor;
             GRANT SELECT ON internal_test_packet_receipt,internal_test_packet_receipt_audit
               TO taranom_sprint23_receipt_auditor;
+            DO $block$ BEGIN
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='taranom_sprint201_medical_review_writer') THEN
+                CREATE ROLE taranom_sprint201_medical_review_writer LOGIN PASSWORD 'ephemeral_medical_review_writer';
+              END IF;
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='taranom_sprint201_medical_review_reader') THEN
+                CREATE ROLE taranom_sprint201_medical_review_reader LOGIN PASSWORD 'ephemeral_medical_review_reader';
+              END IF;
+            END $block$;
+            GRANT USAGE ON SCHEMA public TO taranom_sprint201_medical_review_writer,taranom_sprint201_medical_review_reader;
+            GRANT SELECT ON internal_test_medical_review_head,internal_test_medical_review_source,
+              internal_test_medical_review_event,internal_test_medical_review_audit
+              TO taranom_sprint201_medical_review_writer;
+            GRANT INSERT ON internal_test_medical_review_event,internal_test_medical_review_audit
+              TO taranom_sprint201_medical_review_writer;
+            GRANT UPDATE(current_revision,head_sha256) ON internal_test_medical_review_head
+              TO taranom_sprint201_medical_review_writer;
+            GRANT SELECT ON internal_test_medical_review_head,internal_test_medical_review_source,
+              internal_test_medical_review_event,internal_test_medical_review_audit
+              TO taranom_sprint201_medical_review_reader;
             """, cn);
         await command.ExecuteNonQueryAsync();
     }
