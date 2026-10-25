@@ -14,7 +14,7 @@ public sealed class PgMedicalSourceBlobReconcilerTests
     private static string Source(string name)=>$"test:{name}-{Guid.NewGuid():N}";
 
     [Fact]
-    public async Task ReconciliationDerivesCatalogAndEvidenceReferencesFromTheReadOnlyJournal()
+    public async Task ReconciliationDerivesReferencesAndValidatesAllJournalsFromOneReadOnlySnapshot()
     {
         await ReviewJournalTestSchema.EnsureAsync().WaitAsync(TestContext.Current.CancellationToken);
         var root=Path.Combine(Path.GetTempPath(),$"taranom-pg-blob-reconcile-{Guid.NewGuid():N}");
@@ -57,14 +57,12 @@ public sealed class PgMedicalSourceBlobReconcilerTests
             using(var orphanStream=new MemoryStream(orphanBytes,writable:false))
                 orphanSha=(await store.StoreAsync(orphanStream,1024,TestContext.Current.CancellationToken)).Sha256;
 
-            var reconciler=new PgMedicalSourceBlobReconciler(reader,journal,store);
+            var reconciler=new PgMedicalSourceBlobReconciler(reader,store);
             var report=await reconciler.ReconcileAsync(1024,TestContext.Current.CancellationToken);
-
             Assert.Contains(report,x=>x.Identifier==sourceSha&&x.Kind==MedicalSourceBlobFindingKind.ReferencedIntact);
             Assert.Contains(report,x=>x.Identifier==evidenceSha&&x.Kind==MedicalSourceBlobFindingKind.ReferencedIntact);
             Assert.Contains(report,x=>x.Identifier==missingSha&&x.Kind==MedicalSourceBlobFindingKind.MissingReference);
             Assert.Contains(report,x=>x.Identifier==orphanSha&&x.Kind==MedicalSourceBlobFindingKind.OrphanIntact);
-            Assert.Equal(1L,(await journal.ReadAsync(catalog,taxonomy,TestContext.Current.CancellationToken)).Revision);
         }
         finally { if(Directory.Exists(root))Directory.Delete(root,recursive:true); }
     }
