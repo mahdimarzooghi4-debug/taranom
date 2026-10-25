@@ -1,8 +1,5 @@
 using System.Data;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Npgsql;
 
 namespace Taranom.ClinicalEvidenceJournal.Postgres;
@@ -12,9 +9,6 @@ internal sealed class PgMedicalSourceBlobReconciler(
     NpgsqlDataSource readerDataSource,
     MedicalSourcePackageBlobStore blobStore)
 {
-    private static readonly HashSet<string> Lanes=["RIGHTS","SCIENCE","TAXONOMY"];
-    private static readonly HashSet<string> Recommendations=["REQUEST_EVIDENCE","RECOMMEND_ACCEPT","RECOMMEND_REJECT"];
-
     internal async Task<IReadOnlyList<MedicalSourceBlobFinding>> ReconcileAsync(
         long maximumBytesPerBlob,CancellationToken ct=default)
     {
@@ -35,7 +29,7 @@ internal sealed class PgMedicalSourceBlobReconciler(
                 while(await rows.ReadAsync(ct))
                 {
                     var catalog=rows.GetString(0);var taxonomy=rows.GetString(1);var head=rows.GetString(3);
-                    if(!ValidSha(catalog)||!ValidSha(taxonomy)||!ValidSha(head))
+                    if(!MedicalSourceReviewIntegrity.IsSha256(catalog)||!MedicalSourceReviewIntegrity.IsSha256(taxonomy)||!MedicalSourceReviewIntegrity.IsSha256(head))
                         throw new InvalidOperationException("MEDICAL_REVIEW_CATALOG_METADATA_TAMPERED");
                     states.Add(catalog,new(catalog,taxonomy,rows.GetInt64(2),head));
                 }
@@ -49,7 +43,7 @@ internal sealed class PgMedicalSourceBlobReconciler(
                 while(await rows.ReadAsync(ct))
                 {
                     var catalog=rows.GetString(0);var sourceRef=rows.GetString(1);var packageSha=rows.GetString(2);
-                    if(!states.TryGetValue(catalog,out var state)||!ValidSourceRef(sourceRef)||!ValidSha(packageSha))
+                    if(!states.TryGetValue(catalog,out var state)||!MedicalSourceReviewIntegrity.IsSourceRef(sourceRef)||!MedicalSourceReviewIntegrity.IsSha256(packageSha))
                         throw new InvalidOperationException("MEDICAL_REVIEW_SOURCE_SCOPE_TAMPERED");
                     state.Sources.Add(sourceRef,packageSha);referenced.Add(packageSha);
                 }
@@ -74,8 +68,8 @@ internal sealed class PgMedicalSourceBlobReconciler(
                     MedicalSourceReviewCommand? command;
                     try { command=JsonSerializer.Deserialize<MedicalSourceReviewCommand>(json); }
                     catch(JsonException) { throw new InvalidOperationException("MEDICAL_REVIEW_COMMAND_JSON_TAMPERED"); }
-                    if(command is null||!ValidCommand(command)||revision!=expectedRevision||previous!=state.LastEventSha256||
-                       EventDigest(previous,revision,json)!=eventSha||rows.IsDBNull(6)||rows.IsDBNull(7)||
+                    if(command is null||!MedicalSourceReviewIntegrity.IsValidCommand(command)||revision!=expectedRevision||previous!=state.LastEventSha256||
+                       MedicalSourceReviewIntegrity.EventDigest(previous,revision,json)!=eventSha||rows.IsDBNull(6)||rows.IsDBNull(7)||
                        rows.GetGuid(6)!=requestId||command.RequestId!=requestId||rows.GetString(7)!=eventSha||
                        !state.Sources.TryGetValue(command.SourceRef,out var packageSha)||packageSha!=command.PackageSha256)
                         throw new InvalidOperationException("MEDICAL_REVIEW_CHAIN_OR_AUDIT_TAMPERED");
@@ -96,17 +90,8 @@ internal sealed class PgMedicalSourceBlobReconciler(
         internal long Revision { get; }=revision;
         internal string HeadSha256 { get; }=headSha256;
         internal long EventCount { get; set; }
-        internal string LastEventSha256 { get; set; }=Digest($"genesis\n{catalogSha256}\n{taxonomySha256}");
+        internal string LastEventSha256 { get; set; }=MedicalSourceReviewIntegrity.Digest($"genesis\n{catalogSha256}\n{taxonomySha256}");
         internal Dictionary<string,string> Sources { get; }=new(StringComparer.Ordinal);
     }
 
-    private static bool ValidCommand(MedicalSourceReviewCommand x)=>x.RequestId!=Guid.Empty&&x.ExpectedRevision>=0&&
-        ValidSourceRef(x.SourceRef)&&ValidSha(x.PackageSha256)&&Lanes.Contains(x.Lane)&&Recommendations.Contains(x.Recommendation)&&
-        ValidClaim(x.ReviewerRefClaimed,"reviewer:")&&ValidClaim(x.EvidenceRefClaimed,"evidence:")&&ValidSha(x.EvidencePackageSha256);
-    private static bool ValidSourceRef(string x)=>x is not null&&Regex.IsMatch(x,"^test:[A-Za-z0-9_:-]{1,120}$",RegexOptions.CultureInvariant);
-    private static bool ValidClaim(string x,string prefix)=>x is not null&&x.StartsWith(prefix,StringComparison.Ordinal)&&
-        x.Length>prefix.Length&&x.Length<=129&&x.AsSpan(prefix.Length).ToString().All(c=>char.IsAsciiLetterOrDigit(c)||c is '_' or ':' or '-');
-    private static bool ValidSha(string x)=>x is not null&&x.Length==64&&x.All(c=>c is >= '0' and <= '9' or >= 'a' and <= 'f');
-    private static string Digest(string value)=>Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
-    private static string EventDigest(string previous,long revision,string json)=>Digest($"event\n{previous}\n{revision}\n{json}");
 }
