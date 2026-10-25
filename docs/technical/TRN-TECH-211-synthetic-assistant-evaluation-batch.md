@@ -10,6 +10,7 @@ Provide a reusable batch evaluator so outputs from each internally hosted model 
 
 - Accept only the exact synthetic case schema and the exact response schema defined in TRN-TECH-210.
 - Require a nonempty case batch, one output per case, and unique `test:` case references.
+- Preserve input order and reject outputs whose `test:` reference does not match the corresponding case.
 - Preserve per-case results and produce a deterministic aggregate summary.
 - Evaluate clarification, emergency handoff and human referral, Persian response locale, case lineage, and patient choice only.
 - Reject malformed or mismatched batch inputs without partial reports.

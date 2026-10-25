@@ -7,7 +7,7 @@ Make the Sprint 200 interaction evaluator practical for running the same synthet
 ## Delivered
 
 - Added `evaluate_batch` to validate one candidate's full output batch and return per-case results plus a deterministic summary.
-- Rejected empty batches, input/output length mismatches, and duplicate synthetic case references.
+- Rejected empty batches, input/output length mismatches, duplicate synthetic case references, and reordered/mismatched outputs.
 - Added tests for success, malformed batch boundaries, and non-authoritative reporting.
 
 ## Limits
