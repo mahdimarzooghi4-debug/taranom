@@ -2,8 +2,6 @@ name: Sprint 173 Member Followup Return Full Regression
 on:
   push:
     branches: [sprint-173-member-followup-return]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

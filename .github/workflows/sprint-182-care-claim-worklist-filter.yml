@@ -2,8 +2,6 @@ name: Sprint 182 Care Claim Worklist Filter Full Regression
 on:
   push:
     branches: [sprint-182-care-claim-worklist-filter]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
