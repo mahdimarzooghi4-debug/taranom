@@ -70,16 +70,16 @@ internal sealed class MedicalSourcePackageBlobStore
     {
         if(referencedSha256 is null)throw new ArgumentNullException(nameof(referencedSha256));
         if(maximumBytesPerBlob<=0)throw new ArgumentOutOfRangeException(nameof(maximumBytesPerBlob));
+        ct.ThrowIfCancellationRequested();
         var referenced=new HashSet<string>(StringComparer.Ordinal);
         foreach(var digest in referencedSha256)
         {
+            ct.ThrowIfCancellationRequested();
             if(!ValidSha(digest))throw new ArgumentException("Invalid referenced package SHA-256.",nameof(referencedSha256));
             referenced.Add(digest);
         }
-        var files=Directory.EnumerateFiles(root,"*.blob",SearchOption.TopDirectoryOnly)
-            .OrderBy(Path.GetFileName,StringComparer.Ordinal).ToArray();
         var findings=new List<MedicalSourceBlobFinding>();var validNames=new HashSet<string>(StringComparer.Ordinal);
-        foreach(var path in files)
+        foreach(var path in Directory.EnumerateFiles(root,"*.blob",SearchOption.TopDirectoryOnly))
         {
             ct.ThrowIfCancellationRequested();var fileName=Path.GetFileName(path);
             var digest=Path.GetFileNameWithoutExtension(path);
