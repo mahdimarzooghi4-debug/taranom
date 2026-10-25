@@ -1,5 +1,6 @@
 """Synthetic filesystem tests for local model artifact preflight."""
 import hashlib
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -76,6 +77,31 @@ class LocalModelArtifactTests(unittest.TestCase):
                 with self.subTest(name=name), self.assertRaisesRegex(
                         ArtifactRejected, "SAFE_RELATIVE_ARTIFACT_PATH"):
                     verify_local_model_manifest(manifest(name), Path(temp))
+
+
+    def test_rejects_ambiguous_paths_and_special_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("weights//part", "weights/./part", "weights/../part"):
+                with self.subTest(name=name), self.assertRaisesRegex(
+                        ArtifactRejected, "SAFE_RELATIVE_ARTIFACT_PATH"):
+                    verify_local_model_manifest(manifest(name), root)
+            if hasattr(os, "mkfifo"):
+                os.mkfifo(root / "weights.part")
+                with self.assertRaisesRegex(
+                        ArtifactRejected, "LOCAL_REGULAR_ARTIFACT_FILE_REQUIRED"):
+                    verify_local_model_manifest(manifest(), root)
+
+    def test_rejects_symlinked_parent_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "weights.part").write_bytes(b"synthetic-model-bytes")
+            (root / "nested").symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "SYMLINK_ARTIFACT_PATH"):
+                verify_local_model_manifest(manifest("nested/weights.part"), root)
 
 
 if __name__ == "__main__":
