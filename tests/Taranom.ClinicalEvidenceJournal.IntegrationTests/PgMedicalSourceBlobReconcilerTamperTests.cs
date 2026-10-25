@@ -16,6 +16,7 @@ public sealed class PgMedicalSourceBlobReconcilerTamperTests
     [InlineData("missing-audit","MEDICAL_REVIEW_CHAIN_OR_AUDIT_TAMPERED")]
     [InlineData("invalid-command","MEDICAL_REVIEW_CHAIN_OR_AUDIT_TAMPERED")]
     [InlineData("head","MEDICAL_REVIEW_HEAD_DIVERGENCE")]
+    [InlineData("orphan-audit","MEDICAL_REVIEW_ORPHAN_AUDIT_TAMPERED")]
     public async Task ReconcilerFailsClosedOnTamperedSnapshot(string corruption,string expectedError)
     {
         await AssertTamperedSnapshotRejectedAsync(corruption,expectedError,TestContext.Current.CancellationToken);
@@ -54,18 +55,21 @@ public sealed class PgMedicalSourceBlobReconcilerTamperTests
             if(corruption=="invalid-command")command=command with { Recommendation="ACCEPT" };
             var json=JsonSerializer.Serialize(command);
             var previous=MedicalSourceReviewIntegrity.Digest($"genesis\n{catalog}\n{taxonomy}");
+            var orphanAudit=corruption=="orphan-audit";
             var validEventSha=MedicalSourceReviewIntegrity.EventDigest(previous,1,json);
             var eventSha=corruption=="event-hash"?new string('f',64):validEventSha;
-            var headSha=corruption=="head"?new string('d',64):eventSha;
+            var revision=orphanAudit?0L:1L;
+            var headSha=corruption=="head"?new string('d',64):orphanAudit?previous:eventSha;
 
             await using(var insertHead=new NpgsqlCommand($"""
                 INSERT INTO {schema}.internal_test_medical_review_head
                   (catalog_sha256,taxonomy_sha256,current_revision,head_sha256)
-                VALUES(@catalog,@taxonomy,1,@head)
+                VALUES(@catalog,@taxonomy,@revision,@head)
                 """,setup))
             {
                 insertHead.Parameters.AddWithValue("catalog",catalog);
                 insertHead.Parameters.AddWithValue("taxonomy",taxonomy);
+                insertHead.Parameters.AddWithValue("revision",revision);
                 insertHead.Parameters.AddWithValue("head",headSha);
                 await insertHead.ExecuteNonQueryAsync(ct);
             }
@@ -79,12 +83,13 @@ public sealed class PgMedicalSourceBlobReconcilerTamperTests
                 insertSource.Parameters.AddWithValue("package",packageSha);
                 await insertSource.ExecuteNonQueryAsync(ct);
             }
-            await using(var insertEvent=new NpgsqlCommand($"""
-                INSERT INTO {schema}.internal_test_medical_review_event
-                  (catalog_sha256,revision,request_id,command_json,previous_sha256,event_sha256)
-                VALUES(@catalog,1,@request,@json,@previous,@event)
-                """,setup))
+            if(!orphanAudit)
             {
+                await using var insertEvent=new NpgsqlCommand($"""
+                    INSERT INTO {schema}.internal_test_medical_review_event
+                      (catalog_sha256,revision,request_id,command_json,previous_sha256,event_sha256)
+                    VALUES(@catalog,1,@request,@json,@previous,@event)
+                    """,setup);
                 insertEvent.Parameters.AddWithValue("catalog",catalog);
                 insertEvent.Parameters.AddWithValue("request",requestId);
                 insertEvent.Parameters.AddWithValue("json",json);
