@@ -205,7 +205,7 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioning
         if(!Sha(catalog)||!Sha(taxonomy))throw new ArgumentException("Invalid synthetic review scope.");
         await using var cn=await readerDataSource.OpenConnectionAsync(ct);
         await using var tx=await cn.BeginTransactionAsync(IsolationLevel.RepeatableRead,ct);
-        var state=await ReadLockedAsync(cn,tx,catalog,taxonomy,ct,lockHead:true);
+        var state=await ReadLockedAsync(cn,tx,catalog,taxonomy,ct,lockHead:false);
         await tx.CommitAsync(ct);
         return new(state.Revision,state.HeadSha256,state.Events.AsReadOnly(),false,false,false,false,false,false,false,false);
     }
