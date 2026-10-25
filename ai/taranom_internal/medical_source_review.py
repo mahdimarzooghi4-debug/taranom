@@ -140,7 +140,9 @@ def _validated_catalog(catalog, taxonomy_manifest):
             "taxonomy_refs": refs,
             "intake_ref": intake_ref,
         }
-        if (_sha(entry["package_sha256"]) != _digest(package_body)
+        if (entry["taxonomy_sha256"] != taxonomy["taxonomy_sha256"]
+                or entry["article_sha256"] != article_sha
+                or entry["rights_evidence_sha256"] != rights_sha
                 or entry["package_sha256"] != _digest(package_body)):
             raise KnowledgeRejected("PACKAGE_FINGERPRINT_CONFLICT")
         normalized.append(dict(entry))

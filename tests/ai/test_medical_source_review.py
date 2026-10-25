@@ -189,6 +189,17 @@ class SourceReviewDocketTests(unittest.TestCase):
             mutation(changed)
             with self.assertRaises(KnowledgeRejected):
                 open_source_review_docket(changed, self.taxonomy)
+        # A recomputed outer catalog digest cannot hide an invalid per-source
+        # taxonomy binding, even when the source package digest is unchanged.
+        from ai.taranom_internal.medical_knowledge import _digest
+        forged = copy.deepcopy(self.catalog)
+        forged["sources"][0]["taxonomy_sha256"] = "0" * 64
+        body = {key: forged[key] for key in (
+            "schema_version", "kind", "taxonomy_sha256", "sources",
+        )}
+        forged["catalog_sha256"] = _digest(body)
+        with self.assertRaises(KnowledgeRejected):
+            open_source_review_docket(forged, self.taxonomy)
         altered_taxonomy = copy.deepcopy(self.taxonomy)
         altered_taxonomy["taxonomy_sha256"] = "0" * 64
         with self.assertRaises(KnowledgeRejected):
