@@ -7,7 +7,7 @@ Prepare a real, executable offline test contract for the approved internal model
 ## Delivered
 
 - Added an evaluator for synthetic Persian conversation fixtures.
-- Added executable checks for Persian output, clarification expectations, emergency-to-ER plus human handoff, patient final choice, strict schemas, and case lineage.
+- Added executable checks for Persian output, clarification expectations, emergency-to-ER plus human handoff, patient final choice, strict schemas, case lineage, and rejection of forged aggregate results.
 - Added explicit reporting that diagnostic accuracy is not evaluated without a qualified gold set.
 - Documented that this sprint does not download or run either model and does not create clinical, training, Stage, or Production approval.
 

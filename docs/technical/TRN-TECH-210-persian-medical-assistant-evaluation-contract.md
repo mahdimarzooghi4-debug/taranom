@@ -32,7 +32,7 @@ The fixtures contain no diagnoses, symptom-to-disease mappings, medication advic
 ## Implementation
 
 - `ai/taranom_internal/medical_assistant_eval.py` validates synthetic cases and candidate outputs without loading a model or making a network request.
-- `tests/ai/test_medical_assistant_eval.py` checks valid and rejected fixtures, emergency handoff, patient choice, Persian locale, lineage, and non-authoritative reporting.
+- `tests/ai/test_medical_assistant_eval.py` checks valid and rejected fixtures, emergency handoff, patient choice, Persian locale, lineage, forged summary rejection, and non-authoritative reporting.
 
 ## Acceptance
 
