@@ -100,6 +100,35 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioning
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    internal async Task OpenAndStorePackageStreamsAsync(string catalog,string taxonomy,
+        IReadOnlyCollection<MedicalSourceReviewPackageStream> packages,MedicalSourcePackageBlobStore blobStore,
+        long maximumBytesPerPackage,CancellationToken ct=default)
+    {
+        if(!Sha(catalog)||!Sha(taxonomy)||packages is null||packages.Count is <1 or >32||
+           blobStore is null||maximumBytesPerPackage<=0||
+           packages.Any(x=>x is null||!TestRef(x.SourceRef)||x.Content is null||!x.Content.CanRead)||
+           packages.Select(x=>x.SourceRef).Distinct(StringComparer.Ordinal).Count()!=packages.Count)
+            throw new ArgumentException("Invalid synthetic medical review package scope.");
+        var sources=new List<MedicalSourceReviewSource>(packages.Count);
+        foreach(var package in packages)
+        {
+            var stored=await blobStore.StoreAsync(package.Content,maximumBytesPerPackage,ct);
+            sources.Add(new(package.SourceRef,stored.Sha256));
+        }
+        await OpenHashedSourcesAsync(catalog,taxonomy,sources,ct);
+    }
+
+    internal async Task<MedicalSourceReviewAppendResult> AppendWithStoredPackageAsync(string catalog,string taxonomy,
+        MedicalSourceReviewCommand input,MedicalSourcePackageBlobStore blobStore,long maximumBytes,CancellationToken ct=default)
+    {
+        if(blobStore is null)throw new ArgumentNullException(nameof(blobStore));
+        if(maximumBytes<=0)throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+        if(!Sha(catalog)||!Sha(taxonomy)||!Valid(input))return new(MedicalSourceReviewOutcome.Invalid,0);
+        if(!await blobStore.VerifyAsync(input.PackageSha256,maximumBytes,ct))
+            throw new InvalidOperationException("MEDICAL_SOURCE_PACKAGE_BLOB_MISSING");
+        return await AppendAsync(catalog,taxonomy,input,ct);
+    }
+
     internal async Task OpenFromPackageStreamsAsync(string catalog,string taxonomy,
         IReadOnlyCollection<MedicalSourceReviewPackageStream> packages,long maximumBytesPerPackage,CancellationToken ct=default)
     {

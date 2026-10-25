@@ -129,6 +129,47 @@ public sealed class MedicalSourceReviewPostgresTests
     }
 
     [Fact]
+    public async Task StoredPackageMustPassIntegrityCheckBeforeReviewAppend()
+    {
+        await ReviewJournalTestSchema.EnsureAsync().WaitAsync(TestContext.Current.CancellationToken);
+        var root=Path.Combine(Path.GetTempPath(),$"taranom-source-review-{Guid.NewGuid():N}");
+        try
+        {
+            var owner=NpgsqlDataSource.Create(Pg);
+            var writerSettings=new NpgsqlConnectionStringBuilder(Pg) { Username="taranom_sprint201_medical_review_writer", Password="ephemeral_medical_review_writer" };
+            var readerSettings=new NpgsqlConnectionStringBuilder(Pg) { Username="taranom_sprint201_medical_review_reader", Password="ephemeral_medical_review_reader" };
+            var writer=NpgsqlDataSource.Create(writerSettings.ConnectionString);
+            var reader=NpgsqlDataSource.Create(readerSettings.ConnectionString);
+            await using var ownerScope=owner;await using var writerScope=writer;await using var readerScope=reader;
+            var journal=new PgMedicalSourceReviewJournal(owner,writer,reader);
+            var store=new MedicalSourcePackageBlobStore(root);
+            var catalog=Hash(Guid.NewGuid().ToString("N"));var taxonomy=Hash("taxonomy");
+            var sourceRef=Source("stored-package");
+            var bytes=System.Text.Encoding.UTF8.GetBytes("synthetic-only stored medical source bytes");
+            using(var package=new MemoryStream(bytes,writable:false))
+                await journal.OpenAndStorePackageStreamsAsync(catalog,taxonomy,[new(sourceRef,package)],store,
+                    maximumBytesPerPackage:1024,TestContext.Current.CancellationToken);
+            var source=new MedicalSourceReviewSource(sourceRef,Hash(System.Text.Encoding.UTF8.GetString(bytes)));
+            var request=Command(source);
+            Assert.Equal(MedicalSourceReviewOutcome.Recorded,
+                (await journal.AppendWithStoredPackageAsync(catalog,taxonomy,request,store,1024,TestContext.Current.CancellationToken)).Outcome);
+            Assert.True(await store.VerifyAsync(source.PackageSha256,1024,TestContext.Current.CancellationToken));
+            await File.WriteAllBytesAsync(Path.Combine(root,source.PackageSha256+".blob"),new byte[bytes.Length],
+                TestContext.Current.CancellationToken);
+            var error=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+                journal.AppendWithStoredPackageAsync(catalog,taxonomy,Command(source,revision:1),store,1024,
+                    TestContext.Current.CancellationToken));
+            Assert.Equal("MEDICAL_SOURCE_PACKAGE_AT_REST_TAMPERED",error.Message);
+            var snapshot=await Read(journal,catalog,taxonomy);
+            Assert.Equal(1L,snapshot.Revision);Assert.Single(snapshot.Events);
+        }
+        finally
+        {
+            if(Directory.Exists(root))Directory.Delete(root,recursive:true);
+        }
+    }
+
+    [Fact]
     public async Task CatalogFingerprintCannotBeReopenedWithDifferentSources()
     {
         var (owner,writer,reader,journal,catalog,taxonomy,source)=await Connect();
