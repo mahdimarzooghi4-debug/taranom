@@ -2,8 +2,6 @@ name: Sprint 122 Organization Scope PostgreSQL Isolation Full Regression
 on:
   push:
     branches: [sprint-122-org-scope-postgres-isolation]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -2,8 +2,6 @@ name: Sprint 129 Stage4 Synthetic Test Preparation Full Regression
 on:
   push:
     branches: [sprint-129-stage4-synthetic-test-preflight]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

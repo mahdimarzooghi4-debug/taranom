@@ -2,8 +2,6 @@ name: Sprint 141 Worker Boundary Adversarial Hardening Full Regression
 on:
   push:
     branches: [sprint-141-ai-worker-boundary-adversarial-hardening]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
