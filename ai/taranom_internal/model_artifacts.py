@@ -112,8 +112,8 @@ def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> 
             except FileNotFoundError as exc:
                 raise ArtifactRejected("LOCAL_ARTIFACT_FILE_MISSING") from exc
             except OSError as exc:
-                if exc.errno == errno.ELOOP:
-                    raise ArtifactRejected("SYMLINK_ARTIFACT_PATH_DENIED") from exc
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                    raise ArtifactRejected("UNSAFE_ARTIFACT_PATH_COMPONENT_DENIED") from exc
                 if exc.errno == errno.ENOENT:
                     raise ArtifactRejected("LOCAL_ARTIFACT_FILE_MISSING") from exc
                 raise ArtifactRejected("SAFE_LOCAL_ARTIFACT_OPEN_FAILED") from exc
