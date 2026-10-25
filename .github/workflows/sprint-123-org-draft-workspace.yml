@@ -2,8 +2,6 @@ name: Sprint 123 Organization Scoped Draft Workspace Full Regression
 on:
   push:
     branches: [sprint-123-org-draft-workspace]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
