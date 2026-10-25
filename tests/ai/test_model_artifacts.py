@@ -70,6 +70,13 @@ class LocalModelArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(ArtifactRejected, "BOUNDED_NONEMPTY_ARTIFACT"):
                 verify_local_model_manifest({**manifest(), "files": []}, root)
 
+    def test_rejects_absolute_windows_and_url_like_paths(self):
+        with tempfile.TemporaryDirectory() as temp:
+            for name in ("/tmp/weights.part", "C:\\models\\weights.part", "https://host/model"):
+                with self.subTest(name=name), self.assertRaisesRegex(
+                        ArtifactRejected, "SAFE_RELATIVE_ARTIFACT_PATH"):
+                    verify_local_model_manifest(manifest(name), Path(temp))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,7 +24,8 @@ def _file_entry(raw: object) -> tuple[str, str, int]:
     if type(raw) is not dict or set(raw) != _FILE_KEYS:
         raise ArtifactRejected("EXACT_ARTIFACT_FILE_SCHEMA_REQUIRED")
     name = raw["path"]
-    if type(name) is not str or not name or "\\" in name or "\x00" in name:
+    if (type(name) is not str or not name or "\\" in name
+            or ":" in name or "\x00" in name):
         raise ArtifactRejected("SAFE_RELATIVE_ARTIFACT_PATH_REQUIRED")
     relative = PurePosixPath(name)
     if relative.is_absolute() or any(part in ("", ".", "..") for part in relative.parts):
