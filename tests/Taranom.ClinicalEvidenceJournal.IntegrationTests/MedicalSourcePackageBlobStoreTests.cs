@@ -110,4 +110,50 @@ public sealed class MedicalSourcePackageBlobStoreTests
             if(File.Exists(outside))File.Delete(outside);
         }
     }
+
+    [Fact]
+    public async Task ReconcileHonorsCancellationBeforeScanningTheStore()
+    {
+        var root=NewRoot();
+        try
+        {
+            var store=new MedicalSourcePackageBlobStore(root);
+            using var input=new MemoryStream([1,2,3],writable:false);
+            var stored=await store.StoreAsync(input,16,TestContext.Current.CancellationToken);
+            using var cancellation=new CancellationTokenSource();
+            await cancellation.CancelAsync();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>
+                store.ReconcileAsync([stored.Sha256],16,cancellation.Token));
+        }
+        finally
+        {
+            if(Directory.Exists(root))Directory.Delete(root,recursive:true);
+        }
+    }
+
+    [Fact]
+    public async Task ReconcileOutputRemainsDeterministicWhenDirectoryScanIsStreaming()
+    {
+        var root=NewRoot();
+        try
+        {
+            var store=new MedicalSourcePackageBlobStore(root);
+            foreach(var bytes in new[]{new byte[]{9,8,7},new byte[]{1,2,3},new byte[]{5,4,3}})
+            {
+                using var input=new MemoryStream(bytes,writable:false);
+                await store.StoreAsync(input,16,TestContext.Current.CancellationToken);
+            }
+
+            var report=await store.ReconcileAsync([],16,TestContext.Current.CancellationToken);
+            var expected=report.OrderBy(x=>x.Identifier,StringComparer.Ordinal)
+                .ThenBy(x=>x.Kind).ToArray();
+
+            Assert.Equal(expected,report);
+        }
+        finally
+        {
+            if(Directory.Exists(root))Directory.Delete(root,recursive:true);
+        }
+    }
 }
