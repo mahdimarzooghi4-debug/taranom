@@ -153,18 +153,18 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource dataSource)
         {
             query.Parameters.AddWithValue("c",catalog);
             await using var reader=await query.ExecuteReaderAsync(ct);
-            if(!await reader.ReadAsync(ct))return await Rollback(tx,new(MedicalSourceReviewOutcome.ScopeDenied,0),ct);
+            if(!await reader.ReadAsync(ct))return await Rollback<MedicalSourceReviewAppendResult>(tx,new(MedicalSourceReviewOutcome.ScopeDenied,0),ct);
             revision=reader.GetInt64(0);head=reader.GetString(1);storedTaxonomy=reader.GetString(2);
         }
-        if(storedTaxonomy!=taxonomy)return await Rollback(tx,new(MedicalSourceReviewOutcome.ScopeDenied,revision),ct);
+        if(storedTaxonomy!=taxonomy)return await Rollback<MedicalSourceReviewAppendResult>(tx,new(MedicalSourceReviewOutcome.ScopeDenied,revision),ct);
         var state=await ReadLockedAsync(cn,tx,catalog,taxonomy,ct);
         var replay=state.Events.FirstOrDefault(x=>x.Command.RequestId==input.RequestId);
-        if(replay is not null)return await Rollback(tx,new(replay.Command==input?
+        if(replay is not null)return await Rollback<MedicalSourceReviewAppendResult>(tx,new(replay.Command==input?
             MedicalSourceReviewOutcome.Replayed:MedicalSourceReviewOutcome.ConflictingReplay,revision),ct);
-        if(input.ExpectedRevision!=revision)return await Rollback(tx,new(MedicalSourceReviewOutcome.StaleRevision,revision),ct);
+        if(input.ExpectedRevision!=revision)return await Rollback<MedicalSourceReviewAppendResult>(tx,new(MedicalSourceReviewOutcome.StaleRevision,revision),ct);
         if(!state.Sources.TryGetValue(input.SourceRef,out var package)||package!=input.PackageSha256)
-            return await Rollback(tx,new(MedicalSourceReviewOutcome.ScopeDenied,revision),ct);
-        if(revision>=1024)return await Rollback(tx,new(MedicalSourceReviewOutcome.Invalid,revision),ct);
+            return await Rollback<MedicalSourceReviewAppendResult>(tx,new(MedicalSourceReviewOutcome.ScopeDenied,revision),ct);
+        if(revision>=1024)return await Rollback<MedicalSourceReviewAppendResult>(tx,new(MedicalSourceReviewOutcome.Invalid,revision),ct);
         var next=revision+1;var json=JsonSerializer.Serialize(input);var digest=EventDigest(head,next,json);
         await using(var add=new NpgsqlCommand("""
           INSERT INTO internal_test_medical_review_event
