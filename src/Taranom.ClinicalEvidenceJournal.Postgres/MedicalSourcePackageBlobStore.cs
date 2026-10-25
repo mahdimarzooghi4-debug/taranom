@@ -5,7 +5,7 @@ namespace Taranom.ClinicalEvidenceJournal.Postgres;
 
 internal enum MedicalSourceBlobFindingKind
 {
-    MissingReference, ReferencedIntact, OrphanIntact, Tampered, ExceedsSizeLimit, InvalidBlobName
+    MissingReference, ReferencedIntact, OrphanIntact, Tampered, ExceedsSizeLimit, InvalidBlobName, UnsafeLinkedBlob
 }
 internal sealed record MedicalSourceBlobFinding(string Identifier,MedicalSourceBlobFindingKind Kind);
 internal readonly record struct StoredMedicalSourcePackage(string Sha256,long LengthBytes);
@@ -56,6 +56,7 @@ internal sealed class MedicalSourcePackageBlobStore
         if(!ValidSha(sha256))throw new ArgumentException("Invalid package SHA-256.",nameof(sha256));
         if(maximumBytes<=0)throw new ArgumentOutOfRangeException(nameof(maximumBytes));
         var path=BlobPath(sha256);if(!File.Exists(path))return false;
+        if(IsLinkedBlob(path))throw new InvalidOperationException("MEDICAL_SOURCE_PACKAGE_LINKED_BLOB_REJECTED");
         await using var input=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read,64*1024,
             FileOptions.Asynchronous|FileOptions.SequentialScan);
         var actual=await MedicalSourcePackageFingerprint.ComputeSha256Async(input,maximumBytes,ct);
@@ -83,6 +84,10 @@ internal sealed class MedicalSourcePackageBlobStore
             ct.ThrowIfCancellationRequested();var fileName=Path.GetFileName(path);
             var digest=Path.GetFileNameWithoutExtension(path);
             if(!ValidSha(digest)){findings.Add(new(fileName,MedicalSourceBlobFindingKind.InvalidBlobName));continue;}
+            if(IsLinkedBlob(path))
+            {
+                findings.Add(new(digest,MedicalSourceBlobFindingKind.UnsafeLinkedBlob));continue;
+            }
             validNames.Add(digest);string actual;
             try
             {
@@ -102,6 +107,7 @@ internal sealed class MedicalSourcePackageBlobStore
         return findings.OrderBy(x=>x.Identifier,StringComparer.Ordinal).ThenBy(x=>x.Kind).ToArray();
     }
     private string BlobPath(string sha256)=>Path.Combine(root,sha256+".blob");
+    private static bool IsLinkedBlob(string path)=>(File.GetAttributes(path)&FileAttributes.ReparsePoint)!=0;
     private static bool ValidSha(string value)=>value is not null&&value.Length==64&&
         value.All(c=>c is >= '0' and <= '9' or >= 'a' and <= 'f');
 }
