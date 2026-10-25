@@ -2,8 +2,6 @@ name: Sprint 144 AI Worker Lifecycle Restart Full Regression
 on:
   push:
     branches: [sprint-144-ai-worker-lifecycle-epoch-restart]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

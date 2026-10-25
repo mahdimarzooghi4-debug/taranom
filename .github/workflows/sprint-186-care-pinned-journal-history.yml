@@ -2,8 +2,6 @@ name: Sprint 186 Pinned Nonclinical Care History Full Regression
 on:
   push:
     branches: [sprint-186-care-pinned-journal-history]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

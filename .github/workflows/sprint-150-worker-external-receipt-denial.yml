@@ -2,8 +2,6 @@ name: Sprint 150 Worker External Receipt Denial Full Regression
 on:
   push:
     branches: [sprint-150-worker-external-receipt-denial]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

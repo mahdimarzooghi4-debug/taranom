@@ -2,8 +2,6 @@ name: Sprint 175 Center Member Nonclinical Coordination Full Regression
 on:
   push:
     branches: [sprint-175-center-care-coordination]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

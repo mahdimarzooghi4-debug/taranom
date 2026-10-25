@@ -2,8 +2,6 @@ name: Sprint 177 Nonclinical Coordination Worklist Full Regression
 on:
   push:
     branches: [sprint-177-care-coordination-worklist]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

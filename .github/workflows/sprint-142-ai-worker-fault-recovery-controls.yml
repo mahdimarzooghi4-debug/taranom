@@ -2,8 +2,6 @@ name: Sprint 142 AI Worker Fault Recovery Full Regression
 on:
   push:
     branches: [sprint-142-ai-worker-fault-recovery-controls]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

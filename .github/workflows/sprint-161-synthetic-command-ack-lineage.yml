@@ -2,8 +2,6 @@ name: Sprint 161 Synthetic Command Ack Lineage Full Regression
 on:
   push:
     branches: [sprint-161-synthetic-command-ack-lineage]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
