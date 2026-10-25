@@ -4,8 +4,8 @@
 
 ## Model decision recorded
 
-- Initial internal prototype candidate: `Qwen/Qwen2.5-7B-Instruct`.
-- Comparison candidate: `BioPars`.
+- Selected internal prototype: `Qwen/Qwen2.5-7B-Instruct`.
+- No challenger or model-comparison track is selected.
 - No model weights are downloaded, loaded, fine-tuned, or activated by this sprint. The model choice is a prototype candidate decision, not a clinical or Production approval.
 - Runtime inference remains internal. External model APIs are prohibited.
 
@@ -27,7 +27,7 @@ The fixtures contain no diagnoses, symptom-to-disease mappings, medication advic
 - The evaluator reports synthetic interaction-contract outcomes only.
 - `diagnostic_accuracy` is always `NOT_EVALUATED_NO_QUALIFIED_GOLD_SET`.
 - No score can grant rights, scientific review, clinical use, training, model activation, Stage, or Production authority.
-- A future clinical comparison requires a separately governed Persian case set with rights cleared and qualified, independently verified clinical annotations. No diagnoses, specialty mapping, reviewer identity, or thresholds are invented here.
+- A future clinical evaluation requires a separately governed Persian case set with rights cleared and qualified, independently verified clinical annotations. No diagnoses, specialty mapping, reviewer identity, or thresholds are invented here.
 
 ## Implementation
 

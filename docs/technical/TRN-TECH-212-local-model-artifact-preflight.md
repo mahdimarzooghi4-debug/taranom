@@ -8,7 +8,7 @@ Verify that a locally staged model artifact matches an explicit file manifest be
 
 ## Contract
 
-- Accept only the approved prototype candidate identifiers: Qwen2.5-7B-Instruct and BioPars.
+- Accept only the selected prototype identifier: Qwen2.5-7B-Instruct.
 - Accept a bounded artifact version and a nonempty list of relative file paths, sizes, and lowercase SHA-256 digests.
 - Read only files beneath a pre-existing local root; reject path traversal, symlinks, missing files, empty/mismatched sizes, duplicate paths, and digest mismatch.
 - Stream file hashing in fixed-size chunks and cap the manifest at 8,192 files and 100 GiB total declared bytes.

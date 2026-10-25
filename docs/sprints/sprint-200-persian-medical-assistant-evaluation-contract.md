@@ -2,7 +2,7 @@
 
 ## Goal
 
-Prepare a real, executable offline test contract for the approved internal model prototype choice: Qwen2.5-7B-Instruct as the first candidate and BioPars as its comparison candidate.
+Prepare a real, executable offline test contract for the selected internal model prototype: Qwen2.5-7B-Instruct.
 
 ## Delivered
 

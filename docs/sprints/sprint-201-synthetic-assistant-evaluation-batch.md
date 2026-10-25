@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make the Sprint 200 interaction evaluator practical for running the same synthetic Persian fixtures against more than one internal model candidate.
+Make the Sprint 200 interaction evaluator practical for running synthetic Persian fixtures against outputs from the selected Qwen prototype.
 
 ## Delivered
 

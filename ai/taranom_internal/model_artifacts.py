@@ -10,7 +10,7 @@ class ArtifactRejected(ValueError):
     """Fail closed on untrusted or incomplete local model artifacts."""
 
 
-_CANDIDATES = frozenset(("QWEN_QWEN2_5_7B_INSTRUCT", "BIOPARS"))
+_CANDIDATES = frozenset(("QWEN_QWEN2_5_7B_INSTRUCT",))
 _VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}\Z", re.ASCII)
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _MANIFEST_KEYS = frozenset(("schema_version", "candidate_ref", "artifact_version", "files"))

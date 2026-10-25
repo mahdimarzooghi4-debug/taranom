@@ -6,7 +6,7 @@ Add a working preflight for model files already present in a controlled internal
 
 ## Delivered
 
-- Added a bounded manifest verifier for the selected Qwen2.5-7B-Instruct and BioPars prototype candidates.
+- Added a bounded manifest verifier for the selected Qwen2.5-7B-Instruct prototype.
 - Verify file sizes and SHA-256 digests locally, streaming bytes without network access.
 - Reject unsafe paths, symlinks, missing or changed files, duplicate entries, and unsupported candidates.
 - Add synthetic filesystem tests and TRN-TECH-212.
