@@ -2,8 +2,6 @@ name: Sprint 125 Organization Draft Activity Full Regression
 on:
   push:
     branches: [sprint-125-org-draft-activity-journal]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -2,8 +2,6 @@ name: Sprint 174 Verified Topic Worklist Full Regression
 on:
   push:
     branches: [sprint-174-verified-topic-worklist]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
