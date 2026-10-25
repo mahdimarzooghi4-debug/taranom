@@ -20,10 +20,10 @@ public sealed class MedicalSourceBlobReconciliationTests
             var orphanBytes=Encoding.UTF8.GetBytes("synthetic orphan package");
             var tamperedBytes=Encoding.UTF8.GetBytes("synthetic original package");
             var referenced=Hash(referencedBytes);var orphan=Hash(orphanBytes);var tampered=Hash(tamperedBytes);
-            await File.WriteAllBytesAsync(Path.Combine(root,referenced+".blob"),referencedBytes);
-            await File.WriteAllBytesAsync(Path.Combine(root,orphan+".blob"),orphanBytes);
-            await File.WriteAllBytesAsync(Path.Combine(root,tampered+".blob"),Encoding.UTF8.GetBytes("mutated package"));
-            await File.WriteAllBytesAsync(Path.Combine(root,"not-a-digest.blob"),Encoding.UTF8.GetBytes("synthetic invalid name"));
+            await File.WriteAllBytesAsync(Path.Combine(root,referenced+".blob"),referencedBytes,TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(Path.Combine(root,orphan+".blob"),orphanBytes,TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(Path.Combine(root,tampered+".blob"),Encoding.UTF8.GetBytes("mutated package"),TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(Path.Combine(root,"not-a-digest.blob"),Encoding.UTF8.GetBytes("synthetic invalid name"),TestContext.Current.CancellationToken);
             var before=Directory.GetFiles(root).OrderBy(Path.GetFileName,StringComparer.Ordinal).ToArray();
             var store=new MedicalSourcePackageBlobStore(root);
             var report=await store.ReconcileAsync([referenced,Hash(Encoding.UTF8.GetBytes("missing package")),tampered],1024,
@@ -34,7 +34,7 @@ public sealed class MedicalSourceBlobReconciliationTests
             Assert.Contains(report,x=>x.Kind==MedicalSourceBlobFindingKind.MissingReference);
             Assert.Contains(report,x=>x.Identifier=="not-a-digest.blob"&&x.Kind==MedicalSourceBlobFindingKind.InvalidBlobName);
             Assert.Equal(before,Directory.GetFiles(root).OrderBy(Path.GetFileName,StringComparer.Ordinal).ToArray());
-            Assert.Equal("mutated package",Encoding.UTF8.GetString(await File.ReadAllBytesAsync(Path.Combine(root,tampered+".blob"))));
+            Assert.Equal("mutated package",Encoding.UTF8.GetString(await File.ReadAllBytesAsync(Path.Combine(root,tampered+".blob"),TestContext.Current.CancellationToken)));
         }
         finally { if(Directory.Exists(root))Directory.Delete(root,recursive:true); }
     }
@@ -46,7 +46,7 @@ public sealed class MedicalSourceBlobReconciliationTests
         try
         {
             var bytes=Encoding.UTF8.GetBytes("synthetic payload over the report limit");var digest=Hash(bytes);
-            await File.WriteAllBytesAsync(Path.Combine(root,digest+".blob"),bytes);
+            await File.WriteAllBytesAsync(Path.Combine(root,digest+".blob"),bytes,TestContext.Current.CancellationToken);
             var store=new MedicalSourcePackageBlobStore(root);
             var report=await store.ReconcileAsync([digest],4,TestContext.Current.CancellationToken);
             Assert.Contains(report,x=>x.Identifier==digest&&x.Kind==MedicalSourceBlobFindingKind.ExceedsSizeLimit);
