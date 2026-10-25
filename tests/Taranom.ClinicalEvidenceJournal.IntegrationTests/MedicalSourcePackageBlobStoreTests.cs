@@ -121,7 +121,7 @@ public sealed class MedicalSourcePackageBlobStoreTests
             using var input=new MemoryStream([1,2,3],writable:false);
             var stored=await store.StoreAsync(input,16,TestContext.Current.CancellationToken);
             using var cancellation=new CancellationTokenSource();
-            await cancellation.CancelAsync();
+            cancellation.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>
                 store.ReconcileAsync([stored.Sha256],16,cancellation.Token));
