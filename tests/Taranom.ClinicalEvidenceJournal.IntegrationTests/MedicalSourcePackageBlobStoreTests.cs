@@ -156,4 +156,29 @@ public sealed class MedicalSourcePackageBlobStoreTests
             if(Directory.Exists(root))Directory.Delete(root,recursive:true);
         }
     }
+
+    [Fact]
+    public async Task ReconcileReportsSyntheticTemporaryIngestArtifactWithoutReadingOrDeletingIt()
+    {
+        var root=NewRoot();
+        try
+        {
+            Directory.CreateDirectory(root);
+            var tempPath=Path.Combine(root,$".ingest-{Guid.NewGuid():N}.tmp");
+            var bytes=System.Text.Encoding.UTF8.GetBytes("synthetic partial ingest fixture");
+            await File.WriteAllBytesAsync(tempPath,bytes,TestContext.Current.CancellationToken);
+
+            var store=new MedicalSourcePackageBlobStore(root);
+            var report=await store.ReconcileAsync([],16,TestContext.Current.CancellationToken);
+
+            Assert.Contains(report,x=>x.Identifier==Path.GetFileName(tempPath)&&
+                x.Kind==MedicalSourceBlobFindingKind.TemporaryIngestArtifact);
+            Assert.True(File.Exists(tempPath));
+            Assert.Equal(bytes,await File.ReadAllBytesAsync(tempPath,TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if(Directory.Exists(root))Directory.Delete(root,recursive:true);
+        }
+    }
 }
