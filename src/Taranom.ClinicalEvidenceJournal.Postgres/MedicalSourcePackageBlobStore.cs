@@ -5,7 +5,8 @@ namespace Taranom.ClinicalEvidenceJournal.Postgres;
 
 internal enum MedicalSourceBlobFindingKind
 {
-    MissingReference, ReferencedIntact, OrphanIntact, Tampered, ExceedsSizeLimit, InvalidBlobName, UnsafeLinkedBlob
+    MissingReference, ReferencedIntact, OrphanIntact, Tampered, ExceedsSizeLimit, InvalidBlobName, UnsafeLinkedBlob,
+    TemporaryIngestArtifact
 }
 internal sealed record MedicalSourceBlobFinding(string Identifier,MedicalSourceBlobFindingKind Kind);
 internal readonly record struct StoredMedicalSourcePackage(string Sha256,long LengthBytes);
@@ -101,6 +102,11 @@ internal sealed class MedicalSourcePackageBlobStore
             { findings.Add(new(digest,MedicalSourceBlobFindingKind.Tampered));continue; }
             if(!StringComparer.Ordinal.Equals(actual,digest))findings.Add(new(digest,MedicalSourceBlobFindingKind.Tampered));
             else findings.Add(new(digest,referenced.Contains(digest)?MedicalSourceBlobFindingKind.ReferencedIntact:MedicalSourceBlobFindingKind.OrphanIntact));
+        }
+        foreach(var path in Directory.EnumerateFiles(root,".ingest-*.tmp",SearchOption.TopDirectoryOnly))
+        {
+            ct.ThrowIfCancellationRequested();
+            findings.Add(new(Path.GetFileName(path),MedicalSourceBlobFindingKind.TemporaryIngestArtifact));
         }
         foreach(var digest in referenced.OrderBy(x=>x,StringComparer.Ordinal))
             if(!validNames.Contains(digest))findings.Add(new(digest,MedicalSourceBlobFindingKind.MissingReference));
