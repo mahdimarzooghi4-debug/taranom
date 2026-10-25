@@ -46,9 +46,6 @@ internal readonly record struct MedicalSourceReviewAppendResult(MedicalSourceRev
 // Synthetic-only durable journal. Caller identity/evidence references remain claims.
 internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioningDataSource, NpgsqlDataSource writerDataSource, NpgsqlDataSource readerDataSource)
 {
-    private static readonly HashSet<string> Lanes=["RIGHTS","SCIENCE","TAXONOMY"];
-    private static readonly HashSet<string> Recommendations=["REQUEST_EVIDENCE","RECOMMEND_ACCEPT","RECOMMEND_REJECT"];
-
     internal static async Task InitializeTestSchemaAsync(NpgsqlDataSource owner,CancellationToken ct=default)
     {
         const string ddl="""
@@ -346,17 +343,12 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioning
         return new(revision,head,events,sources);
     }
 
-    private static bool Valid(MedicalSourceReviewSubmission x)=>x is not null&&x.RequestId!=Guid.Empty&&x.ExpectedRevision>=0&&
-        TestRef(x.SourceRef)&&Sha(x.PackageSha256)&&Lanes.Contains(x.Lane)&&Recommendations.Contains(x.Recommendation)&&
-        Ref(x.ReviewerRefClaimed,"reviewer:")&&Ref(x.EvidenceRefClaimed,"evidence:");
-    private static bool Valid(MedicalSourceReviewCommand x)=>x is not null&&
-        Valid(new MedicalSourceReviewSubmission(x.RequestId,x.ExpectedRevision,x.SourceRef,x.PackageSha256,x.Lane,
-            x.Recommendation,x.ReviewerRefClaimed,x.EvidenceRefClaimed))&&Sha(x.EvidencePackageSha256);
-    private static bool TestRef(string x)=>x is not null&&Regex.IsMatch(x,@"^test:[A-Za-z0-9_:-]{1,120}$",RegexOptions.CultureInvariant);
-    private static bool Ref(string x,string prefix)=>x is not null&&x.StartsWith(prefix,StringComparison.Ordinal)&&
-        x.Length>prefix.Length&&x.Length<=129&&x.AsSpan(prefix.Length).ToString().All(c=>char.IsAsciiLetterOrDigit(c)||c is '_' or ':' or '-');
-    private static bool Sha(string x)=>x is not null&&x.Length==64&&x.All(c=>c is >= '0' and <= '9' or >= 'a' and <= 'f');
-    private static string Digest(string s)=>Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
-    private static string EventDigest(string prev,long revision,string json)=>Digest($"event\n{prev}\n{revision}\n{json}");
+    private static bool Valid(MedicalSourceReviewSubmission x)=>MedicalSourceReviewIntegrity.IsValidSubmission(x);
+    private static bool Valid(MedicalSourceReviewCommand x)=>MedicalSourceReviewIntegrity.IsValidCommand(x);
+    private static bool TestRef(string x)=>MedicalSourceReviewIntegrity.IsSourceRef(x);
+    private static bool Ref(string x,string prefix)=>MedicalSourceReviewIntegrity.IsClaimRef(x,prefix);
+    private static bool Sha(string x)=>MedicalSourceReviewIntegrity.IsSha256(x);
+    private static string Digest(string s)=>MedicalSourceReviewIntegrity.Digest(s);
+    private static string EventDigest(string prev,long revision,string json)=>MedicalSourceReviewIntegrity.EventDigest(prev,revision,json);
     private static async Task<T> Rollback<T>(NpgsqlTransaction tx,T result,CancellationToken ct){await tx.RollbackAsync(ct);return result;}
 }
