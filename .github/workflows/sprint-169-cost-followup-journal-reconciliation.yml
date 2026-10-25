@@ -2,8 +2,6 @@ name: Sprint 169 Cost Followup Journal Reconciliation Full Regression
 on:
   push:
     branches: [sprint-169-cost-followup-journal-reconciliation]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

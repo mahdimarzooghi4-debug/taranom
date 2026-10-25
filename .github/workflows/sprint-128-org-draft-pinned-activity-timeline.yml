@@ -2,8 +2,6 @@ name: Sprint 128 Pinned Draft Activity Timeline Full Regression
 on:
   push:
     branches: [sprint-128-org-draft-pinned-activity-timeline]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

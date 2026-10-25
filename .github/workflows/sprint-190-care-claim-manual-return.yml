@@ -2,8 +2,6 @@ name: Sprint 190 Care Claim Manual Return Full Regression
 on:
   push:
     branches: [sprint-190-care-claim-manual-return]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

@@ -2,8 +2,6 @@ name: Sprint 148 Worker POSIX Custody Full Regression
 on:
   push:
     branches: [sprint-148-worker-posix-custody-qa]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
