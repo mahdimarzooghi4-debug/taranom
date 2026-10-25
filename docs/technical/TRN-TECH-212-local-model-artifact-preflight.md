@@ -10,7 +10,8 @@ Verify that a locally staged model artifact matches an explicit file manifest be
 
 - Accept only the selected prototype identifier: Qwen2.5-7B-Instruct.
 - Accept a bounded artifact version and a nonempty list of relative file paths, sizes, and lowercase SHA-256 digests.
-- Read only files beneath a pre-existing local root; reject path traversal, symlinks, missing files, empty/mismatched sizes, duplicate paths, and digest mismatch.
+- Read only files beneath a pre-existing local root through directory descriptors with no-follow opens; reject path traversal, ambiguous path segments, symlinks in any path component, missing files, special files, duplicate paths, and size or digest mismatches.
+- Hash the already-open file descriptor, bound bytes read by the declared size, and reject metadata changes observed during the read. This prevents path replacement between validation and opening from redirecting verification.
 - Stream file hashing in fixed-size chunks and cap the manifest at 8,192 files and 100 GiB total declared bytes.
 - Return `LOCAL_ARTIFACT_BYTES_VERIFIED_NOT_LOADED` with all clinical, training, and Production flags false.
 
@@ -20,4 +21,4 @@ This is not a license, scientific, authenticity, provenance, or security attesta
 
 ## Tests
 
-`tests/ai/test_model_artifacts.py` uses temporary synthetic bytes to cover valid manifests, remote model references, path traversal, symlink, missing-file, duplicate, size, digest, and authority failures.
+`tests/ai/test_model_artifacts.py` uses temporary synthetic bytes to cover valid manifests, remote model references, ambiguous paths, nested and final symlinks, special files, missing-file, duplicate, size, digest, and authority failures.
