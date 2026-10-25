@@ -1,3 +1,4 @@
+using System.IO;
 using Npgsql;
 using Taranom.ClinicalEvidenceJournal.Postgres;
 using Xunit;
@@ -64,6 +65,64 @@ public sealed class MedicalSourceReviewPostgresTests
             "UPDATE internal_test_medical_review_head SET current_revision=99 WHERE catalog_sha256=@c",catalog);
         await AssertPermissionDenied(reader,
             "INSERT INTO internal_test_medical_review_head(catalog_sha256,taxonomy_sha256,head_sha256) VALUES(@c,'2222222222222222222222222222222222222222222222222222222222222222','3333333333333333333333333333333333333333333333333333333333333333')",catalog);
+    }
+
+    [Fact]
+    public async Task CatalogOpeningFingerprintsRawPackageStreamBytes()
+    {
+        await ReviewJournalTestSchema.EnsureAsync().WaitAsync(TestContext.Current.CancellationToken);
+        var owner=NpgsqlDataSource.Create(Pg);
+        var writerSettings=new NpgsqlConnectionStringBuilder(Pg) { Username="taranom_sprint201_medical_review_writer", Password="ephemeral_medical_review_writer" };
+        var readerSettings=new NpgsqlConnectionStringBuilder(Pg) { Username="taranom_sprint201_medical_review_reader", Password="ephemeral_medical_review_reader" };
+        var writer=NpgsqlDataSource.Create(writerSettings.ConnectionString);
+        var reader=NpgsqlDataSource.Create(readerSettings.ConnectionString);
+        await using var ownerScope=owner;await using var writerScope=writer;await using var readerScope=reader;
+        var journal=new PgMedicalSourceReviewJournal(owner,writer,reader);
+        var catalog=Hash(Guid.NewGuid().ToString("N"));var taxonomy=Hash("taxonomy");
+        var sourceRef=Source("byte-verified");
+        var packageBytes=System.Text.Encoding.UTF8.GetBytes("synthetic-only medical source package bytes");
+        using var packageStream=new MemoryStream(packageBytes,writable:false);
+        await journal.OpenFromPackageStreamsAsync(catalog,taxonomy,
+            [new(sourceRef,packageStream)],maximumBytesPerPackage:1024,TestContext.Current.CancellationToken);
+        Assert.True(packageStream.CanRead);
+        var source=new MedicalSourceReviewSource(sourceRef,Hash(System.Text.Encoding.UTF8.GetString(packageBytes)));
+        var request=Command(source);
+        Assert.Equal(MedicalSourceReviewOutcome.Recorded,(await Append(journal,catalog,taxonomy,request)).Outcome);
+        Assert.Equal(request,Assert.Single((await Read(journal,catalog,taxonomy)).Events).Command);
+    }
+
+    [Fact]
+    public async Task PackageStreamSizeLimitRejectsBeforeCatalogScopeIsCreated()
+    {
+        await ReviewJournalTestSchema.EnsureAsync().WaitAsync(TestContext.Current.CancellationToken);
+        var owner=NpgsqlDataSource.Create(Pg);
+        var writerSettings=new NpgsqlConnectionStringBuilder(Pg) { Username="taranom_sprint201_medical_review_writer", Password="ephemeral_medical_review_writer" };
+        var readerSettings=new NpgsqlConnectionStringBuilder(Pg) { Username="taranom_sprint201_medical_review_reader", Password="ephemeral_medical_review_reader" };
+        var writer=NpgsqlDataSource.Create(writerSettings.ConnectionString);
+        var reader=NpgsqlDataSource.Create(readerSettings.ConnectionString);
+        await using var ownerScope=owner;await using var writerScope=writer;await using var readerScope=reader;
+        var journal=new PgMedicalSourceReviewJournal(owner,writer,reader);
+        var catalog=Hash(Guid.NewGuid().ToString("N"));var taxonomy=Hash("taxonomy");
+        using var packageStream=new MemoryStream(new byte[8],writable:false);
+        var error=await Assert.ThrowsAsync<InvalidOperationException>(()=>journal.OpenFromPackageStreamsAsync(catalog,taxonomy,
+            [new(Source("oversized"),packageStream)],maximumBytesPerPackage:4,TestContext.Current.CancellationToken));
+        Assert.Equal("MEDICAL_SOURCE_PACKAGE_SIZE_LIMIT",error.Message);
+        await using var cn=await owner.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using var check=new NpgsqlCommand("SELECT count(*) FROM internal_test_medical_review_head WHERE catalog_sha256=@c",cn);
+        check.Parameters.AddWithValue("c",catalog);
+        Assert.Equal(0L,(long)(await check.ExecuteScalarAsync(TestContext.Current.CancellationToken))!);
+    }
+
+    [Fact]
+    public async Task PackageFingerprintRejectsEmptyStreamsAndNonPositiveLimits()
+    {
+        using var empty=new MemoryStream();
+        var emptyError=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            MedicalSourcePackageFingerprint.ComputeSha256Async(empty,10,TestContext.Current.CancellationToken));
+        Assert.Equal("MEDICAL_SOURCE_PACKAGE_EMPTY",emptyError.Message);
+        using var bytes=new MemoryStream([1,2,3]);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(()=>
+            MedicalSourcePackageFingerprint.ComputeSha256Async(bytes,0,TestContext.Current.CancellationToken));
     }
 
     [Fact]
