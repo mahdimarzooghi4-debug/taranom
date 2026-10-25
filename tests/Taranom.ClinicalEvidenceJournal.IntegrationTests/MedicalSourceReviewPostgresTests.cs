@@ -24,6 +24,18 @@ public sealed class MedicalSourceReviewPostgresTests
         new(id??Guid.NewGuid(),revision,s.SourceRef,s.PackageSha256,"RIGHTS","RECOMMEND_ACCEPT","reviewer:claimed-test","evidence:claimed-test");
 
     [Fact]
+    public async Task CatalogFingerprintCannotBeReopenedWithDifferentSources()
+    {
+        var (owner,journal,catalog,taxonomy,source)=await Connect();await using var _=owner;
+        var added=new MedicalSourceReviewSource(Source("added"),Hash("another package"));
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            journal.OpenAsync(catalog,taxonomy,[source,added],TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            journal.OpenAsync(catalog,taxonomy,[added],TestContext.Current.CancellationToken));
+        Assert.Equal(0L,(await journal.ReadAsync(catalog,taxonomy)).Revision);
+    }
+
+    [Fact]
     public async Task DurableRecommendationsNeverGrantAuthority()
     {
         var (owner,journal,catalog,taxonomy,source)=await Connect();await using var _=owner;var command=Command(source);

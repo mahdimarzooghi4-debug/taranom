@@ -105,6 +105,20 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource dataSource)
         }
         if(storedTaxonomy!=taxonomy||(revision==0&&storedHead!=genesis)||(revision>0&&storedHead==genesis))
             throw new InvalidOperationException("MEDICAL_REVIEW_CATALOG_SCOPE_CONFLICT");
+        var existingSources=new List<MedicalSourceReviewSource>();
+        await using(var existingQuery=new NpgsqlCommand("""
+          SELECT source_ref,package_sha256 FROM internal_test_medical_review_source
+          WHERE catalog_sha256=@c ORDER BY source_ref
+          """,cn,tx))
+        {
+            existingQuery.Parameters.AddWithValue("c",catalog);
+            await using var existingReader=await existingQuery.ExecuteReaderAsync(ct);
+            while(await existingReader.ReadAsync(ct))
+                existingSources.Add(new(existingReader.GetString(0),existingReader.GetString(1)));
+        }
+        var requestedSources=sources.OrderBy(x=>x.SourceRef,StringComparer.Ordinal).ToArray();
+        if((revision>0&&existingSources.Count==0)||(existingSources.Count>0&&!existingSources.SequenceEqual(requestedSources)))
+            throw new InvalidOperationException("MEDICAL_REVIEW_CATALOG_CONTENT_CONFLICT");
         foreach(var source in sources)
         {
             await using(var add=new NpgsqlCommand("""
