@@ -114,10 +114,10 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioning
             var digest=await MedicalSourcePackageFingerprint.ComputeSha256Async(package.Content,maximumBytesPerPackage,ct);
             sources.Add(new(package.SourceRef,digest));
         }
-        await OpenAsync(catalog,taxonomy,sources,ct);
+        await OpenHashedSourcesAsync(catalog,taxonomy,sources,ct);
     }
 
-    internal async Task OpenAsync(string catalog,string taxonomy,IReadOnlyCollection<MedicalSourceReviewSource> sources,CancellationToken ct=default)
+    private async Task OpenHashedSourcesAsync(string catalog,string taxonomy,IReadOnlyCollection<MedicalSourceReviewSource> sources,CancellationToken ct=default)
     {
         if(!Sha(catalog)||!Sha(taxonomy)||sources is null||sources.Count is <1 or >32||
            sources.Any(x=>!TestRef(x.SourceRef)||!Sha(x.PackageSha256))||

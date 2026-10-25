@@ -21,8 +21,11 @@ public sealed class MedicalSourceReviewPostgresTests
         var reader=NpgsqlDataSource.Create(readerSettings.ConnectionString);
         var journal=new PgMedicalSourceReviewJournal(owner,writer,reader);
         var catalog=Hash(Guid.NewGuid().ToString("N"));var taxonomy=Hash("taxonomy");
-        var source=new MedicalSourceReviewSource(Source(prefix),Hash(Guid.NewGuid().ToString("N")));
-        await journal.OpenAsync(catalog,taxonomy,[source],TestContext.Current.CancellationToken);
+        var packageBytes=System.Text.Encoding.UTF8.GetBytes(Guid.NewGuid().ToString("N"));
+        var source=new MedicalSourceReviewSource(Source(prefix),Hash(System.Text.Encoding.UTF8.GetString(packageBytes)));
+        using var packageStream=new MemoryStream(packageBytes,writable:false);
+        await journal.OpenFromPackageStreamsAsync(catalog,taxonomy,[new(source.SourceRef,packageStream)],
+            maximumBytesPerPackage:1024,TestContext.Current.CancellationToken);
         return(owner,writer,reader,journal,catalog,taxonomy,source);
     }
 
@@ -132,9 +135,13 @@ public sealed class MedicalSourceReviewPostgresTests
         await using var ownerScope=owner;await using var writerScope=writer;await using var readerScope=reader;
         var added=new MedicalSourceReviewSource(Source("added"),Hash("another package"));
         await Assert.ThrowsAsync<InvalidOperationException>(()=>
-            journal.OpenAsync(catalog,taxonomy,[source,added],TestContext.Current.CancellationToken));
+            journal.OpenFromPackageStreamsAsync(catalog,taxonomy,
+                [new(source.SourceRef,new MemoryStream([1,2,3])),new(added.SourceRef,new MemoryStream([4,5,6]))],
+                maximumBytesPerPackage:16,TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<InvalidOperationException>(()=>
-            journal.OpenAsync(catalog,taxonomy,[added],TestContext.Current.CancellationToken));
+            journal.OpenFromPackageStreamsAsync(catalog,taxonomy,
+                [new(added.SourceRef,new MemoryStream([4,5,6]))],
+                maximumBytesPerPackage:16,TestContext.Current.CancellationToken));
         Assert.Equal(0L,(await Read(journal,catalog,taxonomy)).Revision);
     }
 
