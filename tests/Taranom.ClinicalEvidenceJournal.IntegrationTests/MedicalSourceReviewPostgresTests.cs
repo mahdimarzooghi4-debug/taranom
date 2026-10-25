@@ -30,6 +30,9 @@ public sealed class MedicalSourceReviewPostgresTests
     }
 
     private static MedicalSourceReviewCommand Command(MedicalSourceReviewSource s,long revision=0,Guid? id=null)=>
+        new(id??Guid.NewGuid(),revision,s.SourceRef,s.PackageSha256,"RIGHTS","RECOMMEND_ACCEPT","reviewer:claimed-test","evidence:claimed-test",Hash("synthetic evidence claim only"));
+
+    private static MedicalSourceReviewSubmission Submission(MedicalSourceReviewSource s,long revision=0,Guid? id=null)=>
         new(id??Guid.NewGuid(),revision,s.SourceRef,s.PackageSha256,"RIGHTS","RECOMMEND_ACCEPT","reviewer:claimed-test","evidence:claimed-test");
 
     private static Task<MedicalSourceReviewAppendResult> Append(PgMedicalSourceReviewJournal journal,
@@ -162,6 +165,52 @@ public sealed class MedicalSourceReviewPostgresTests
             Assert.Equal("MEDICAL_SOURCE_PACKAGE_AT_REST_TAMPERED",error.Message);
             var snapshot=await Read(journal,catalog,taxonomy);
             Assert.Equal(1L,snapshot.Revision);Assert.Single(snapshot.Events);
+        }
+        finally
+        {
+            if(Directory.Exists(root))Directory.Delete(root,recursive:true);
+        }
+    }
+
+    [Fact]
+    public async Task ReviewEvidenceBytesAreStoredAndTheirDigestIsBoundToTheEvent()
+    {
+        await ReviewJournalTestSchema.EnsureAsync().WaitAsync(TestContext.Current.CancellationToken);
+        var root=Path.Combine(Path.GetTempPath(),$"taranom-review-evidence-{Guid.NewGuid():N}");
+        try
+        {
+            var owner=NpgsqlDataSource.Create(Pg);
+            var writerSettings=new NpgsqlConnectionStringBuilder(Pg) { Username="taranom_sprint201_medical_review_writer", Password="ephemeral_medical_review_writer" };
+            var readerSettings=new NpgsqlConnectionStringBuilder(Pg) { Username="taranom_sprint201_medical_review_reader", Password="ephemeral_medical_review_reader" };
+            var writer=NpgsqlDataSource.Create(writerSettings.ConnectionString);
+            var reader=NpgsqlDataSource.Create(readerSettings.ConnectionString);
+            await using var ownerScope=owner;await using var writerScope=writer;await using var readerScope=reader;
+            var journal=new PgMedicalSourceReviewJournal(owner,writer,reader);
+            var store=new MedicalSourcePackageBlobStore(root);
+            var catalog=Hash(Guid.NewGuid().ToString("N"));var taxonomy=Hash("taxonomy");
+            var sourceRef=Source("evidence-bound");
+            var sourceBytes=System.Text.Encoding.UTF8.GetBytes("synthetic-only source package");
+            var source=new MedicalSourceReviewSource(sourceRef,Hash(System.Text.Encoding.UTF8.GetString(sourceBytes)));
+            using(var sourceStream=new MemoryStream(sourceBytes,writable:false))
+                await journal.OpenAndStorePackageStreamsAsync(catalog,taxonomy,[new(sourceRef,sourceStream)],store,
+                    maximumBytesPerPackage:1024,TestContext.Current.CancellationToken);
+            var evidenceBytes=System.Text.Encoding.UTF8.GetBytes("synthetic-only unverified review evidence");
+            var evidenceSha=Hash(System.Text.Encoding.UTF8.GetString(evidenceBytes));
+            using(var evidenceStream=new MemoryStream(evidenceBytes,writable:false))
+                Assert.Equal(MedicalSourceReviewOutcome.Recorded,(await journal.AppendWithStoredEvidenceAsync(catalog,taxonomy,
+                    Submission(source),evidenceStream,store,1024,TestContext.Current.CancellationToken)).Outcome);
+            var recorded=Assert.Single((await Read(journal,catalog,taxonomy)).Events);
+            Assert.Equal(evidenceSha,recorded.Command.EvidencePackageSha256);
+            Assert.Equal("evidence:claimed-test",recorded.Command.EvidenceRefClaimed);
+            var state=await Read(journal,catalog,taxonomy);
+            Assert.False(state.RightsVerified);Assert.False(state.ScientificallyReviewed);Assert.False(state.TrainingAllowed);
+            await File.WriteAllBytesAsync(Path.Combine(root,evidenceSha+".blob"),new byte[evidenceBytes.Length],
+                TestContext.Current.CancellationToken);
+            using var replayedEvidence=new MemoryStream(evidenceBytes,writable:false);
+            var error=await Assert.ThrowsAsync<InvalidOperationException>(()=>journal.AppendWithStoredEvidenceAsync(
+                catalog,taxonomy,Submission(source,revision:1),replayedEvidence,store,1024,TestContext.Current.CancellationToken));
+            Assert.Equal("MEDICAL_SOURCE_PACKAGE_AT_REST_TAMPERED",error.Message);
+            Assert.Equal(1L,(await Read(journal,catalog,taxonomy)).Revision);
         }
         finally
         {

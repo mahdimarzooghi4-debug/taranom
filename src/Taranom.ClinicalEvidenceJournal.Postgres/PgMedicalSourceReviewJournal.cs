@@ -33,8 +33,10 @@ internal static class MedicalSourcePackageFingerprint
         return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
 }
-internal sealed record MedicalSourceReviewCommand(Guid RequestId,long ExpectedRevision,string SourceRef,
+internal sealed record MedicalSourceReviewSubmission(Guid RequestId,long ExpectedRevision,string SourceRef,
     string PackageSha256,string Lane,string Recommendation,string ReviewerRefClaimed,string EvidenceRefClaimed);
+internal sealed record MedicalSourceReviewCommand(Guid RequestId,long ExpectedRevision,string SourceRef,
+    string PackageSha256,string Lane,string Recommendation,string ReviewerRefClaimed,string EvidenceRefClaimed,string EvidencePackageSha256);
 internal sealed record MedicalSourceReviewEvent(long Revision,MedicalSourceReviewCommand Command,string PreviousSha256,string EventSha256);
 internal sealed record MedicalSourceReviewSnapshot(long Revision,string HeadSha256,IReadOnlyList<MedicalSourceReviewEvent> Events,
     bool ReviewerIdentityAuthenticated,bool EvidenceCustodyVerified,bool RightsVerified,bool ScientificallyReviewed,
@@ -116,6 +118,23 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioning
             sources.Add(new(package.SourceRef,stored.Sha256));
         }
         await OpenHashedSourcesAsync(catalog,taxonomy,sources,ct);
+    }
+
+    internal async Task<MedicalSourceReviewAppendResult> AppendWithStoredEvidenceAsync(string catalog,string taxonomy,
+        MedicalSourceReviewSubmission input,Stream evidencePackage,MedicalSourcePackageBlobStore blobStore,
+        long maximumBytes,CancellationToken ct=default)
+    {
+        if(blobStore is null)throw new ArgumentNullException(nameof(blobStore));
+        if(maximumBytes<=0)throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+        if(!Sha(catalog)||!Sha(taxonomy)||!Valid(input))return new(MedicalSourceReviewOutcome.Invalid,0);
+        if(!await blobStore.VerifyAsync(input.PackageSha256,maximumBytes,ct))
+            throw new InvalidOperationException("MEDICAL_SOURCE_PACKAGE_BLOB_MISSING");
+        var evidence=await blobStore.StoreAsync(evidencePackage,maximumBytes,ct);
+        if(!await blobStore.VerifyAsync(evidence.Sha256,maximumBytes,ct))
+            throw new InvalidOperationException("MEDICAL_REVIEW_EVIDENCE_BLOB_MISSING");
+        var command=new MedicalSourceReviewCommand(input.RequestId,input.ExpectedRevision,input.SourceRef,
+            input.PackageSha256,input.Lane,input.Recommendation,input.ReviewerRefClaimed,input.EvidenceRefClaimed,evidence.Sha256);
+        return await AppendAsync(catalog,taxonomy,command,ct);
     }
 
     internal async Task<MedicalSourceReviewAppendResult> AppendWithStoredPackageAsync(string catalog,string taxonomy,
@@ -327,9 +346,12 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioning
         return new(revision,head,events,sources);
     }
 
-    private static bool Valid(MedicalSourceReviewCommand x)=>x is not null&&x.RequestId!=Guid.Empty&&x.ExpectedRevision>=0&&
+    private static bool Valid(MedicalSourceReviewSubmission x)=>x is not null&&x.RequestId!=Guid.Empty&&x.ExpectedRevision>=0&&
         TestRef(x.SourceRef)&&Sha(x.PackageSha256)&&Lanes.Contains(x.Lane)&&Recommendations.Contains(x.Recommendation)&&
         Ref(x.ReviewerRefClaimed,"reviewer:")&&Ref(x.EvidenceRefClaimed,"evidence:");
+    private static bool Valid(MedicalSourceReviewCommand x)=>x is not null&&
+        Valid(new MedicalSourceReviewSubmission(x.RequestId,x.ExpectedRevision,x.SourceRef,x.PackageSha256,x.Lane,
+            x.Recommendation,x.ReviewerRefClaimed,x.EvidenceRefClaimed))&&Sha(x.EvidencePackageSha256);
     private static bool TestRef(string x)=>x is not null&&Regex.IsMatch(x,@"^test:[A-Za-z0-9_:-]{1,120}$",RegexOptions.CultureInvariant);
     private static bool Ref(string x,string prefix)=>x is not null&&x.StartsWith(prefix,StringComparison.Ordinal)&&
         x.Length>prefix.Length&&x.Length<=129&&x.AsSpan(prefix.Length).ToString().All(c=>char.IsAsciiLetterOrDigit(c)||c is '_' or ':' or '-');
