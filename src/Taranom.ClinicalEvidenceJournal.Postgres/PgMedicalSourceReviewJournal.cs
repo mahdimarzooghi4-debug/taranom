@@ -1,4 +1,5 @@
 using System.Data;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -9,6 +10,29 @@ namespace Taranom.ClinicalEvidenceJournal.Postgres;
 
 internal enum MedicalSourceReviewOutcome { Recorded, Replayed, ConflictingReplay, StaleRevision, ScopeDenied, Invalid }
 internal sealed record MedicalSourceReviewSource(string SourceRef,string PackageSha256);
+internal sealed record MedicalSourceReviewPackageStream(string SourceRef,Stream Content);
+
+internal static class MedicalSourcePackageFingerprint
+{
+    internal static async Task<string> ComputeSha256Async(Stream content,long maximumBytes,CancellationToken ct=default)
+    {
+        if(content is null||!content.CanRead)throw new ArgumentException("A readable package stream is required.",nameof(content));
+        if(maximumBytes<=0)throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+        using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer=new byte[64*1024];
+        long total=0;
+        while(true)
+        {
+            var read=await content.ReadAsync(buffer.AsMemory(),ct);
+            if(read==0)break;
+            if(read>maximumBytes-total)throw new InvalidOperationException("MEDICAL_SOURCE_PACKAGE_SIZE_LIMIT");
+            hash.AppendData(buffer,0,read);
+            total+=read;
+        }
+        if(total==0)throw new InvalidOperationException("MEDICAL_SOURCE_PACKAGE_EMPTY");
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
+    }
+}
 internal sealed record MedicalSourceReviewCommand(Guid RequestId,long ExpectedRevision,string SourceRef,
     string PackageSha256,string Lane,string Recommendation,string ReviewerRefClaimed,string EvidenceRefClaimed);
 internal sealed record MedicalSourceReviewEvent(long Revision,MedicalSourceReviewCommand Command,string PreviousSha256,string EventSha256);
@@ -76,7 +100,24 @@ internal sealed class PgMedicalSourceReviewJournal(NpgsqlDataSource provisioning
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    internal async Task OpenAsync(string catalog,string taxonomy,IReadOnlyCollection<MedicalSourceReviewSource> sources,CancellationToken ct=default)
+    internal async Task OpenFromPackageStreamsAsync(string catalog,string taxonomy,
+        IReadOnlyCollection<MedicalSourceReviewPackageStream> packages,long maximumBytesPerPackage,CancellationToken ct=default)
+    {
+        if(!Sha(catalog)||!Sha(taxonomy)||packages is null||packages.Count is <1 or >32||maximumBytesPerPackage<=0)
+            throw new ArgumentException("Invalid synthetic medical review package scope.");
+        var refs=new HashSet<string>(StringComparer.Ordinal);
+        var sources=new List<MedicalSourceReviewSource>(packages.Count);
+        foreach(var package in packages)
+        {
+            if(package is null||!TestRef(package.SourceRef)||package.Content is null||!refs.Add(package.SourceRef))
+                throw new ArgumentException("Invalid synthetic medical review package.");
+            var digest=await MedicalSourcePackageFingerprint.ComputeSha256Async(package.Content,maximumBytesPerPackage,ct);
+            sources.Add(new(package.SourceRef,digest));
+        }
+        await OpenHashedSourcesAsync(catalog,taxonomy,sources,ct);
+    }
+
+    private async Task OpenHashedSourcesAsync(string catalog,string taxonomy,IReadOnlyCollection<MedicalSourceReviewSource> sources,CancellationToken ct=default)
     {
         if(!Sha(catalog)||!Sha(taxonomy)||sources is null||sources.Count is <1 or >32||
            sources.Any(x=>!TestRef(x.SourceRef)||!Sha(x.PackageSha256))||
