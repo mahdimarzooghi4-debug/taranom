@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security.Cryptography;
 using Taranom.ClinicalEvidenceJournal.Postgres;
 using Xunit;
 
@@ -77,6 +78,36 @@ public sealed class MedicalSourcePackageBlobStoreTests
         finally
         {
             if(Directory.Exists(root))Directory.Delete(root,recursive:true);
+        }
+    }
+
+    [Fact]
+    public async Task VerifyAndReconcileRejectLinkedBlobWithoutTreatingItsTargetAsStoredContent()
+    {
+        var root=NewRoot();
+        var outside=Path.Combine(Path.GetTempPath(),$"taranom-linked-target-{Guid.NewGuid():N}.bin");
+        try
+        {
+            Directory.CreateDirectory(root);
+            var bytes=System.Text.Encoding.UTF8.GetBytes("synthetic external target");
+            var digest=Convert.ToHexStringLower(SHA256.HashData(bytes));
+            await File.WriteAllBytesAsync(outside,bytes,TestContext.Current.CancellationToken);
+            File.CreateSymbolicLink(Path.Combine(root,digest+".blob"),outside);
+
+            var store=new MedicalSourcePackageBlobStore(root);
+            var verifyError=await Assert.ThrowsAsync<InvalidOperationException>(()=>
+                store.VerifyAsync(digest,1024,TestContext.Current.CancellationToken));
+            Assert.Equal("MEDICAL_SOURCE_PACKAGE_LINKED_BLOB_REJECTED",verifyError.Message);
+
+            var report=await store.ReconcileAsync([digest],1024,TestContext.Current.CancellationToken);
+            Assert.Contains(report,x=>x.Identifier==digest&&x.Kind==MedicalSourceBlobFindingKind.UnsafeLinkedBlob);
+            Assert.Contains(report,x=>x.Identifier==digest&&x.Kind==MedicalSourceBlobFindingKind.MissingReference);
+            Assert.DoesNotContain(report,x=>x.Identifier==digest&&x.Kind==MedicalSourceBlobFindingKind.ReferencedIntact);
+        }
+        finally
+        {
+            if(Directory.Exists(root))Directory.Delete(root,recursive:true);
+            if(File.Exists(outside))File.Delete(outside);
         }
     }
 }
