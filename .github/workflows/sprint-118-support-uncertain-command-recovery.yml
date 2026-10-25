@@ -2,8 +2,6 @@ name: Sprint 118 Support Uncertain Write Recovery Full Regression
 on:
   push:
     branches: [sprint-118-support-uncertain-command-recovery]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
