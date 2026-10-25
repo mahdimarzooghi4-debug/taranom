@@ -24,6 +24,7 @@ _OUTPUT_KEYS = frozenset((
     "human_referral", "patient_retains_choice", "final_provider_choice",
 ))
 _ACTIONS = frozenset(("NONE", "ER_NOW"))
+_CANDIDATE_REFS = frozenset(("QWEN_QWEN2_5_7B_INSTRUCT", "BIOPARS"))
 
 
 @dataclass(frozen=True)
@@ -165,6 +166,31 @@ def evaluate_batch(cases: list[object], outputs: list[object]) -> dict[str, obje
         "status": "SYNTHETIC_INTERACTION_CONTRACT_ONLY",
         "case_results": results,
         "summary": summarize(results),
+        "diagnostic_accuracy": "NOT_EVALUATED_NO_QUALIFIED_GOLD_SET",
+        "clinical_use_allowed": False,
+        "training_allowed": False,
+        "production_allowed": False,
+    }
+
+
+def compare_candidate_batches(
+    cases: list[object], candidate_outputs: object,
+) -> dict[str, object]:
+    """Compare the same synthetic cases across both selected model candidates.
+
+    The result compares interaction-contract pass/fail counts only. It does not
+    rank candidates or estimate diagnosis, specialty referral, or clinical quality.
+    """
+    if type(candidate_outputs) is not dict or set(candidate_outputs) != _CANDIDATE_REFS:
+        raise EvaluationRejected("EXACT_SELECTED_CANDIDATE_SET_REQUIRED")
+    reports = {
+        candidate: evaluate_batch(cases, candidate_outputs[candidate])["summary"]
+        for candidate in sorted(_CANDIDATE_REFS)
+    }
+    return {
+        "status": "SYNTHETIC_INTERACTION_CONTRACT_COMPARISON_ONLY",
+        "candidate_reports": reports,
+        "comparison_scope": "INTERACTION_CONTRACT_ONLY",
         "diagnostic_accuracy": "NOT_EVALUATED_NO_QUALIFIED_GOLD_SET",
         "clinical_use_allowed": False,
         "training_allowed": False,

@@ -2,7 +2,8 @@
 import unittest
 
 from ai.taranom_internal.medical_assistant_eval import (
-    EvaluationRejected, check_candidate_output, evaluate_batch, summarize, validate_case,
+    EvaluationRejected, check_candidate_output, compare_candidate_batches,
+    evaluate_batch, summarize, validate_case,
 )
 
 
@@ -101,6 +102,25 @@ class MedicalAssistantEvaluationTests(unittest.TestCase):
         duplicate = [case("test:same"), case("test:same")]
         with self.assertRaisesRegex(EvaluationRejected, "DUPLICATE_SYNTHETIC_CASE_REF"):
             evaluate_batch(duplicate, [output(validate_case(duplicate[0]))] * 2)
+
+    def test_candidate_comparison_uses_same_batch_without_medical_ranking(self):
+        cases = [case("test:case-1"), case("test:case-2", clarification=False)]
+        validated = [validate_case(item) for item in cases]
+        qwen = [output(validated[0]), output(validated[1], clarification=False)]
+        biopars = [output(validated[0]), output(validated[1], clarification=True)]
+        comparison = compare_candidate_batches(cases, {
+            "QWEN_QWEN2_5_7B_INSTRUCT": qwen,
+            "BIOPARS": biopars,
+        })
+        reports = comparison["candidate_reports"]
+        self.assertEqual(2, reports["QWEN_QWEN2_5_7B_INSTRUCT"]["passed_case_count"])
+        self.assertEqual(1, reports["BIOPARS"]["failed_case_count"])
+        self.assertEqual("INTERACTION_CONTRACT_ONLY", comparison["comparison_scope"])
+        self.assertEqual("NOT_EVALUATED_NO_QUALIFIED_GOLD_SET", comparison["diagnostic_accuracy"])
+        self.assertFalse(comparison["clinical_use_allowed"])
+        self.assertFalse(comparison["production_allowed"])
+        with self.assertRaisesRegex(EvaluationRejected, "EXACT_SELECTED_CANDIDATE_SET"):
+            compare_candidate_batches(cases, {"QWEN_QWEN2_5_7B_INSTRUCT": qwen})
 
     def test_emergency_cannot_be_defined_without_human_referral(self):
         with self.assertRaisesRegex(EvaluationRejected, "EMERGENCY_REQUIRES"):
