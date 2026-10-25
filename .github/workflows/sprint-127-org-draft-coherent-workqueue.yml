@@ -2,8 +2,6 @@ name: Sprint 127 Organization Draft Coherent Workqueue Full Regression
 on:
   push:
     branches: [sprint-127-org-draft-coherent-workqueue]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

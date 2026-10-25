@@ -2,8 +2,6 @@ name: Sprint 135 Internal Shadow QA Workspace E2E Full Regression
 on:
   push:
     branches: [sprint-135-shadow-qa-workspace-e2e]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
