@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Provide a reusable batch evaluator so outputs from each internally hosted model candidate can be checked against the same synthetic Persian interaction fixtures.
+Provide a reusable batch evaluator for outputs from the selected internally hosted Qwen prototype against the synthetic Persian interaction fixtures.
 
 ## Behavior
 
@@ -17,7 +17,7 @@ Provide a reusable batch evaluator so outputs from each internally hosted model 
 
 ## Boundaries
 
-This helper performs no model loading, inference, network request, file access, or training. Run it separately for each candidate's locally generated outputs. A comparison can report interaction-contract behavior only; diagnostic and referral accuracy remain unevaluated until a rights-cleared, qualified Persian reference set and approved thresholds exist. All clinical, training, and Production permissions remain false.
+This helper performs no model loading, inference, network request, file access, or training. Use it with locally generated outputs from the selected Qwen prototype. The batch reports interaction-contract behavior only; diagnostic and referral accuracy remain unevaluated until a rights-cleared, qualified Persian reference set and approved thresholds exist. All clinical, training, and Production permissions remain false.
 
 ## Tests
 
