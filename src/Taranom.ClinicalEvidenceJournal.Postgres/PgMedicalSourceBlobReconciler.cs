@@ -52,14 +52,16 @@ internal sealed class PgMedicalSourceBlobReconciler(
                 SELECT e.catalog_sha256,e.revision,e.request_id,e.command_json,e.previous_sha256,e.event_sha256,
                        a.request_id,a.event_sha256
                 FROM internal_test_medical_review_event e
-                LEFT JOIN internal_test_medical_review_audit a
+                FULL OUTER JOIN internal_test_medical_review_audit a
                   ON a.catalog_sha256=e.catalog_sha256 AND a.revision=e.revision
-                ORDER BY e.catalog_sha256,e.revision
+                ORDER BY COALESCE(e.catalog_sha256,a.catalog_sha256),COALESCE(e.revision,a.revision)
                 """,cn,tx))
             await using(var rows=await query.ExecuteReaderAsync(ct))
             {
                 while(await rows.ReadAsync(ct))
                 {
+                    if(rows.IsDBNull(0))
+                        throw new InvalidOperationException("MEDICAL_REVIEW_ORPHAN_AUDIT_TAMPERED");
                     var catalog=rows.GetString(0);var revision=rows.GetInt64(1);var requestId=rows.GetGuid(2);
                     var json=rows.GetString(3);var previous=rows.GetString(4);var eventSha=rows.GetString(5);
                     if(!states.TryGetValue(catalog,out var state))
