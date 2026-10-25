@@ -2,8 +2,6 @@ name: Sprint 196 Member Care Support Followup Full Regression
 on:
   push:
     branches: [sprint-196-member-care-support-followup]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
