@@ -6,7 +6,7 @@ Persist the member's synthetic request intent across HTTP reads using the isolat
 
 ## Runtime boundary
 
-The routes are registered only when `TARANOM_APPOINTMENT_REQUEST_QA=CI_EPHEMERAL_ONLY`. They are hosted by the loopback-only center demo, require the isolated `taranom_sprint64_center` database, and use separate restricted writer and reader PostgreSQL principals. Event and audit rows are append-only; every read rebuilds the revision history and verifies its digest chain and audit correspondence.
+The routes are registered only when `TARANOM_APPOINTMENT_REQUEST_QA=CI_EPHEMERAL_ONLY`. They are hosted by the loopback-only center demo, require the isolated `taranom_sprint64_center` database, and use separate restricted writer and reader PostgreSQL principals. Event and audit rows are append-only; every read rebuilds the revision history and verifies each event digest and its audit correspondence.
 
 The payload accepts only bounded `test:` references and a fixed set of non-clinical fields. Diagnosis, prescription, and arbitrary extension fields are rejected. The endpoint does not authenticate a member or center, check a doctor's license, verify slot availability, reserve or confirm an appointment, or authorize clinical action. All such flags, including national release, remain false.
 
