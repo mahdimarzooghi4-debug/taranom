@@ -27,6 +27,8 @@ def main(argv: list[str] | None = None) -> int:
             "error": str(exc),
             "model_loaded": False,
             "network_used": False,
+            "manifest_sha256": None,
+            "manifest_authenticity_verified": False,
             "license_reviewed": False,
             "clinical_use_allowed": False,
             "training_allowed": False,

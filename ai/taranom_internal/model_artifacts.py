@@ -105,8 +105,8 @@ def _reject_manifest_constant(value: str) -> object:
     raise ArtifactRejected("NONFINITE_MODEL_MANIFEST_NUMBER_DENIED")
 
 
-def load_local_model_manifest(manifest_path: str | Path) -> object:
-    """Read bounded strict JSON through one pinned, no-follow regular file handle."""
+def _read_local_model_manifest_bytes(manifest_path: str | Path) -> bytes:
+    """Read bounded manifest bytes through one pinned, no-follow regular file handle."""
     if not getattr(os, "O_NOFOLLOW", 0):
         raise ArtifactRejected("SAFE_MANIFEST_OPEN_NOT_SUPPORTED")
     try:
@@ -140,11 +140,14 @@ def load_local_model_manifest(manifest_path: str | Path) -> object:
                         after.st_mtime_ns, after.st_ctime_ns)
         if stable_before != stable_after or count != before.st_size:
             raise ArtifactRejected("MODEL_MANIFEST_CHANGED_DURING_READ")
+        return b"".join(chunks)
     finally:
         os.close(descriptor)
 
+
+def _parse_local_model_manifest(raw: bytes) -> object:
     try:
-        text = b"".join(chunks).decode("utf-8", errors="strict")
+        text = raw.decode("utf-8", errors="strict")
         _check_manifest_json_depth(text)
         return json.loads(
             text,
@@ -157,12 +160,22 @@ def load_local_model_manifest(manifest_path: str | Path) -> object:
         raise ArtifactRejected("STRICT_MODEL_MANIFEST_JSON_REQUIRED") from exc
 
 
+def load_local_model_manifest(manifest_path: str | Path) -> object:
+    """Read and parse strict local JSON; digest calculation is returned by verifier."""
+    return _parse_local_model_manifest(
+        _read_local_model_manifest_bytes(manifest_path)
+    )
+
+
 def verify_local_model_artifact(
     manifest_path: str | Path, artifact_root: str | Path
 ) -> dict[str, object]:
-    """Read a strict local manifest and verify its declared bytes; never load weights."""
-    manifest = load_local_model_manifest(manifest_path)
-    return verify_local_model_manifest(manifest, artifact_root)
+    """Verify exact local manifest bytes and declared files; never load weights."""
+    raw = _read_local_model_manifest_bytes(manifest_path)
+    manifest = _parse_local_model_manifest(raw)
+    result = verify_local_model_manifest(manifest, artifact_root)
+    result["manifest_sha256"] = hashlib.sha256(raw).hexdigest()
+    return result
 
 
 def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> dict[str, object]:
@@ -253,6 +266,7 @@ def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> 
         "total_size_bytes": total_size,
         "model_loaded": False,
         "network_used": False,
+        "manifest_authenticity_verified": False,
         "license_reviewed": False,
         "clinical_use_allowed": False,
         "training_allowed": False,
