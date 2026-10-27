@@ -206,10 +206,12 @@ class LocalModelArtifactTests(unittest.TestCase):
     def test_loaded_manifest_drives_existing_artifact_byte_verification(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            (root / "weights.part").write_bytes(b"synthetic-model-bytes")
+            artifact_root = root / "artifacts"
+            artifact_root.mkdir()
+            (artifact_root / "weights.part").write_bytes(b"synthetic-model-bytes")
             manifest_path = root / "manifest.json"
             manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
-            result = verify_local_model_artifact(manifest_path, root)
+            result = verify_local_model_artifact(manifest_path, artifact_root)
             manifest_bytes = manifest_path.read_bytes()
         self.assertEqual("LOCAL_ARTIFACT_BYTES_VERIFIED_NOT_LOADED", result["status"])
         self.assertEqual(hashlib.sha256(manifest_bytes).hexdigest(),
