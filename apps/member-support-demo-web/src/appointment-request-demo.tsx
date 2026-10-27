@@ -1,5 +1,39 @@
 import { useState, type FormEvent } from 'react';
 
+type CenterDirectory = {
+  contract?: string;
+  syntheticOnly?: boolean;
+  centerRef?: string;
+  currentVersion?: number;
+  departments?: string[];
+  managerAuthenticated?: boolean;
+  professionalQualificationVerified?: boolean;
+  nationalReleaseAllowed?: boolean;
+};
+type RosterDoctor = {
+  doctorRef: string;
+  affiliation: string;
+  assignmentUnverified: boolean;
+  clinicalPrivilegesGranted: boolean;
+  licensureVerified: boolean;
+};
+type DepartmentRoster = {
+  contract?: string;
+  syntheticOnly?: boolean;
+  outcome?: string;
+  centerRef?: string;
+  departmentRef?: string;
+  currentVersion?: number;
+  asOfVersion?: number;
+  doctors?: RosterDoctor[];
+  doctorCount?: number;
+  managerAuthenticated?: boolean;
+  professionalQualificationVerified?: boolean;
+  clinicalAccessGranted?: boolean;
+  providerContractVerified?: boolean;
+  billingAllowed?: boolean;
+  nationalReleaseAllowed?: boolean;
+};
 type RequestBody = {
   requestId: string;
   expectedRevision: 0;
@@ -26,11 +60,22 @@ type Receipt = {
 };
 
 const referencePattern = '^test:[A-Za-z0-9:_-]{1,123}$';
-const authorityFlags: Array<keyof Receipt> = [
+const receiptFlags: Array<keyof Receipt> = [
   'memberAuthenticated', 'centerAuthenticated', 'requestedDoctorLicensed',
   'slotAvailabilityVerified', 'bookingConfirmed', 'clinicalActionAllowed',
   'nationalReleaseAllowed',
 ];
+const directoryFlags: Array<keyof CenterDirectory> = [
+  'managerAuthenticated', 'professionalQualificationVerified', 'nationalReleaseAllowed',
+];
+const rosterFlags: Array<keyof DepartmentRoster> = [
+  'managerAuthenticated', 'professionalQualificationVerified', 'clinicalAccessGranted',
+  'providerContractVerified', 'billingAllowed', 'nationalReleaseAllowed',
+];
+const isTestRef = (value: unknown): value is string =>
+  typeof value === 'string' && /^test:[A-Za-z0-9:_-]{1,123}$/.test(value);
+const allFalse = (value: Record<string, unknown>, flags: string[]) =>
+  flags.every(flag => value[flag] === false);
 const sameCommand = (left: RequestBody, right: RequestBody) =>
   left.requestId === right.requestId &&
   left.expectedRevision === right.expectedRevision &&
@@ -41,13 +86,111 @@ const sameCommand = (left: RequestBody, right: RequestBody) =>
   left.slotRef === right.slotRef;
 
 export function AppointmentRequestDemo() {
-  const [values, setValues] = useState({
-    memberRef: '', centerRef: '', departmentRef: '', requestedDoctorRef: '', slotRef: '',
-  });
+  const [memberRef, setMemberRef] = useState('');
+  const [centerRef, setCenterRef] = useState('');
+  const [slotRef, setSlotRef] = useState('');
+  const [directory, setDirectory] = useState<CenterDirectory | null>(null);
+  const [departmentRef, setDepartmentRef] = useState('');
+  const [roster, setRoster] = useState<DepartmentRoster | null>(null);
+  const [requestedDoctorRef, setRequestedDoctorRef] = useState('');
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogMessage, setCatalogMessage] = useState('');
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+
+  const loadCenterDirectory = async () => {
+    const requestedCenter = centerRef.trim();
+    if (!isTestRef(requestedCenter) || catalogBusy || attempt) return;
+    setCatalogBusy(true);
+    setDirectory(null);
+    setDepartmentRef('');
+    setRoster(null);
+    setRequestedDoctorRef('');
+    setCatalogMessage('در حال خواندن فهرست آزمایشی مرکز…');
+    try {
+      const response = await fetch('/internal/demo/v1/centers/' + encodeURIComponent(requestedCenter), {
+        headers: { Accept: 'application/json' },
+      });
+      const result = await response.json() as CenterDirectory;
+      const validDirectory = response.ok &&
+        result.contract === 'TRN-TECH-073' &&
+        result.syntheticOnly === true &&
+        result.centerRef === requestedCenter &&
+        Number.isSafeInteger(result.currentVersion) &&
+        Array.isArray(result.departments) &&
+        result.departments.every(isTestRef) &&
+        allFalse(result as Record<string, unknown>, directoryFlags);
+      if (!validDirectory) {
+        setCatalogMessage('فهرست مرکز خوانا یا قابل تأیید نیست؛ شناسه ساختگی مرکز را بررسی کنید.');
+        return;
+      }
+      setDirectory(result);
+      setCatalogMessage('فهرست مرکز در نسخه ' + result.currentVersion + ' خوانده شد؛ پزشکان هنوز احراز صلاحیت نشده‌اند.');
+    } catch {
+      setCatalogMessage('فهرست مرکز دریافت نشد؛ انتخاب تخصص و پزشک غیرفعال مانده است.');
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const loadDepartmentRoster = async () => {
+    if (!directory || !departmentRef || catalogBusy || attempt) return;
+    const selectedCenter = directory.centerRef!;
+    const selectedDepartment = departmentRef;
+    setCatalogBusy(true);
+    setRoster(null);
+    setRequestedDoctorRef('');
+    setCatalogMessage('در حال بازخوانی فهرست پزشکان همین تخصص…');
+    const query = new URLSearchParams({
+      expectedCurrentVersion: String(directory.currentVersion),
+      asOfVersion: String(directory.currentVersion),
+    });
+    try {
+      const response = await fetch(
+        '/internal/demo/v1/centers/' + encodeURIComponent(selectedCenter) +
+          '/departments/' + encodeURIComponent(selectedDepartment) + '/roster?' + query,
+        { headers: { Accept: 'application/json' } },
+      );
+      const result = await response.json() as DepartmentRoster;
+      const doctors = result.doctors;
+      const validRoster = response.ok &&
+        result.contract === 'TRN-TECH-102' &&
+        result.syntheticOnly === true &&
+        result.outcome === 'UNVERIFIED_DEPARTMENT_ROSTER' &&
+        result.centerRef === selectedCenter &&
+        result.departmentRef === selectedDepartment &&
+        result.currentVersion === directory.currentVersion &&
+        result.asOfVersion === directory.currentVersion &&
+        Array.isArray(doctors) &&
+        result.doctorCount === doctors.length &&
+        doctors.every(doctor =>
+          isTestRef(doctor.doctorRef) &&
+          doctor.affiliation === 'PendingIndependentVerification' &&
+          doctor.assignmentUnverified === true &&
+          doctor.clinicalPrivilegesGranted === false &&
+          doctor.licensureVerified === false
+        ) &&
+        allFalse(result as Record<string, unknown>, rosterFlags);
+      if (!validRoster) {
+        setCatalogMessage(
+          response.status === 409
+            ? 'نسخه مرکز تغییر کرده؛ فهرست مرکز را دوباره بخوانید.'
+            : 'فهرست تخصص قابل تأیید نیست؛ پزشک برای درخواست قابل انتخاب نیست.',
+        );
+        return;
+      }
+      setRoster(result);
+      setCatalogMessage(doctors.length
+        ? 'پزشکان ثبت‌شده این تخصص بارگذاری شدند؛ صلاحیت حرفه‌ای هیچ‌کدام تأیید نشده است.'
+        : 'برای این تخصص پزشک آزمایشی ثبت نشده است.');
+    } catch {
+      setCatalogMessage('فهرست پزشکان دریافت نشد؛ انتخاب پزشک غیرفعال مانده است.');
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
 
   const sendExactAttempt = async (candidate: Attempt) => {
     setBusy(true);
@@ -69,7 +212,7 @@ export function AppointmentRequestDemo() {
         result.requests?.length === 1 &&
         result.requests[0]?.command !== undefined &&
         sameCommand(result.requests[0].command, candidate.body) &&
-        authorityFlags.every(flag => result[flag] === false);
+        allFalse(result as Record<string, unknown>, receiptFlags);
       if (!validReceipt) {
         setReceipt(null);
         setMessage('پاسخ سرویس قابل تأیید نیست. همان شناسه و همان بدنه را فقط با اقدام دستی دوباره بفرستید.');
@@ -79,7 +222,7 @@ export function AppointmentRequestDemo() {
       setMessage('درخواست ثبت شد؛ نوبت هنوز تأیید نشده است. مرکز باید جداگانه پاسخ دهد.');
     } catch {
       setReceipt(null);
-      setMessage('پاسخی دریافت نشد؛ ممکن است درخواست ثبت شده باشد. برای جلوگیری از درخواست تکراری، فقط ارسال دستیِ دقیق همان درخواست ممکن است.');
+      setMessage('پاسخی دریافت نشد؛ ممکن است درخواست ثبت شده باشد. فقط ارسال دستیِ دقیق همان درخواست ممکن است.');
     } finally {
       setBusy(false);
     }
@@ -88,14 +231,20 @@ export function AppointmentRequestDemo() {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy || attempt || !event.currentTarget.reportValidity()) return;
+    if (!directory || !roster || !roster.doctors?.some(
+      doctor => doctor.doctorRef === requestedDoctorRef,
+    )) {
+      setMessage('ابتدا فهرست مرکز و فهرست پزشکان همین تخصص را بارگذاری و پزشک را انتخاب کنید.');
+      return;
+    }
     const body: RequestBody = {
       requestId: crypto.randomUUID(),
       expectedRevision: 0,
-      memberRef: values.memberRef.trim(),
-      centerRef: values.centerRef.trim(),
-      departmentRef: values.departmentRef.trim(),
-      requestedDoctorRef: values.requestedDoctorRef.trim(),
-      slotRef: values.slotRef.trim(),
+      memberRef: memberRef.trim(),
+      centerRef: directory.centerRef!,
+      departmentRef,
+      requestedDoctorRef,
+      slotRef: slotRef.trim(),
     };
     const candidate = {
       requestRef: 'test:appointment-' + crypto.randomUUID().replaceAll('-', ''),
@@ -110,23 +259,6 @@ export function AppointmentRequestDemo() {
     void sendExactAttempt(attempt);
   };
 
-  const field = (key: keyof typeof values, label: string, description: string) =>
-    <label key={key}>
-      {label}
-      <input
-        required
-        pattern={referencePattern}
-        maxLength={128}
-        autoComplete="off"
-        dir="ltr"
-        value={values[key]}
-        disabled={attempt !== null || busy}
-        onChange={event => setValues(previous => ({ ...previous, [key]: event.target.value }))}
-        aria-describedby={key + '-help'}
-      />
-      <span className="muted" id={key + '-help'}>{description}</span>
-    </label>;
-
   return <section className="appointment-request-demo" aria-labelledby="appointment-request-title">
     <h1 id="appointment-request-title">درخواست نوبت — محیط آزمایشی عضو</h1>
     <div role="note" className="notice">
@@ -136,14 +268,79 @@ export function AppointmentRequestDemo() {
     </div>
     <form onSubmit={submit}>
       <fieldset disabled={busy || attempt !== null}>
-        <legend>مرکز، تخصص، پزشک و بازه‌ای که بیمار درخواست می‌کند</legend>
+        <legend>عضو و مرکز درمانی</legend>
         <div className="fields">
-          {field('memberRef', 'شناسه عضو آزمایشی', 'نمونه: test:member-001')}
-          {field('centerRef', 'شناسه مرکز درمانی آزمایشی', 'نمونه: test:center-001')}
-          {field('departmentRef', 'شناسه تخصص یا بخش آزمایشی', 'نمونه: test:department-001')}
-          {field('requestedDoctorRef', 'شناسه پزشک انتخاب‌شده توسط بیمار', 'نمونه: test:doctor-001')}
-          {field('slotRef', 'شناسه بازه زمانی درخواستی آزمایشی', 'نمونه: test:slot-001')}
+          <label>
+            شناسه عضو آزمایشی
+            <input required pattern={referencePattern} maxLength={128} autoComplete="off" dir="ltr"
+              value={memberRef} onChange={event => setMemberRef(event.target.value)} />
+            <span className="muted">نمونه: test:member-001</span>
+          </label>
+          <label>
+            شناسه مرکز درمانی آزمایشی
+            <input required pattern={referencePattern} maxLength={128} autoComplete="off" dir="ltr"
+              value={centerRef}
+              onChange={event => {
+                setCenterRef(event.target.value);
+                setDirectory(null);
+                setDepartmentRef('');
+                setRoster(null);
+                setRequestedDoctorRef('');
+                setCatalogMessage('');
+              }} />
+            <span className="muted">نمونه: test:center-001؛ فهرست واقعی/ملی در این محیط موجود نیست.</span>
+          </label>
         </div>
+        <div className="actions">
+          <button type="button" onClick={() => void loadCenterDirectory()}
+            disabled={catalogBusy || !isTestRef(centerRef) || attempt !== null}>
+            خواندن تخصص‌های ثبت‌شده مرکز
+          </button>
+        </div>
+      </fieldset>
+      {catalogMessage && <p role="status" aria-live="polite" className="status">{catalogMessage}</p>}
+      {directory && <fieldset disabled={catalogBusy || attempt !== null}>
+        <legend>انتخاب تخصص و پزشک از فهرست ثبت‌شده مرکز</legend>
+        <label>
+          تخصص یا بخش
+          <select required value={departmentRef}
+            onChange={event => {
+              setDepartmentRef(event.target.value);
+              setRoster(null);
+              setRequestedDoctorRef('');
+            }}>
+            <option value="">انتخاب کنید</option>
+            {directory.departments?.map(ref =>
+              <option key={ref} value={ref}>{ref}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => void loadDepartmentRoster()}
+          disabled={catalogBusy || !departmentRef || attempt !== null}>
+          خواندن پزشکان این تخصص در همان نسخه
+        </button>
+        {roster && <label>
+          پزشک انتخاب‌شده توسط بیمار
+          <select required value={requestedDoctorRef}
+            onChange={event => setRequestedDoctorRef(event.target.value)}>
+            <option value="">بیمار پزشک را انتخاب کند</option>
+            {roster.doctors?.map(doctor =>
+              <option key={doctor.doctorRef} value={doctor.doctorRef}>
+                {doctor.doctorRef} — صلاحیت تأیید نشده
+              </option>)}
+          </select>
+        </label>}
+        <p className="muted">
+          فهرست به نسخه {directory.currentVersion} مرکز مقید است. نمایش پزشک در فهرست، احراز هویت، مجوز طبابت یا دسترسی بالینی را ثابت نمی‌کند.
+        </p>
+      </fieldset>}
+      <fieldset disabled={busy || attempt !== null}>
+        <legend>بازه زمانی مورد درخواست</legend>
+        <label>
+          شناسه بازه زمانی درخواستی آزمایشی
+          <input required pattern={referencePattern} maxLength={128} autoComplete="off" dir="ltr"
+            value={slotRef} onChange={event => setSlotRef(event.target.value)} />
+          <span className="muted">نمونه: test:slot-001؛ زمان‌بندی و ظرفیت در این محیط بررسی نمی‌شود.</span>
+        </label>
       </fieldset>
       {!attempt && <div className="actions">
         <button type="submit" disabled={busy}>ارسال درخواست نوبت آزمایشی</button>
@@ -156,7 +353,7 @@ export function AppointmentRequestDemo() {
     {receipt && attempt && <section className="panel" aria-labelledby="appointment-receipt-title">
       <h2 id="appointment-receipt-title">رسید درخواست آزمایشی</h2>
       <p>شناسه درخواست: <code data-testid="appointment-request-ref">{attempt.requestRef}</code></p>
-      <p>پزشک درخواستی بیمار: <code>{attempt.body.requestedDoctorRef}</code></p>
+      <p>پزشک انتخاب‌شده توسط بیمار: <code>{attempt.body.requestedDoctorRef}</code></p>
       <p>نتیجه فنی: <code>{receipt.outcome}</code> — نسخه {receipt.revision}</p>
       <strong>نوبت تأیید نشده است؛ پاسخ مرکز و تأیید ظرفیت در این محیط وجود ندارد.</strong>
     </section>}
