@@ -22,7 +22,7 @@ test('APPOINTMENT-QUEUE-01: center sees only verified synthetic request intent, 
  await page.goto('/appointment-requests-qa');
  await page.getByLabel('شناسه مرکز آزمایشی').fill(center);
  await page.getByRole('button',{name:'خواندن صف درخواست نوبت'}).click();
- await expect(page.getByRole('status')).toContainText('ژورنال PostgreSQL');
+ await expect(page.getByRole('status')).toContainText('یکپارچگی درخواست‌ها بررسی شد');
  const visible=page.getByRole('region',{name:'درخواست‌های این صفحه'});
  await expect(visible).toContainText(requestRef);
  await expect(visible).not.toContainText(otherRequestRef);
