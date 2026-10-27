@@ -71,6 +71,47 @@ async function readCenterQueue(request: APIRequestContext, centerRef: string) {
   return queue;
 }
 
+test('MEMBER-APPOINTMENT-05: uncertain request survives reload and is reconciled before retry', async ({ page, request }) => {
+  const memberRef = ref('member');
+  const centerRef = ref('center');
+  const departmentRef = ref('department');
+  const requestedDoctorRef = ref('patient-selected-doctor');
+  const slotRef = ref('requested-slot');
+  await seedCenter(request, centerRef, departmentRef, requestedDoctorRef);
+  let originalRequestRef = '';
+  let postCount = 0;
+  await page.route('**/internal/demo/v1/appointment-requests/*', async route => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    postCount++;
+    originalRequestRef = new URL(route.request().url()).pathname.split('/').pop() ?? '';
+    await route.fetch();
+    await route.abort();
+  });
+
+  await prepareMemberForm(page, memberRef, centerRef, departmentRef, requestedDoctorRef, slotRef);
+  await page.getByRole('button', { name: 'ارسال درخواست نوبت آزمایشی' }).click();
+  await expect(page.getByRole('status').last()).toContainText('پیش از هر ارسال مجدد');
+  expect(postCount).toBe(1);
+  expect(originalRequestRef).toMatch(/^test:appointment-[a-f0-9]{32}$/);
+
+  await page.reload();
+  await expect(page.getByRole('status').last()).toContainText('قبلی بازیابی شد');
+  await page.getByRole('button', { name: 'بررسی وضعیت همین درخواست' }).click();
+  await expect(page.getByRole('status').last()).toContainText('ثبت همان درخواست با بازخوانی تأیید شد');
+  expect(postCount).toBe(1);
+  await expect(page.getByTestId('appointment-request-ref')).toHaveText(originalRequestRef);
+
+  const queue = await readCenterQueue(request, centerRef);
+  expect(queue.requests).toHaveLength(1);
+  expect(queue.requests[0]).toMatchObject({
+    requestRef: originalRequestRef, centerRef, revision: 1,
+    departmentRef, requestedDoctorRef, slotRef,
+  });
+});
+
 test('MEMBER-APPOINTMENT-03: lost acknowledgement is reconciled by exact journal readback', async ({ page, request }) => {
   const memberRef = ref('member');
   const centerRef = ref('center');

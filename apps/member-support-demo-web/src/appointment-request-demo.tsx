@@ -86,6 +86,55 @@ const sameCommand = (left: RequestBody, right: RequestBody) =>
   left.requestedDoctorRef === right.requestedDoctorRef &&
   left.slotRef === right.slotRef;
 
+const recoveryStorageKey = 'taranom.syntheticAppointmentAttempt.v1';
+const recoveryMaxAgeMs = 24 * 60 * 60 * 1000;
+function readStoredAttempt(): Attempt | null {
+  try {
+    const stored = sessionStorage.getItem(recoveryStorageKey);
+    if (!stored) return null;
+    const envelope = JSON.parse(stored) as {
+      version?: unknown; savedAt?: unknown; attempt?: unknown;
+    };
+    if (envelope.version !== 1 || !Number.isSafeInteger(envelope.savedAt) ||
+        Date.now() - Number(envelope.savedAt) < 0 ||
+        Date.now() - Number(envelope.savedAt) > recoveryMaxAgeMs ||
+        !envelope.attempt || typeof envelope.attempt !== 'object' ||
+        Array.isArray(envelope.attempt)) return null;
+    const candidate = envelope.attempt as Partial<Attempt>;
+    const body = candidate.body as Partial<RequestBody> | undefined;
+    if (typeof candidate.requestRef !== 'string' ||
+        !/^test:appointment-[a-f0-9]{32}$/.test(candidate.requestRef) ||
+        !body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(candidate).some(key => !['requestRef', 'body'].includes(key)) ||
+        Object.keys(body).length !== 7 ||
+        Object.keys(body).some(key => ![
+          'requestId', 'expectedRevision', 'memberRef', 'centerRef',
+          'departmentRef', 'requestedDoctorRef', 'slotRef',
+        ].includes(key)) ||
+        typeof body.requestId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.requestId) ||
+        body.expectedRevision !== 0 ||
+        ![body.memberRef, body.centerRef, body.departmentRef,
+          body.requestedDoctorRef, body.slotRef].every(isTestRef)) return null;
+    return { requestRef: candidate.requestRef, body: body as RequestBody };
+  } catch {
+    return null;
+  }
+}
+function persistAttempt(attempt: Attempt): boolean {
+  try {
+    sessionStorage.setItem(recoveryStorageKey, JSON.stringify({
+      version: 1, savedAt: Date.now(), attempt,
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+function clearStoredAttempt() {
+  try { sessionStorage.removeItem(recoveryStorageKey); } catch { /* best effort */ }
+}
+
 export function AppointmentRequestDemo() {
   const [memberRef, setMemberRef] = useState('');
   const [centerRef, setCenterRef] = useState('');
@@ -96,11 +145,17 @@ export function AppointmentRequestDemo() {
   const [requestedDoctorRef, setRequestedDoctorRef] = useState('');
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [catalogMessage, setCatalogMessage] = useState('');
-  const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [attempt, setAttempt] = useState<Attempt | null>(() => readStoredAttempt());
   const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const [recovery, setRecovery] = useState<RecoveryState>(null);
+  const [recovery, setRecovery] = useState<RecoveryState>(() =>
+    readStoredAttempt() ? 'UNRESOLVED' : null,
+  );
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(() =>
+    readStoredAttempt()
+      ? 'درخواست آزمایشی قبلی بازیابی شد؛ پیش از ارسال مجدد، وضعیت همان شناسه را بررسی کنید.'
+      : '',
+  );
 
   const loadCenterDirectory = async () => {
     const requestedCenter = centerRef.trim();
@@ -223,6 +278,7 @@ export function AppointmentRequestDemo() {
         return;
       }
       setReceipt(result);
+      clearStoredAttempt();
       setRecovery(null);
       setMessage('درخواست ثبت شد؛ نوبت هنوز تأیید نشده است. مرکز باید جداگانه پاسخ دهد.');
     } catch {
@@ -262,6 +318,7 @@ export function AppointmentRequestDemo() {
           requestEvents[0]?.command &&
           sameCommand(requestEvents[0].command, attempt.body)) {
         setReceipt({ ...result, outcome: 'ReadBackConfirmed' });
+        clearStoredAttempt();
         setRecovery(null);
         setMessage('ثبت همان درخواست با بازخوانی تأیید شد؛ نوبت هنوز تأیید نشده است.');
         return;
@@ -304,6 +361,10 @@ export function AppointmentRequestDemo() {
       requestRef: 'test:appointment-' + crypto.randomUUID().replaceAll('-', ''),
       body,
     };
+    if (!persistAttempt(candidate)) {
+      setMessage('وضعیت بازیابی در همین زبانه ذخیره نشد؛ برای جلوگیری از درخواست بدون امکان بازیابی، چیزی ارسال نشد.');
+      return;
+    }
     setAttempt(candidate);
     void sendExactAttempt(candidate);
   };
