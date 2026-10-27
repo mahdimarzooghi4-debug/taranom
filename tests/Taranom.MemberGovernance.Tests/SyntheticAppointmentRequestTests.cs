@@ -112,7 +112,9 @@ public sealed class SyntheticAppointmentRequestTests
 public sealed class AppointmentScheduleReadServiceTests
 {
     private static AppointmentScheduleQuery Query() =>
-        new("center:future-provider-01", null, "doctor:patient-selected-01");
+        new("center:future-provider-01", null, "doctor:patient-selected-01",
+            DateTimeOffset.Parse("2026-10-28T00:00:00Z"),
+            DateTimeOffset.Parse("2026-10-29T00:00:00Z"));
 
     private static AppointmentScheduleObservation Observation(
         AppointmentScheduleQuery? query = null,
@@ -215,6 +217,27 @@ public sealed class AppointmentScheduleReadServiceTests
         Assert.False(result.SourceAuthenticated);
         Assert.False(result.SlotAvailabilityVerified);
         Assert.False(result.BookingConfirmed);
+    }
+
+
+    [Fact]
+    public async Task QueryWindowMustBeValidAndSourceClaimsMustStayInsideIt()
+    {
+        var query = Query();
+        var invalidQuery = await new AppointmentScheduleReadService(
+            new FixedScheduleSource(Observation(query))).ReadAsync(
+                query with { EndsAt = query.StartsAt },
+                TestContext.Current.CancellationToken);
+        Assert.Equal(AppointmentScheduleReadOutcome.InvalidQuery, invalidQuery.Outcome);
+        Assert.Empty(invalidQuery.SourceClaimedSlots);
+
+        var outsideWindow = new AppointmentScheduleSlotClaim(
+            "slot:outside", query.StartsAt.AddMinutes(-1), query.StartsAt.AddMinutes(10));
+        var invalidClaim = await new AppointmentScheduleReadService(
+            new FixedScheduleSource(Observation(query, [outsideWindow])))
+            .ReadAsync(query, TestContext.Current.CancellationToken);
+        Assert.Equal(AppointmentScheduleReadOutcome.InvalidSourceResponse, invalidClaim.Outcome);
+        Assert.Empty(invalidClaim.SourceClaimedSlots);
     }
 
     private sealed class FixedScheduleSource(

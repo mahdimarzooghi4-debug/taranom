@@ -92,13 +92,16 @@ def main():
     schedule_url = (
         schedule_base + "?departmentRef=" + body["departmentRef"]
         + "&requestedDoctorRef=" + body["requestedDoctorRef"]
+        + "&from=2026-10-28T00:00:00Z&until=2026-10-29T00:00:00Z"
     )
     schedule_code, schedule = read_schedule(schedule_url)
-    assert schedule_code == 200 and schedule["contract"] == "TRN-TECH-227"
+    assert schedule_code == 200 and schedule["contract"] == "TRN-TECH-228"
     assert schedule["outcome"] == "SourceNotConfigured"
     assert schedule["centerRef"] == body["centerRef"]
     assert schedule["departmentRefFilter"] == body["departmentRef"]
     assert schedule["requestedDoctorRefFilter"] == body["requestedDoctorRef"]
+    assert schedule["from"] == "2026-10-28T00:00:00.0000000+00:00"
+    assert schedule["until"] == "2026-10-29T00:00:00.0000000+00:00"
     assert schedule["sourceClaims"] == []
     for flag in (
         "sourceAuthenticated", "slotAvailabilityVerified", "bookingConfirmed",
@@ -115,7 +118,16 @@ def main():
     code, rejected = read_schedule(duplicate)
     assert code == 400 and rejected["outcome"] == "INVALID_TEST_QUERY"
 
-    print("PASS: synthetic request intent persisted and verified through HTTP/PostgreSQL")
+    code, _ = read_schedule(schedule_base + "?from=2026-10-28T00:00:00Z")
+    assert code == 400
+    code, _ = read_schedule(schedule_base +
+        "?from=2026-10-28T00:00:00&until=2026-10-29T00:00:00Z")
+    assert code == 400
+    code, _ = read_schedule(schedule_base +
+        "?from=2026-10-29T00:00:00Z&until=2026-10-28T00:00:00Z")
+    assert code == 400
+
+    print("PASS: synthetic appointment request persisted; schedule query window validated over HTTP")
 
 
 if __name__ == "__main__":

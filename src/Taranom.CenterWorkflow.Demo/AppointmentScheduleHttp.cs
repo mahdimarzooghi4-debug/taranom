@@ -1,3 +1,4 @@
+using System.Globalization;
 using Taranom.MemberGovernance;
 
 namespace Taranom.CenterWorkflow.Demo;
@@ -13,12 +14,18 @@ internal static class AppointmentScheduleHttp
         var centerRef = context.Request.RouteValues["centerRef"]?.ToString();
         if (!TestRef(centerRef) ||
             context.Request.Query.Keys.Any(key =>
-                key is not ("departmentRef" or "requestedDoctorRef")))
+                key is not ("departmentRef" or "requestedDoctorRef" or "from" or "until")))
             return Denied();
 
         var departmentValues = context.Request.Query["departmentRef"];
         var doctorValues = context.Request.Query["requestedDoctorRef"];
-        if (departmentValues.Count > 1 || doctorValues.Count > 1)
+        var fromValues = context.Request.Query["from"];
+        var untilValues = context.Request.Query["until"];
+        if (departmentValues.Count > 1 || doctorValues.Count > 1 ||
+            fromValues.Count != 1 || untilValues.Count != 1 ||
+            !TryParseTimestamp(fromValues[0], out var startsAt) ||
+            !TryParseTimestamp(untilValues[0], out var endsAt) ||
+            endsAt <= startsAt)
             return Denied();
 
         var departmentRef = departmentValues.Count == 0 ||
@@ -30,16 +37,18 @@ internal static class AppointmentScheduleHttp
             return Denied();
 
         var query = new AppointmentScheduleQuery(
-            centerRef!, departmentRef, requestedDoctorRef);
+            centerRef!, departmentRef, requestedDoctorRef, startsAt, endsAt);
         var result = await Reader.ReadAsync(query, context.RequestAborted);
         return Results.Json(new
         {
-            contract = "TRN-TECH-227",
+            contract = "TRN-TECH-228",
             syntheticOnly = true,
             outcome = result.Outcome.ToString(),
             centerRef,
             departmentRefFilter = departmentRef ?? string.Empty,
             requestedDoctorRefFilter = requestedDoctorRef ?? string.Empty,
+            from = startsAt.ToString("O", CultureInfo.InvariantCulture),
+            until = endsAt.ToString("O", CultureInfo.InvariantCulture),
             sourceClaims = result.SourceClaimedSlots,
             sourceAuthenticated = result.SourceAuthenticated,
             slotAvailabilityVerified = result.SlotAvailabilityVerified,
@@ -47,6 +56,20 @@ internal static class AppointmentScheduleHttp
             clinicalActionAllowed = result.ClinicalActionAllowed,
             nationalReleaseAllowed = false
         });
+    }
+
+    private static bool TryParseTimestamp(string? value, out DateTimeOffset timestamp)
+    {
+        timestamp = default;
+        if (value is null || value.Length > 64)
+            return false;
+
+        var hasZuluOffset = value.EndsWith("Z", StringComparison.Ordinal);
+        var hasNumericOffset = value.Length >= 6 &&
+            value[^6] is '+' or '-' && value[^3] == ':';
+        return (hasZuluOffset || hasNumericOffset) &&
+            DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out timestamp);
     }
 
     private static bool TestRef(string? value) =>
@@ -58,7 +81,7 @@ internal static class AppointmentScheduleHttp
     private static IResult Denied() =>
         Results.Json(new
         {
-            contract = "TRN-TECH-227",
+            contract = "TRN-TECH-228",
             outcome = "INVALID_TEST_QUERY",
             syntheticOnly = true,
             sourceClaims = Array.Empty<AppointmentScheduleSlotClaim>(),

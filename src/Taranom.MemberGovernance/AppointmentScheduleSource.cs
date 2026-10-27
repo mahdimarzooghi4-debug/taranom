@@ -5,7 +5,9 @@ namespace Taranom.MemberGovernance;
 internal sealed record AppointmentScheduleQuery(
     string CenterRef,
     string? DepartmentRef,
-    string? RequestedDoctorRef);
+    string? RequestedDoctorRef,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt);
 
 internal sealed record AppointmentScheduleSlotClaim(
     string SlotRef,
@@ -68,7 +70,8 @@ internal sealed class AppointmentScheduleReadService(
     {
         if (query is null || !ValidRef(query.CenterRef) ||
             query.DepartmentRef is not null && !ValidRef(query.DepartmentRef) ||
-            query.RequestedDoctorRef is not null && !ValidRef(query.RequestedDoctorRef))
+            query.RequestedDoctorRef is not null && !ValidRef(query.RequestedDoctorRef) ||
+            query.StartsAt == default || query.EndsAt <= query.StartsAt)
             return AppointmentScheduleReadResult.Denied(
                 AppointmentScheduleReadOutcome.InvalidQuery);
 
@@ -124,6 +127,7 @@ internal sealed class AppointmentScheduleReadService(
             if (slot is null || !ValidRef(slot.SlotRef) ||
                 !refs.Add(slot.SlotRef) || slot.StartsAt == default ||
                 slot.EndsAt <= slot.StartsAt ||
+                slot.StartsAt < query.StartsAt || slot.EndsAt > query.EndsAt ||
                 previousStart is not null && slot.StartsAt < previousStart)
                 return false;
             previousStart = slot.StartsAt;
