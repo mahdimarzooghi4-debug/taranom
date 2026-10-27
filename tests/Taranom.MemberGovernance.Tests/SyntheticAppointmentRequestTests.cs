@@ -128,7 +128,7 @@ public sealed class AppointmentScheduleReadServiceTests
     [Fact]
     public async Task MissingSourceReturnsNoSlotsAndNoAuthority()
     {
-        var result = await new AppointmentScheduleReadService(null).ReadAsync(Query());
+        var result = await new AppointmentScheduleReadService(null).ReadAsync(Query(), TestContext.Current.CancellationToken);
 
         Assert.Equal(AppointmentScheduleReadOutcome.SourceNotConfigured, result.Outcome);
         Assert.Empty(result.SourceClaimedSlots);
@@ -147,7 +147,7 @@ public sealed class AppointmentScheduleReadServiceTests
             "slot:provider-123", starts, starts.AddMinutes(30));
         var result = await new AppointmentScheduleReadService(
             new FixedScheduleSource(Observation(query, [claim])))
-            .ReadAsync(query);
+            .ReadAsync(query, TestContext.Current.CancellationToken);
 
         Assert.Equal(AppointmentScheduleReadOutcome.SourceClaimReceived, result.Outcome);
         Assert.Equal(claim, Assert.Single(result.SourceClaimedSlots));
