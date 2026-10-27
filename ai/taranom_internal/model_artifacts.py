@@ -23,6 +23,7 @@ _MAX_FILES = 8192
 _MAX_TOTAL_BYTES = 100 * 1024 * 1024 * 1024
 _CHUNK_SIZE = 1024 * 1024
 _MAX_MANIFEST_BYTES = 1024 * 1024
+_MAX_MANIFEST_JSON_DEPTH = 32
 
 
 def _file_entry(raw: object) -> tuple[str, str, int]:
@@ -66,6 +67,29 @@ def _open_beneath(root_fd: int, parts: tuple[str, ...]) -> int:
         )
     finally:
         os.close(current_fd)
+
+
+def _check_manifest_json_depth(text: str) -> None:
+    depth = 0
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            if depth > _MAX_MANIFEST_JSON_DEPTH:
+                raise ArtifactRejected("MODEL_MANIFEST_NESTING_LIMIT")
+        elif character in "]}":
+            depth -= 1
 
 
 def _unique_manifest_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -121,6 +145,7 @@ def load_local_model_manifest(manifest_path: str | Path) -> object:
 
     try:
         text = b"".join(chunks).decode("utf-8", errors="strict")
+        _check_manifest_json_depth(text)
         return json.loads(
             text,
             object_pairs_hook=_unique_manifest_object,

@@ -142,10 +142,10 @@ class LocalModelArtifactTests(unittest.TestCase):
             for content, reason in (
                 ('{"schema_version":1,"schema_version":1}', "DUPLICATE_MODEL_MANIFEST_KEY"),
                 ('{"schema_version":NaN}', "NONFINITE_MODEL_MANIFEST_NUMBER_DENIED"),
-                ("[" * 1100 + "]" * 1100, "STRICT_MODEL_MANIFEST_JSON_REQUIRED"),
+                ("[" * 1100 + "]" * 1100, "MODEL_MANIFEST_NESTING_LIMIT"),
             ):
                 path.write_text(content, encoding="utf-8")
-                with self.subTest(reason=reason), self.assertRaisesRegex(
+                with self.subTest(reason=reason, prefix=content[:24]), self.assertRaisesRegex(
                         ArtifactRejected, reason):
                     load_local_model_manifest(path)
             path.write_bytes(b"\xff")
