@@ -16,7 +16,7 @@ test('APPOINTMENT-QUEUE-02: center queue filters by requested department and pat
   const response=await request.post('/internal/demo/v1/appointment-requests/'+
    encodeURIComponent(requestRef),{data:{
     requestId:crypto.randomUUID(),expectedRevision:0,memberRef:ref('member'),
-    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
+    centerRef,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
    }});
   expect(response.status()).toBe(200);
  };
@@ -55,7 +55,7 @@ test('APPOINTMENT-QUEUE-02: center queue filters by requested department and pat
  expect(firstPage.requests).toHaveLength(10);
  expect(firstPage.hasMore).toBe(true);
  for(const row of firstPage.requests)
-  expect(row).toMatchObject({centerRef,departmentRef:department,requestedDoctorRef:doctor});
+  expect(row).toMatchObject({centerRef:center,departmentRef:department,requestedDoctorRef:doctor});
 
  await page.getByRole('button',{name:'صفحه بعد درخواست‌ها'}).click();
  await expect(visible.locator('li')).toHaveCount(1);
@@ -65,7 +65,7 @@ test('APPOINTMENT-QUEUE-02: center queue filters by requested department and pat
  const secondPage=await nextResponse.json();
  expect(secondPage.requests).toHaveLength(1);
  expect(secondPage.hasMore).toBe(false);
- expect(secondPage.requests[0]).toMatchObject({centerRef,departmentRef:department,requestedDoctorRef:doctor});
+ expect(secondPage.requests[0]).toMatchObject({centerRef:center,departmentRef:department,requestedDoctorRef:doctor});
  expect(matchingRefs.sort()[10]).toBe(secondPage.requests[0].requestRef);
 });
 
