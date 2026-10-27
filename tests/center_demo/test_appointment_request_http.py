@@ -28,6 +28,15 @@ def call(request_ref, data=None, origin=None):
         return error.code, json.loads(error.read())
 
 
+def read_schedule(url):
+    request = Request(url, method="GET", headers={"Accept": "application/json"})
+    try:
+        with urlopen(request, timeout=6) as response:
+            return response.status, json.loads(response.read())
+    except HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
 def main():
     request_ref = "test:appointment-" + uuid4().hex
     request_id = str(uuid4())
@@ -75,6 +84,36 @@ def main():
     malformed = dict(body, diagnosis="must-not-be-accepted")
     code, _ = call("test:extra-field-" + uuid4().hex, malformed)
     assert code == 400
+
+    schedule_base = (
+        "http://127.0.0.1:4320/internal/demo/v1/centers/"
+        + body["centerRef"] + "/appointment-schedule"
+    )
+    schedule_url = (
+        schedule_base + "?departmentRef=" + body["departmentRef"]
+        + "&requestedDoctorRef=" + body["requestedDoctorRef"]
+    )
+    schedule_code, schedule = read_schedule(schedule_url)
+    assert schedule_code == 200 and schedule["contract"] == "TRN-TECH-227"
+    assert schedule["outcome"] == "SourceNotConfigured"
+    assert schedule["centerRef"] == body["centerRef"]
+    assert schedule["departmentRefFilter"] == body["departmentRef"]
+    assert schedule["requestedDoctorRefFilter"] == body["requestedDoctorRef"]
+    assert schedule["sourceClaims"] == []
+    for flag in (
+        "sourceAuthenticated", "slotAvailabilityVerified", "bookingConfirmed",
+        "clinicalActionAllowed", "nationalReleaseAllowed",
+    ):
+        assert schedule[flag] is False, flag
+
+    code, rejected = read_schedule(schedule_base + "?unexpected=value")
+    assert code == 400 and rejected["outcome"] == "INVALID_TEST_QUERY"
+    duplicate = (
+        schedule_base + "?departmentRef=" + body["departmentRef"]
+        + "&departmentRef=" + body["departmentRef"]
+    )
+    code, rejected = read_schedule(duplicate)
+    assert code == 400 and rejected["outcome"] == "INVALID_TEST_QUERY"
 
     print("PASS: synthetic request intent persisted and verified through HTTP/PostgreSQL")
 
