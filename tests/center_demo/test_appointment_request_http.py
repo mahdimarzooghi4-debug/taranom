@@ -2,6 +2,7 @@
 """Real HTTP -> ASP.NET -> isolated PostgreSQL synthetic appointment request."""
 import json
 import sys
+from datetime import datetime
 from uuid import uuid4
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -64,7 +65,17 @@ def main():
     assert code == 200 and created["outcome"] == "RecordedRequest"
     assert created["revision"] == 1 and created["requestCount"] == 1
     assert created["requests"][0]["command"]["requestedDoctorRef"] == body["requestedDoctorRef"]
-    assert created["requests"][0]["command"]["unverifiedScheduleSelection"] == body["unverifiedScheduleSelection"]
+    returned_selection = created["requests"][0]["command"]["unverifiedScheduleSelection"]
+    expected_selection = body["unverifiedScheduleSelection"]
+    assert returned_selection["sourceRef"] == expected_selection["sourceRef"]
+    assert returned_selection["sourceRevision"] == expected_selection["sourceRevision"]
+    assert returned_selection["slotRef"] == body["slotRef"] == expected_selection["slotRef"]
+    for timestamp in ("observedAt", "startsAt", "endsAt"):
+        returned_at = datetime.fromisoformat(
+            returned_selection[timestamp].replace("Z", "+00:00"))
+        expected_at = datetime.fromisoformat(
+            expected_selection[timestamp].replace("Z", "+00:00"))
+        assert returned_at == expected_at, timestamp
     for flag in (
         "memberAuthenticated", "centerAuthenticated", "requestedDoctorLicensed",
         "slotAvailabilityVerified", "bookingConfirmed", "clinicalActionAllowed",
