@@ -167,7 +167,7 @@ public sealed class AppointmentScheduleReadServiceTests
         var wrongScope = Observation(query with { RequestedDoctorRef = "doctor:other" }, [claim]);
 
         var result = await new AppointmentScheduleReadService(
-            new FixedScheduleSource(wrongScope)).ReadAsync(query);
+            new FixedScheduleSource(wrongScope)).ReadAsync(query, TestContext.Current.CancellationToken);
 
         Assert.Equal(AppointmentScheduleReadOutcome.InvalidSourceResponse, result.Outcome);
         Assert.Empty(result.SourceClaimedSlots);
@@ -198,7 +198,7 @@ public sealed class AppointmentScheduleReadServiceTests
         foreach (var slots in cases)
         {
             var result = await new AppointmentScheduleReadService(
-                new FixedScheduleSource(Observation(query, slots))).ReadAsync(query);
+                new FixedScheduleSource(Observation(query, slots))).ReadAsync(query, TestContext.Current.CancellationToken);
             Assert.Equal(AppointmentScheduleReadOutcome.InvalidSourceResponse, result.Outcome);
             Assert.Empty(result.SourceClaimedSlots);
         }
@@ -208,7 +208,7 @@ public sealed class AppointmentScheduleReadServiceTests
     public async Task SourceFailureReturnsUnavailableWithoutLeakingAnAvailabilityClaim()
     {
         var result = await new AppointmentScheduleReadService(new FailingScheduleSource())
-            .ReadAsync(Query());
+            .ReadAsync(Query(), TestContext.Current.CancellationToken);
 
         Assert.Equal(AppointmentScheduleReadOutcome.SourceUnavailable, result.Outcome);
         Assert.Empty(result.SourceClaimedSlots);
