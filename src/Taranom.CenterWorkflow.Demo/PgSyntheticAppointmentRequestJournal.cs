@@ -134,16 +134,18 @@ internal sealed class PgSyntheticAppointmentRequestJournal(
               has_table_privilege(current_user,'internal_test_appointment_request_audit','UPDATE'),
               has_table_privilege(current_user,'internal_test_appointment_request_audit','DELETE')
             """;
-        await using var cmd = new NpgsqlCommand(sql, cn);
-        await using var row = await cmd.ExecuteReaderAsync();
-        if (!await row.ReadAsync() || row.GetString(0) != role ||
-            !row.GetBoolean(1) || row.GetBoolean(2) != canWrite ||
-            row.GetBoolean(3) != canWrite || row.GetBoolean(4) ||
-            !row.GetBoolean(5) || row.GetBoolean(6) != canWrite ||
-            row.GetBoolean(7) || row.GetBoolean(8) ||
-            !row.GetBoolean(9) || row.GetBoolean(10) != canWrite ||
-            row.GetBoolean(11) || row.GetBoolean(12))
-            throw new InvalidOperationException("APPOINTMENT_REQUEST_ROLE_PRIVILEGES_UNVERIFIABLE");
+        await using (var cmd = new NpgsqlCommand(sql, cn))
+        await using (var row = await cmd.ExecuteReaderAsync())
+        {
+            if (!await row.ReadAsync() || row.GetString(0) != role ||
+                !row.GetBoolean(1) || row.GetBoolean(2) != canWrite ||
+                row.GetBoolean(3) != canWrite || row.GetBoolean(4) ||
+                !row.GetBoolean(5) || row.GetBoolean(6) != canWrite ||
+                row.GetBoolean(7) || row.GetBoolean(8) ||
+                !row.GetBoolean(9) || row.GetBoolean(10) != canWrite ||
+                row.GetBoolean(11) || row.GetBoolean(12))
+                throw new InvalidOperationException("APPOINTMENT_REQUEST_ROLE_PRIVILEGES_UNVERIFIABLE");
+        }
 
         await DeniedAsync(cn, canWrite
             ? "DELETE FROM internal_test_appointment_request_event WHERE false"
