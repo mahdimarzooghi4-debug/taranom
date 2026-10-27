@@ -95,7 +95,7 @@ def main():
         + "&from=2026-10-28T00:00:00Z&until=2026-10-29T00:00:00Z"
     )
     schedule_code, schedule = read_schedule(schedule_url)
-    assert schedule_code == 200 and schedule["contract"] == "TRN-TECH-228"
+    assert schedule_code == 200 and schedule["contract"] == "TRN-TECH-229"
     assert schedule["outcome"] == "SourceNotConfigured"
     assert schedule["centerRef"] == body["centerRef"]
     assert schedule["departmentRefFilter"] == body["departmentRef"]
@@ -103,6 +103,7 @@ def main():
     assert schedule["from"] == "2026-10-28T00:00:00.0000000+00:00"
     assert schedule["until"] == "2026-10-29T00:00:00.0000000+00:00"
     assert schedule["sourceClaims"] == []
+    assert schedule["unverifiedSourceMetadata"] is None
     for flag in (
         "sourceAuthenticated", "slotAvailabilityVerified", "bookingConfirmed",
         "clinicalActionAllowed", "nationalReleaseAllowed",

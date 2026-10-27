@@ -41,7 +41,7 @@ internal static class AppointmentScheduleHttp
         var result = await Reader.ReadAsync(query, context.RequestAborted);
         return Results.Json(new
         {
-            contract = "TRN-TECH-228",
+            contract = "TRN-TECH-229",
             syntheticOnly = true,
             outcome = result.Outcome.ToString(),
             centerRef,
@@ -50,6 +50,7 @@ internal static class AppointmentScheduleHttp
             from = startsAt.ToString("O", CultureInfo.InvariantCulture),
             until = endsAt.ToString("O", CultureInfo.InvariantCulture),
             sourceClaims = result.SourceClaimedSlots,
+            unverifiedSourceMetadata = result.UnverifiedSourceMetadata,
             sourceAuthenticated = result.SourceAuthenticated,
             slotAvailabilityVerified = result.SlotAvailabilityVerified,
             bookingConfirmed = result.BookingConfirmed,
@@ -81,10 +82,11 @@ internal static class AppointmentScheduleHttp
     private static IResult Denied() =>
         Results.Json(new
         {
-            contract = "TRN-TECH-228",
+            contract = "TRN-TECH-229",
             outcome = "INVALID_TEST_QUERY",
             syntheticOnly = true,
             sourceClaims = Array.Empty<AppointmentScheduleSlotClaim>(),
+            unverifiedSourceMetadata = (AppointmentScheduleSourceMetadata?)null,
             sourceAuthenticated = false,
             slotAvailabilityVerified = false,
             bookingConfirmed = false,

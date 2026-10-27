@@ -134,6 +134,7 @@ public sealed class AppointmentScheduleReadServiceTests
 
         Assert.Equal(AppointmentScheduleReadOutcome.SourceNotConfigured, result.Outcome);
         Assert.Empty(result.SourceClaimedSlots);
+        Assert.Null(result.UnverifiedSourceMetadata);
         Assert.False(result.SourceAuthenticated);
         Assert.False(result.SlotAvailabilityVerified);
         Assert.False(result.BookingConfirmed);
@@ -153,6 +154,10 @@ public sealed class AppointmentScheduleReadServiceTests
 
         Assert.Equal(AppointmentScheduleReadOutcome.SourceClaimReceived, result.Outcome);
         Assert.Equal(claim, Assert.Single(result.SourceClaimedSlots));
+        Assert.Equal(new AppointmentScheduleSourceMetadata(
+            "source:future-provider", "revision-7",
+            DateTimeOffset.Parse("2026-10-27T09:00:00Z")),
+            result.UnverifiedSourceMetadata);
         Assert.False(result.SourceAuthenticated);
         Assert.False(result.SlotAvailabilityVerified);
         Assert.False(result.BookingConfirmed);
@@ -240,12 +245,34 @@ public sealed class AppointmentScheduleReadServiceTests
         Assert.Empty(invalidClaim.SourceClaimedSlots);
     }
 
+
+    [Fact]
+    public async Task CallerCancellationPropagatesInsteadOfBecomingSourceUnavailable()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new AppointmentScheduleReadService(new CancellationAwareScheduleSource())
+                .ReadAsync(Query(), cancellation.Token).AsTask());
+    }
+
     private sealed class FixedScheduleSource(
         AppointmentScheduleObservation? observation) : IAppointmentScheduleSource
     {
         public ValueTask<AppointmentScheduleObservation?> ReadAsync(
             AppointmentScheduleQuery query, CancellationToken cancellationToken) =>
             ValueTask.FromResult(observation);
+    }
+
+    private sealed class CancellationAwareScheduleSource : IAppointmentScheduleSource
+    {
+        public ValueTask<AppointmentScheduleObservation?> ReadAsync(
+            AppointmentScheduleQuery query, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<AppointmentScheduleObservation?>(Observation(query));
+        }
     }
 
     private sealed class FailingScheduleSource : IAppointmentScheduleSource

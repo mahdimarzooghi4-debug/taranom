@@ -23,6 +23,11 @@ internal sealed record AppointmentScheduleObservation(
     DateTimeOffset ObservedAt,
     IReadOnlyList<AppointmentScheduleSlotClaim> Slots);
 
+internal sealed record AppointmentScheduleSourceMetadata(
+    string SourceRef,
+    string SourceRevision,
+    DateTimeOffset ObservedAt);
+
 internal interface IAppointmentScheduleSource
 {
     ValueTask<AppointmentScheduleObservation?> ReadAsync(
@@ -42,6 +47,7 @@ internal enum AppointmentScheduleReadOutcome
 internal sealed record AppointmentScheduleReadResult(
     AppointmentScheduleReadOutcome Outcome,
     IReadOnlyList<AppointmentScheduleSlotClaim> SourceClaimedSlots,
+    AppointmentScheduleSourceMetadata? UnverifiedSourceMetadata,
     bool SourceAuthenticated,
     bool SlotAvailabilityVerified,
     bool BookingConfirmed,
@@ -50,6 +56,7 @@ internal sealed record AppointmentScheduleReadResult(
     internal static AppointmentScheduleReadResult Denied(
         AppointmentScheduleReadOutcome outcome) =>
         new(outcome, Array.Empty<AppointmentScheduleSlotClaim>(),
+            UnverifiedSourceMetadata: null,
             SourceAuthenticated: false,
             SlotAvailabilityVerified: false,
             BookingConfirmed: false,
@@ -92,6 +99,8 @@ internal sealed class AppointmentScheduleReadService(
 
             return new(AppointmentScheduleReadOutcome.SourceClaimReceived,
                 observation.Slots.ToArray(),
+                new AppointmentScheduleSourceMetadata(
+                    observation.SourceRef, observation.SourceRevision, observation.ObservedAt),
                 SourceAuthenticated: false,
                 SlotAvailabilityVerified: false,
                 BookingConfirmed: false,
