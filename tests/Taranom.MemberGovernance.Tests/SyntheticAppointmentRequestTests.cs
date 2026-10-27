@@ -150,7 +150,7 @@ public sealed class AppointmentScheduleReadServiceTests
             .ReadAsync(query);
 
         Assert.Equal(AppointmentScheduleReadOutcome.SourceClaimReceived, result.Outcome);
-        Assert.Equal([claim], result.SourceClaimedSlots);
+        Assert.Equal(claim, Assert.Single(result.SourceClaimedSlots));
         Assert.False(result.SourceAuthenticated);
         Assert.False(result.SlotAvailabilityVerified);
         Assert.False(result.BookingConfirmed);
