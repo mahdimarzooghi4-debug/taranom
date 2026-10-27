@@ -129,6 +129,56 @@ internal static class SyntheticAppointmentHttp
         }
     }
 
+    internal static async Task<IResult> ListForMemberAsync(HttpContext context)
+    {
+        var memberRef = context.Request.RouteValues["memberRef"]?.ToString();
+        if (!ValidRef(memberRef))
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_REFERENCE");
+        if (context.Request.Query.Keys.Any(k => k is not ("afterRequestRef" or "limit")))
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
+
+        var afterValues = context.Request.Query["afterRequestRef"];
+        if (afterValues.Count > 1)
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
+        string? after = afterValues.Count == 0 ? null : afterValues[0];
+        if (string.IsNullOrEmpty(after)) after = null;
+        var limitValues = context.Request.Query["limit"];
+        var limit = 10;
+        if (limitValues.Count > 1 || limitValues.Count == 1 &&
+            (!int.TryParse(limitValues[0], NumberStyles.None,
+                CultureInfo.InvariantCulture, out limit) || limit is < 1 or > 10))
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
+
+        try
+        {
+            var page = await Store.ReadForMemberAsync(memberRef!, after, limit);
+            return Results.Json(new
+            {
+                contract = "TRN-TECH-222",
+                syntheticOnly = true,
+                source = "VERIFIED_ISOLATED_POSTGRES_APPOINTMENT_JOURNAL",
+                memberRef,
+                afterRequestRef = after ?? string.Empty,
+                limit,
+                hasMore = page.HasMore,
+                nextAfterRequestRef = page.NextAfterRequestRef,
+                requests = page.Requests,
+                memberAuthenticated = false,
+                centerAuthenticated = false,
+                requestedDoctorLicensed = false,
+                slotAvailabilityVerified = false,
+                bookingConfirmed = false,
+                clinicalActionAllowed = false,
+                nationalReleaseAllowed = false
+            });
+        }
+        catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or IOException)
+        {
+            return Denied(StatusCodes.Status503ServiceUnavailable,
+                "TEST_JOURNAL_UNVERIFIABLE");
+        }
+    }
+
     internal static async Task<IResult> ReadAsync(HttpContext context)
     {
         var requestRef = context.Request.RouteValues["requestRef"]?.ToString();

@@ -268,6 +268,8 @@ if (appointmentQaEnabled)
         (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.ReadAsync);
     app.MapGet("/internal/demo/v1/centers/{centerRef}/appointment-requests",
         (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.ListForCenterAsync);
+    app.MapGet("/internal/demo/v1/members/{memberRef}/appointment-requests",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.ListForMemberAsync);
     app.MapGet("/appointment-requests-qa", () =>
         Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
             "index.html"), "text/html; charset=utf-8"));

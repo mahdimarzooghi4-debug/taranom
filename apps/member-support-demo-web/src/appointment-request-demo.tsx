@@ -58,6 +58,20 @@ type Receipt = {
   clinicalActionAllowed?: boolean;
   nationalReleaseAllowed?: boolean;
 };
+type AppointmentHistoryRow = {
+  requestRef: string; centerRef: string; revision: number;
+  departmentRef: string; requestedDoctorRef: string; slotRef: string;
+};
+type AppointmentHistory = {
+  contract?: string; syntheticOnly?: boolean;
+  source?: string; memberRef?: string; afterRequestRef?: string; limit?: number;
+  hasMore?: boolean; nextAfterRequestRef?: string | null;
+  requests?: AppointmentHistoryRow[];
+  memberAuthenticated?: boolean; centerAuthenticated?: boolean;
+  requestedDoctorLicensed?: boolean; slotAvailabilityVerified?: boolean;
+  bookingConfirmed?: boolean; clinicalActionAllowed?: boolean;
+  nationalReleaseAllowed?: boolean;
+};
 type RecoveryState = 'UNRESOLVED' | 'CONFIRMED_ABSENT' | null;
 
 const referencePattern = '^test:[A-Za-z0-9:_-]{1,123}$';
@@ -153,6 +167,66 @@ export function AppointmentRequestDemo() {
       ? 'درخواست آزمایشی قبلی بازیابی شد؛ پیش از ارسال مجدد، وضعیت همان شناسه را بررسی کنید.'
       : '',
   );
+  const [history, setHistory] = useState<AppointmentHistory | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyMessage, setHistoryMessage] = useState('');
+
+
+  const loadMemberHistory = async (after = '') => {
+    const selectedMember = memberRef.trim();
+    if (!isTestRef(selectedMember) || historyBusy || attempt !== null) return;
+    setHistoryBusy(true);
+    setHistory(null);
+    setHistoryMessage('در حال خواندن درخواست‌های آزمایشی از دفتر ثبت…');
+    const query = new URLSearchParams({ limit: '10' });
+    if (after) query.set('afterRequestRef', after);
+    try {
+      const response = await fetch(
+        '/internal/demo/v1/members/' + encodeURIComponent(selectedMember) +
+          '/appointment-requests?' + query.toString(),
+        { headers: { Accept: 'application/json' }, credentials: 'omit', cache: 'no-store' },
+      );
+      const raw: unknown = await response.json();
+      const value = raw as AppointmentHistory;
+      const rows = value.requests;
+      const allFlagsFalse = [
+        'memberAuthenticated', 'centerAuthenticated', 'requestedDoctorLicensed',
+        'slotAvailabilityVerified', 'bookingConfirmed', 'clinicalActionAllowed',
+        'nationalReleaseAllowed',
+      ].every(flag => (raw as Record<string, unknown>)[flag] === false);
+      let previous = after;
+      const rowsValid = Array.isArray(rows) && rows.length <= 10 && rows.every(row => {
+        const valid = isTestRef(row.requestRef) && row.requestRef > previous &&
+          isTestRef(row.centerRef) && Number.isSafeInteger(row.revision) && row.revision >= 1 &&
+          isTestRef(row.departmentRef) && isTestRef(row.requestedDoctorRef) &&
+          isTestRef(row.slotRef) &&
+          Object.keys(row).every(key => [
+            'requestRef', 'centerRef', 'revision', 'departmentRef',
+            'requestedDoctorRef', 'slotRef',
+          ].includes(key));
+        if (valid) previous = row.requestRef;
+        return valid;
+      });
+      const valid = response.ok && value.contract === 'TRN-TECH-222' &&
+        value.syntheticOnly === true &&
+        value.source === 'VERIFIED_ISOLATED_POSTGRES_APPOINTMENT_JOURNAL' &&
+        value.memberRef === selectedMember && value.afterRequestRef === after &&
+        value.limit === 10 && typeof value.hasMore === 'boolean' && rowsValid &&
+        (value.hasMore
+          ? rows!.length === 10 && value.nextAfterRequestRef === previous
+          : value.nextAfterRequestRef === null) && allFlagsFalse;
+      if (!valid) {
+        setHistoryMessage('تاریخچه یا یکپارچگی آن قابل تأیید نیست؛ درخواستی نمایش داده نشد.');
+        return;
+      }
+      setHistory(value);
+      setHistoryMessage('درخواست‌های ساختگی از دفتر ثبت خوانده شدند؛ این شناسه احراز هویت عضو نیست.');
+    } catch {
+      setHistoryMessage('تاریخچه از دفتر ثبت دریافت نشد.');
+    } finally {
+      setHistoryBusy(false);
+    }
+  };
 
   const loadCenterDirectory = async () => {
     const requestedCenter = centerRef.trim();
@@ -408,9 +482,37 @@ export function AppointmentRequestDemo() {
             disabled={catalogBusy || !isTestRef(centerRef) || attempt !== null}>
             خواندن تخصص‌های ثبت‌شده مرکز
           </button>
+          <button type="button" onClick={() => void loadMemberHistory()}
+            disabled={historyBusy || !isTestRef(memberRef.trim()) || attempt !== null}>
+            خواندن درخواست‌های قبلی آزمایشی
+          </button>
         </div>
       </fieldset>
       {catalogMessage && <p role="status" aria-live="polite" className="status">{catalogMessage}</p>}
+      {historyMessage && <p role="status" aria-live="polite" className="status">
+        {historyBusy ? 'در حال خواندن تاریخچه…' : historyMessage}
+      </p>}
+      {history && <section className="panel" aria-labelledby="appointment-history-heading">
+        <h2 id="appointment-history-heading">درخواست‌های نوبت آزمایشی قبلی</h2>
+        <p>این سوابق با شناسه ساختگی فیلتر شده‌اند؛ عضویت یا مالکیت هویت احراز نشده است.</p>
+        {history.requests?.length
+          ? <ul>{history.requests.map(row => <li key={row.requestRef}>
+              <article className="details">
+                <h3>درخواست ثبت‌شده — نوبت تأییدنشده</h3>
+                <p>شناسه درخواست: <code>{row.requestRef}</code> | نسخه {row.revision}</p>
+                <p>مرکز: <code>{row.centerRef}</code> | بخش: <code>{row.departmentRef}</code></p>
+                <p>پزشک انتخاب‌شده توسط بیمار: <code>{row.requestedDoctorRef}</code></p>
+                <p>بازه درخواستی: <code>{row.slotRef}</code></p>
+                <p>ظرفیت بررسی‌نشده است؛ رزرو انجام نشده است.</p>
+              </article>
+            </li>)}</ul>
+          : <p>درخواستی برای این شناسه آزمایشی پیدا نشد.</p>}
+        {history.hasMore && history.nextAfterRequestRef &&
+          <button type="button" disabled={historyBusy}
+            onClick={() => void loadMemberHistory(history.nextAfterRequestRef!)}>
+            صفحه بعد درخواست‌ها
+          </button>}
+      </section>}
       {directory && <fieldset disabled={catalogBusy || attempt !== null}>
         <legend>انتخاب تخصص و پزشک از فهرست ثبت‌شده مرکز</legend>
         <label>

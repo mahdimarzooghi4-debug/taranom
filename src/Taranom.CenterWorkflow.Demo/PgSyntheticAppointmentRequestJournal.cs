@@ -296,6 +296,67 @@ internal sealed class PgSyntheticAppointmentRequestJournal(
         value.AsSpan(5).ToArray().All(c =>
             char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or ':');
 
+    // Read-only, bounded member history. The supplied reference is synthetic
+    // and does not authenticate or authorize a real member.
+    internal async Task<(IReadOnlyList<SyntheticAppointmentQueueRow> Requests,
+        bool HasMore, string? NextAfterRequestRef)> ReadForMemberAsync(
+        string memberRef, string? afterRequestRef, int limit)
+    {
+        if (!TestReference(memberRef) ||
+            (afterRequestRef is not null && !TestReference(afterRequestRef)) ||
+            limit is < 1 or > 10)
+            throw new InvalidOperationException("INVALID_APPOINTMENT_HISTORY_CURSOR");
+
+        const int scanLimit = 513;
+        await using var cn = await reader.OpenConnectionAsync();
+        await using var tx = await cn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead);
+        await using (var ro = new NpgsqlCommand("SET TRANSACTION READ ONLY", cn, tx))
+            await ro.ExecuteNonQueryAsync();
+
+        var refs = new List<string>();
+        await using (var query = new NpgsqlCommand("""
+            SELECT request_ref FROM internal_test_appointment_request
+            WHERE current_revision>0
+              AND (@after='' OR request_ref COLLATE "C" > @after COLLATE "C")
+            ORDER BY request_ref COLLATE "C"
+            LIMIT @max
+            """, cn, tx))
+        {
+            query.Parameters.AddWithValue("after", afterRequestRef ?? string.Empty);
+            query.Parameters.AddWithValue("max", scanLimit);
+            await using var rows = await query.ExecuteReaderAsync();
+            while (await rows.ReadAsync()) refs.Add(rows.GetString(0));
+        }
+
+        var matching = new List<SyntheticAppointmentQueueRow>();
+        foreach (var requestRef in refs)
+        {
+            if (!TestReference(requestRef))
+                throw new InvalidOperationException("APPOINTMENT_HISTORY_REFERENCE_UNVERIFIABLE");
+            var snapshot = await RebuildAsync(cn, tx, requestRef, lockHead: false);
+            if (snapshot.Revision < 1 || snapshot.History.Length != snapshot.Revision)
+                throw new InvalidOperationException("APPOINTMENT_HISTORY_LINEAGE_UNVERIFIABLE");
+            var latest = snapshot.History[^1].Command;
+            if (!TestReference(latest.MemberRef) || !TestReference(latest.CenterRef) ||
+                !TestReference(latest.DepartmentRef) || !TestReference(latest.RequestedDoctorRef) ||
+                !TestReference(latest.SlotRef))
+                throw new InvalidOperationException("APPOINTMENT_HISTORY_PAYLOAD_UNVERIFIABLE");
+            if (latest.MemberRef != memberRef) continue;
+            matching.Add(new SyntheticAppointmentQueueRow(requestRef,
+                latest.CenterRef, snapshot.Revision, latest.DepartmentRef,
+                latest.RequestedDoctorRef, latest.SlotRef));
+            if (matching.Count > limit) break;
+        }
+
+        var hasMore = matching.Count > limit;
+        if (!hasMore && refs.Count == scanLimit)
+            throw new InvalidOperationException("APPOINTMENT_HISTORY_SCAN_INCOMPLETE");
+        var page = matching.Take(limit).ToArray();
+        await tx.CommitAsync();
+        return (page, hasMore, hasMore ? page[^1].RequestRef : null);
+    }
+
     internal async Task<SyntheticAppointmentRequestSnapshot> ReadAsync(string requestRef)
     {
         await using var cn = await reader.OpenConnectionAsync();
