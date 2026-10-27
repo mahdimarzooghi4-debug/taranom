@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import json
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -21,6 +22,7 @@ _FILE_KEYS = frozenset(("path", "sha256", "size_bytes"))
 _MAX_FILES = 8192
 _MAX_TOTAL_BYTES = 100 * 1024 * 1024 * 1024
 _CHUNK_SIZE = 1024 * 1024
+_MAX_MANIFEST_BYTES = 1024 * 1024
 
 
 def _file_entry(raw: object) -> tuple[str, str, int]:
@@ -64,6 +66,78 @@ def _open_beneath(root_fd: int, parts: tuple[str, ...]) -> int:
         )
     finally:
         os.close(current_fd)
+
+
+def _unique_manifest_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ArtifactRejected("DUPLICATE_MODEL_MANIFEST_KEY")
+        result[key] = value
+    return result
+
+
+def _reject_manifest_constant(value: str) -> object:
+    raise ArtifactRejected("NONFINITE_MODEL_MANIFEST_NUMBER_DENIED")
+
+
+def load_local_model_manifest(manifest_path: str | Path) -> object:
+    """Read bounded strict JSON through one pinned, no-follow regular file handle."""
+    if not getattr(os, "O_NOFOLLOW", 0):
+        raise ArtifactRejected("SAFE_MANIFEST_OPEN_NOT_SUPPORTED")
+    try:
+        descriptor = os.open(
+            manifest_path,
+            os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0),
+        )
+    except OSError as exc:
+        raise ArtifactRejected("SAFE_LOCAL_MANIFEST_OPEN_FAILED") from exc
+
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise ArtifactRejected("LOCAL_REGULAR_MANIFEST_FILE_REQUIRED")
+        if before.st_size <= 0 or before.st_size > _MAX_MANIFEST_BYTES:
+            raise ArtifactRejected("MODEL_MANIFEST_SIZE_LIMIT")
+        chunks: list[bytes] = []
+        count = 0
+        while True:
+            chunk = os.read(descriptor, min(_CHUNK_SIZE, _MAX_MANIFEST_BYTES + 1 - count))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            count += len(chunk)
+            if count > _MAX_MANIFEST_BYTES:
+                raise ArtifactRejected("MODEL_MANIFEST_SIZE_LIMIT")
+        after = os.fstat(descriptor)
+        stable_before = (before.st_dev, before.st_ino, before.st_size,
+                         before.st_mtime_ns, before.st_ctime_ns)
+        stable_after = (after.st_dev, after.st_ino, after.st_size,
+                        after.st_mtime_ns, after.st_ctime_ns)
+        if stable_before != stable_after or count != before.st_size:
+            raise ArtifactRejected("MODEL_MANIFEST_CHANGED_DURING_READ")
+    finally:
+        os.close(descriptor)
+
+    try:
+        text = b"".join(chunks).decode("utf-8", errors="strict")
+        return json.loads(
+            text,
+            object_pairs_hook=_unique_manifest_object,
+            parse_constant=_reject_manifest_constant,
+        )
+    except ArtifactRejected:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise ArtifactRejected("STRICT_MODEL_MANIFEST_JSON_REQUIRED") from exc
+
+
+def verify_local_model_artifact(
+    manifest_path: str | Path, artifact_root: str | Path
+) -> dict[str, object]:
+    """Read a strict local manifest and verify its declared bytes; never load weights."""
+    manifest = load_local_model_manifest(manifest_path)
+    return verify_local_model_manifest(manifest, artifact_root)
 
 
 def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> dict[str, object]:

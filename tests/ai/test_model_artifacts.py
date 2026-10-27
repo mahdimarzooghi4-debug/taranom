@@ -1,11 +1,18 @@
 """Synthetic filesystem tests for local model artifact preflight."""
 import hashlib
+import json
+import io
+from contextlib import redirect_stdout
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from ai.taranom_internal.model_artifacts import ArtifactRejected, verify_local_model_manifest
+from ai.taranom_internal.model_artifacts import (
+    ArtifactRejected, load_local_model_manifest, verify_local_model_artifact,
+    verify_local_model_manifest,
+)
+from ai.taranom_internal.model_artifact_cli import main as artifact_cli_main
 
 
 def manifest(name="weights.part", data=b"synthetic-model-bytes"):
@@ -102,6 +109,75 @@ class LocalModelArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(
                     ArtifactRejected, "UNSAFE_ARTIFACT_PATH_COMPONENT"):
                 verify_local_model_manifest(manifest("nested/weights.part"), root)
+
+    def test_strict_local_manifest_cli_verifies_only_local_synthetic_bytes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifact_root = root / "weights"
+            artifact_root.mkdir()
+            data = b"synthetic-model-bytes"
+            (artifact_root / "weights.part").write_bytes(data)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                status = artifact_cli_main([
+                    "--manifest", str(manifest_path),
+                    "--artifact-root", str(artifact_root),
+                ])
+            result = json.loads(output.getvalue())
+
+        self.assertEqual(0, status)
+        self.assertEqual("LOCAL_ARTIFACT_BYTES_VERIFIED_NOT_LOADED", result["status"])
+        self.assertFalse(result["model_loaded"])
+        self.assertFalse(result["network_used"])
+        self.assertFalse(result["license_reviewed"])
+        self.assertFalse(result["clinical_use_allowed"])
+        self.assertFalse(result["production_allowed"])
+
+    def test_manifest_loader_rejects_duplicate_keys_nonfinite_json_and_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "manifest.json"
+            for content, reason in (
+                ('{"schema_version":1,"schema_version":1}', "DUPLICATE_MODEL_MANIFEST_KEY"),
+                ('{"schema_version":NaN}', "NONFINITE_MODEL_MANIFEST_NUMBER_DENIED"),
+                ("[" * 1100 + "]" * 1100, "STRICT_MODEL_MANIFEST_JSON_REQUIRED"),
+            ):
+                path.write_text(content, encoding="utf-8")
+                with self.subTest(reason=reason), self.assertRaisesRegex(
+                        ArtifactRejected, reason):
+                    load_local_model_manifest(path)
+            path.write_bytes(b"\xff")
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "STRICT_MODEL_MANIFEST_JSON_REQUIRED"):
+                load_local_model_manifest(path)
+
+    def test_manifest_loader_rejects_symlinks_special_files_and_oversize(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "target.json"
+            target.write_text(json.dumps(manifest()), encoding="utf-8")
+            link = root / "link.json"
+            link.symlink_to(target)
+            with self.assertRaisesRegex(ArtifactRejected, "SAFE_LOCAL_MANIFEST_OPEN_FAILED"):
+                load_local_model_manifest(link)
+
+            oversized = root / "oversized.json"
+            oversized.write_bytes(b" " * (1024 * 1024 + 1))
+            with self.assertRaisesRegex(ArtifactRejected, "MODEL_MANIFEST_SIZE_LIMIT"):
+                load_local_model_manifest(oversized)
+
+    def test_loaded_manifest_drives_existing_artifact_byte_verification(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            result = verify_local_model_artifact(manifest_path, root)
+        self.assertEqual("LOCAL_ARTIFACT_BYTES_VERIFIED_NOT_LOADED", result["status"])
+        self.assertFalse(result["network_used"])
+        self.assertFalse(result["clinical_use_allowed"])
 
 
 if __name__ == "__main__":
