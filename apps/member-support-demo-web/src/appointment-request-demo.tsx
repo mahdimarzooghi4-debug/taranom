@@ -344,7 +344,7 @@ export function AppointmentRequestDemo() {
       );
       const result = await response.json() as Receipt;
       const validReceipt = response.ok &&
-        result.contract === 'TRN-TECH-232' &&
+        result.contract === 'TRN-TECH-233' &&
         (result.outcome === 'RecordedRequest' || result.outcome === 'Replayed') &&
         result.revision === 1 && result.requestCount === 1 &&
         result.requests?.length === 1 &&
@@ -381,7 +381,7 @@ export function AppointmentRequestDemo() {
       );
       const result = await response.json() as Receipt;
       const commonValid = response.ok &&
-        result.contract === 'TRN-TECH-232' &&
+        result.contract === 'TRN-TECH-233' &&
         result.outcome === 'Read' &&
         Number.isSafeInteger(result.revision) &&
         Number.isSafeInteger(result.requestCount) &&

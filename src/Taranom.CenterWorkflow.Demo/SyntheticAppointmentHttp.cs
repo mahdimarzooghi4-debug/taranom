@@ -45,7 +45,8 @@ internal static class SyntheticAppointmentHttp
             foreach (var field in Fields)
                 if (!document.RootElement.TryGetProperty(field, out _))
                     return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_COMMAND");
-            if (!ValidScheduleSelectionShape(document.RootElement))
+            if (!ValidScheduleSelectionShape(document.RootElement) ||
+                !ValidScheduleSelectionTimestamps(document.RootElement))
                 return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_COMMAND");
 
             var command = document.RootElement.Deserialize<SyntheticAppointmentRequestCommand>(JsonOptions);
@@ -61,7 +62,7 @@ internal static class SyntheticAppointmentHttp
             };
             return Results.Json(new
             {
-                contract = "TRN-TECH-232",
+                contract = "TRN-TECH-233",
                 outcome = change.Outcome.ToString(),
                 result.Revision,
                 result.RequestCount,
@@ -213,7 +214,7 @@ internal static class SyntheticAppointmentHttp
             var result = SyntheticAppointmentRequestProjection.Project(snapshot);
             return Results.Json(new
             {
-                contract = "TRN-TECH-232",
+                contract = "TRN-TECH-233",
                 outcome = "Read",
                 result.Revision,
                 result.RequestCount,
@@ -246,6 +247,20 @@ internal static class SyntheticAppointmentHttp
                 ScheduleSelectionFields.Contains(property.Name));
     }
 
+    private static bool ValidScheduleSelectionTimestamps(JsonElement root)
+    {
+        var selection = root.GetProperty("unverifiedScheduleSelection");
+        if (selection.ValueKind == JsonValueKind.Null) return true;
+        foreach (var field in new[] { "observedAt", "startsAt", "endsAt" })
+        {
+            var value = selection.GetProperty(field);
+            if (value.ValueKind != JsonValueKind.String ||
+                !AppointmentTimestampSyntax.TryParseTimestamp(value.GetString(), out _))
+                return false;
+        }
+        return true;
+    }
+
     private static bool AllowedOrigin(string origin) =>
         origin.Length == 0 || origin is "http://127.0.0.1:4320" or "http://localhost:4320";
 
@@ -256,6 +271,6 @@ internal static class SyntheticAppointmentHttp
             char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or ':');
 
     private static IResult Denied(int status, string code) =>
-        Results.Json(new { contract = "TRN-TECH-232", outcome = code },
+        Results.Json(new { contract = "TRN-TECH-233", outcome = code },
             statusCode: status);
 }

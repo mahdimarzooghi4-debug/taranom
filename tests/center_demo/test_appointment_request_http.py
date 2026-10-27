@@ -172,8 +172,21 @@ def main():
                             body["unverifiedScheduleSelection"], approved=True))
     code, _ = call("test:nested-extra-" + uuid4().hex, nested_extra)
     assert code == 400
+    for invalid_timestamp in (
+        "2026-10-27T09:00:00",
+        "2026-10-27 09:00:00Z",
+        "2026-02-30T09:00:00Z",
+        "2026-10-27T09:00:00.12345678Z",
+    ):
+        invalid_selection = dict(
+            body["unverifiedScheduleSelection"], observedAt=invalid_timestamp)
+        invalid_body = dict(
+            body, requestId=str(uuid4()), expectedRevision=0,
+            unverifiedScheduleSelection=invalid_selection)
+        code, _ = call("test:invalid-provenance-time-" + uuid4().hex, invalid_body)
+        assert code == 400, invalid_timestamp
 
-    print("PASS: synthetic unverified schedule provenance persisted and read back over HTTP/PostgreSQL")
+    print("PASS: synthetic unverified schedule provenance persisted; timestamp syntax validated over HTTP/PostgreSQL")
 
 
 if __name__ == "__main__":
