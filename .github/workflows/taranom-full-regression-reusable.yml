@@ -753,7 +753,7 @@ jobs:
           cd apps/center-demo-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
-          VITE_TARANOM_ORG_DRAFT_QA=1 npm run build
+          VITE_TARANOM_ORG_DRAFT_QA=1 VITE_TARANOM_APPOINTMENT_REQUEST_QA=1 npm run build
           mkdir -p ../../src/Taranom.CenterWorkflow.Demo/wwwroot
           cp -R dist/. ../../src/Taranom.CenterWorkflow.Demo/wwwroot/
           cd ../member-support-demo-web

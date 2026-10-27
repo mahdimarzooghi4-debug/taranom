@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 using Microsoft.AspNetCore.Http.Json;
 using Npgsql;
 using Taranom.MemberGovernance;
@@ -70,6 +71,56 @@ internal static class SyntheticAppointmentHttp
         catch (JsonException)
         {
             return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_COMMAND");
+        }
+        catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or IOException)
+        {
+            return Denied(StatusCodes.Status503ServiceUnavailable,
+                "TEST_JOURNAL_UNVERIFIABLE");
+        }
+    }
+
+    internal static async Task<IResult> ListForCenterAsync(HttpContext context)
+    {
+        var centerRef = context.Request.RouteValues["centerRef"]?.ToString();
+        if (!ValidRef(centerRef))
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_REFERENCE");
+        if (context.Request.Query.Keys.Any(k => k is not ("afterRequestRef" or "limit")))
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
+
+        var afterValues = context.Request.Query["afterRequestRef"];
+        if (afterValues.Count > 1)
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
+        var after = afterValues.Count == 0 || afterValues[0].Length == 0
+            ? null : afterValues[0];
+        var limitValues = context.Request.Query["limit"];
+        var limit = 10;
+        if (limitValues.Count > 1 || limitValues.Count == 1 &&
+            (!int.TryParse(limitValues[0], NumberStyles.None,
+                CultureInfo.InvariantCulture, out limit) || limit is < 1 or > 10))
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
+
+        try
+        {
+            var page = await Store.ReadForCenterAsync(centerRef!, after, limit);
+            return Results.Json(new
+            {
+                contract = "TRN-TECH-217",
+                syntheticOnly = true,
+                source = "VERIFIED_ISOLATED_POSTGRES_APPOINTMENT_JOURNAL",
+                centerRef,
+                afterRequestRef = after ?? string.Empty,
+                limit,
+                hasMore = page.HasMore,
+                nextAfterRequestRef = page.NextAfterRequestRef,
+                requests = page.Requests,
+                memberAuthenticated = false,
+                centerAuthenticated = false,
+                requestedDoctorLicensed = false,
+                slotAvailabilityVerified = false,
+                bookingConfirmed = false,
+                clinicalActionAllowed = false,
+                nationalReleaseAllowed = false
+            });
         }
         catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or IOException)
         {

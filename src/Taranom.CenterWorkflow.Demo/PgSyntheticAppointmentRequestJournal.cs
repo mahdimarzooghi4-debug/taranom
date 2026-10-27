@@ -228,6 +228,74 @@ internal sealed class PgSyntheticAppointmentRequestJournal(
         return change;
     }
 
+    // Read-only, bounded center queue. Every candidate is rebuilt from its
+    // event and audit rows before inclusion; no member identity is projected.
+    internal async Task<(IReadOnlyList<SyntheticAppointmentQueueRow> Requests,
+        bool HasMore, string? NextAfterRequestRef)> ReadForCenterAsync(
+        string centerRef, string? afterRequestRef, int limit)
+    {
+        if (!TestReference(centerRef) ||
+            (afterRequestRef is not null && !TestReference(afterRequestRef)) ||
+            limit is < 1 or > 10)
+            throw new InvalidOperationException("INVALID_APPOINTMENT_QUEUE_CURSOR");
+
+        const int scanLimit = 513;
+        await using var cn = await reader.OpenConnectionAsync();
+        await using var tx = await cn.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead);
+        await using (var ro = new NpgsqlCommand("SET TRANSACTION READ ONLY", cn, tx))
+            await ro.ExecuteNonQueryAsync();
+
+        var refs = new List<string>();
+        await using (var query = new NpgsqlCommand("""
+            SELECT request_ref FROM internal_test_appointment_request
+            WHERE current_revision>0
+              AND (@after='' OR request_ref COLLATE "C" > @after COLLATE "C")
+            ORDER BY request_ref COLLATE "C"
+            LIMIT @max
+            """, cn, tx))
+        {
+            query.Parameters.AddWithValue("after", afterRequestRef ?? string.Empty);
+            query.Parameters.AddWithValue("max", scanLimit);
+            await using var rows = await query.ExecuteReaderAsync();
+            while (await rows.ReadAsync()) refs.Add(rows.GetString(0));
+        }
+
+        var matching = new List<SyntheticAppointmentQueueRow>();
+        foreach (var requestRef in refs)
+        {
+            if (!TestReference(requestRef))
+                throw new InvalidOperationException("APPOINTMENT_QUEUE_REFERENCE_UNVERIFIABLE");
+            var snapshot = await RebuildAsync(cn, tx, requestRef, lockHead: false);
+            if (snapshot.Revision < 1 || snapshot.History.Length != snapshot.Revision)
+                throw new InvalidOperationException("APPOINTMENT_QUEUE_HISTORY_UNVERIFIABLE");
+            var latest = snapshot.History[^1].Command;
+            if (!TestReference(latest.CenterRef) ||
+                !TestReference(latest.DepartmentRef) ||
+                !TestReference(latest.RequestedDoctorRef) ||
+                !TestReference(latest.SlotRef))
+                throw new InvalidOperationException("APPOINTMENT_QUEUE_PAYLOAD_UNVERIFIABLE");
+            if (latest.CenterRef != centerRef) continue;
+            matching.Add(new SyntheticAppointmentQueueRow(requestRef,
+                latest.CenterRef, snapshot.Revision, latest.DepartmentRef,
+                latest.RequestedDoctorRef, latest.SlotRef));
+            if (matching.Count > limit) break;
+        }
+
+        var hasMore = matching.Count > limit;
+        if (!hasMore && refs.Count == scanLimit)
+            throw new InvalidOperationException("APPOINTMENT_QUEUE_SCAN_INCOMPLETE");
+        var page = matching.Take(limit).ToArray();
+        await tx.CommitAsync();
+        return (page, hasMore, hasMore ? page[^1].RequestRef : null);
+    }
+
+    private static bool TestReference(string? value) =>
+        value is { Length: > 5 and <= 128 } &&
+        value.StartsWith("test:", StringComparison.Ordinal) &&
+        value.AsSpan(5).ToArray().All(c =>
+            char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or ':');
+
     internal async Task<SyntheticAppointmentRequestSnapshot> ReadAsync(string requestRef)
     {
         await using var cn = await reader.OpenConnectionAsync();
@@ -303,3 +371,14 @@ internal sealed class PgSyntheticAppointmentRequestJournal(
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }
+
+
+// Queue row deliberately omits the member reference. The retained fields are
+// synthetic routing intent only and convey no provider/availability authority.
+internal readonly record struct SyntheticAppointmentQueueRow(
+    string RequestRef,
+    string CenterRef,
+    long Revision,
+    string DepartmentRef,
+    string RequestedDoctorRef,
+    string SlotRef);
