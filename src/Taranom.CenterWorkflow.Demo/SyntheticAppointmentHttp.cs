@@ -42,7 +42,7 @@ internal static class SyntheticAppointmentHttp
 
             var command = document.RootElement.Deserialize<SyntheticAppointmentRequestCommand>(JsonOptions);
             var requestRef = context.Request.RouteValues["requestRef"]!.ToString();
-            var change = await Store.ApplyAsync(requestRef, command);
+            var change = await Store.ApplyAsync(requestRef!, command);
             var result = SyntheticAppointmentRequestProjection.Project(change.Snapshot);
             var status = change.Outcome switch
             {
