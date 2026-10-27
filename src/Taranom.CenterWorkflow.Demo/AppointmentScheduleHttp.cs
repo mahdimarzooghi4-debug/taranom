@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Taranom.MemberGovernance;
 
 namespace Taranom.CenterWorkflow.Demo;
@@ -7,6 +8,10 @@ namespace Taranom.CenterWorkflow.Demo;
 // adapter is explicitly wired; source assertions never become bookings here.
 internal static class AppointmentScheduleHttp
 {
+    private static readonly Regex OffsetTimestampPattern = new(
+        @"\A[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]{1,7})?(?:Z|[+-][0-9]{2}:[0-9]{2})\z",
+        RegexOptions.CultureInvariant);
+
     internal static AppointmentScheduleReadService Reader { get; set; } = new(null);
 
     internal static async Task<IResult> ReadAsync(HttpContext context)
@@ -62,15 +67,12 @@ internal static class AppointmentScheduleHttp
     private static bool TryParseTimestamp(string? value, out DateTimeOffset timestamp)
     {
         timestamp = default;
-        if (value is null || value.Length > 64)
+        if (value is null || value.Length > 64 ||
+            !OffsetTimestampPattern.IsMatch(value))
             return false;
 
-        var hasZuluOffset = value.EndsWith("Z", StringComparison.Ordinal);
-        var hasNumericOffset = value.Length >= 6 &&
-            value[^6] is '+' or '-' && value[^3] == ':';
-        return (hasZuluOffset || hasNumericOffset) &&
-            DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
-                DateTimeStyles.None, out timestamp);
+        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out timestamp);
     }
 
     private static bool TestRef(string? value) =>

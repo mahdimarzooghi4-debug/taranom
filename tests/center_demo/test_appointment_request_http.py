@@ -5,6 +5,7 @@ import sys
 from uuid import uuid4
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from urllib.parse import urlencode
 
 BASE = "http://127.0.0.1:4320/internal/demo/v1/appointment-requests/"
 
@@ -89,19 +90,21 @@ def main():
         "http://127.0.0.1:4320/internal/demo/v1/centers/"
         + body["centerRef"] + "/appointment-schedule"
     )
-    schedule_url = (
-        schedule_base + "?departmentRef=" + body["departmentRef"]
-        + "&requestedDoctorRef=" + body["requestedDoctorRef"]
-        + "&from=2026-10-28T00:00:00Z&until=2026-10-29T00:00:00Z"
-    )
+    schedule_query = urlencode([
+        ("departmentRef", body["departmentRef"]),
+        ("requestedDoctorRef", body["requestedDoctorRef"]),
+        ("from", "2026-10-28T03:30:00+03:30"),
+        ("until", "2026-10-29T03:30:00+03:30"),
+    ])
+    schedule_url = schedule_base + "?" + schedule_query
     schedule_code, schedule = read_schedule(schedule_url)
     assert schedule_code == 200 and schedule["contract"] == "TRN-TECH-229"
     assert schedule["outcome"] == "SourceNotConfigured"
     assert schedule["centerRef"] == body["centerRef"]
     assert schedule["departmentRefFilter"] == body["departmentRef"]
     assert schedule["requestedDoctorRefFilter"] == body["requestedDoctorRef"]
-    assert schedule["from"] == "2026-10-28T00:00:00.0000000+00:00"
-    assert schedule["until"] == "2026-10-29T00:00:00.0000000+00:00"
+    assert schedule["from"] == "2026-10-28T03:30:00.0000000+03:30"
+    assert schedule["until"] == "2026-10-29T03:30:00.0000000+03:30"
     assert schedule["sourceClaims"] == []
     assert schedule["unverifiedSourceMetadata"] is None
     for flag in (
@@ -128,7 +131,18 @@ def main():
         "?from=2026-10-29T00:00:00Z&until=2026-10-28T00:00:00Z")
     assert code == 400
 
-    print("PASS: synthetic appointment request persisted; schedule query window validated over HTTP")
+    for invalid_from in (
+        "2026/10/28 00:00:00Z",
+        "2026-10-28T00:00:00.12345678Z",
+        "2026-02-30T00:00:00Z",
+    ):
+        code, _ = read_schedule(schedule_base + "?" + urlencode([
+            ("from", invalid_from),
+            ("until", "2026-10-29T00:00:00Z"),
+        ]))
+        assert code == 400, invalid_from
+
+    print("PASS: synthetic appointment request persisted; strict schedule timestamp syntax validated over HTTP")
 
 
 if __name__ == "__main__":
