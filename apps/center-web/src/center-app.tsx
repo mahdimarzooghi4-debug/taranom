@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import {ReleaseSourcePanel} from './release-source-panel';
 
-type SectionKey = 'overview' | 'departments' | 'doctors' | 'qualifications' | 'audit';
+type SectionKey = 'overview' | 'departments' | 'doctors' | 'appointments' | 'qualifications' | 'audit';
 type ActionKey = 'department' | 'doctor' | 'assignment' | 'end-affiliation';
 type Section = { key: SectionKey; path: string; title: string; kicker: string; description: string; symbol: string };
 
@@ -12,6 +12,8 @@ export const centerSections: readonly Section[] = [
     description: 'هر مرکز می‌تواند چند بخش داشته باشد؛ بیمارستان زنجیره‌ای نیز در این مدل یک مرکز با بخش‌های مختلف است.', symbol: '▦' },
   { key: 'doctors', path: '/center/doctors', title: 'پزشکان وابسته', kicker: 'مدیریت ارتباط پزشک و مرکز',
     description: 'مدیر مجاز مرکز در آینده می‌تواند پزشکان همان مرکز را معرفی کند؛ این اقدام تأیید صلاحیت یا فعال‌سازی پزشک نیست.', symbol: '♧' },
+  { key: 'appointments', path: '/center/appointments', title: 'نوبت‌های مرکز', kicker: 'هماهنگی برنامه پزشکان',
+    description: 'برنامه و درخواست نوبت مرکز فقط با اتصال معتبر به هویت مرکز، پزشکان واجدصلاحیت و ظرفیت واقعی نمایش داده می‌شود.', symbol: '◷' },
   { key: 'qualifications', path: '/center/qualifications', title: 'بررسی صلاحیت', kicker: 'کنترل‌های مستقل حرفه‌ای',
     description: 'ثبت وابستگی یک پزشک با تأیید هویت، پروانه پزشکی، قرارداد ترنم و حق دسترسی درمانی تفاوت دارد.', symbol: '◇' },
   { key: 'audit', path: '/center/audit', title: 'ردپای فعالیت', kicker: 'تاریخچه و ممیزی تغییرات',
@@ -270,6 +272,22 @@ export function CenterApp() {
                     <button type="button" className="secondary" onClick={e => showAction(e, 'assignment')}>انتساب پزشک به بخش</button>
                     <button type="button" className="secondary" onClick={e => showAction(e, 'end-affiliation')}>پایان همکاری پزشک</button>
                   </div>
+                </section>
+              ) : null}
+
+              {section.key === 'appointments' ? (
+                <section className="module" aria-labelledby="appointments-heading">
+                  <div className="section-heading">
+                    <div>
+                      <p className="eyebrow">نوبت‌دهی از خدمات اصلی ترنم</p>
+                      <h2 id="appointments-heading">برنامه و درخواست‌های نوبت</h2>
+                    </div>
+                  </div>
+                  <LockedCard title="برنامه نوبت‌دهی مرکز متصل نیست"
+                    message="برای ثبت یا تغییر نوبت باید هویت مجاز مرکز، پزشک واجدصلاحیت، برنامه واقعی و منبع پایدار نوبت‌دهی به ترنم متصل باشند. در این نسخه هیچ ظرفیت یا نوبتی ساخته نمی‌شود."/>
+                  <p className="care-warning">
+                    وابستگی پزشک به مرکز به‌تنهایی تأیید صلاحیت بالینی یا اجازه پذیرش نوبت نیست.
+                  </p>
                 </section>
               ) : null}
 
