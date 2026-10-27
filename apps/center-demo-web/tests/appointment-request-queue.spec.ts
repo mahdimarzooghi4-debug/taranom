@@ -151,3 +151,38 @@ test('APPOINTMENT-QUEUE-03: department and patient-selected doctor filters work 
  expect(doctorPage.requests.every((row:{requestedDoctorRef:string})=>
   row.requestedDoctorRef===firstDoctor)).toBe(true);
 });
+
+test('APPOINTMENT-QUEUE-04: clearing center queue filters reloads the unfiltered first page',async({page,request})=>{
+ const center=ref('clear-filter-center');
+ const department=ref('clear-filter-department');
+ const doctor=ref('clear-filter-doctor');
+ const requestRefs:string[]=[];
+ const add=async(departmentRef:string,doctorRef:string)=>{
+  const requestRef=ref('clear-filter-request');
+  const response=await request.post('/internal/demo/v1/appointment-requests/'+
+   encodeURIComponent(requestRef),{data:{
+    requestId:crypto.randomUUID(),expectedRevision:0,memberRef:ref('member'),
+    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
+   }});
+  expect(response.status()).toBe(200);
+  requestRefs.push(requestRef);
+ };
+ await add(department,doctor);
+ await add(ref('clear-filter-other-department'),ref('clear-filter-other-doctor'));
+
+ await page.goto('/appointment-requests-qa');
+ await page.getByLabel('شناسه مرکز آزمایشی').fill(center);
+ await page.getByLabel('شناسه تخصص برای فیلتر (اختیاری)').fill(department);
+ await page.getByLabel('شناسه پزشک برای فیلتر (اختیاری)').fill(doctor);
+ await page.getByRole('button',{name:'خواندن صف درخواست نوبت'}).click();
+ await expect(page.getByRole('status')).toContainText('یکپارچگی درخواست‌ها بررسی شد');
+ const visible=page.getByRole('region',{name:'درخواست‌های این صفحه'});
+ await expect(visible.locator('li')).toHaveCount(1);
+ await expect(visible).toContainText(requestRefs[0]);
+ await page.getByRole('button',{name:'پاک‌کردن فیلترها'}).click();
+ await expect(page.getByLabel('شناسه تخصص برای فیلتر (اختیاری)')).toHaveValue('');
+ await expect(page.getByLabel('شناسه پزشک برای فیلتر (اختیاری)')).toHaveValue('');
+ await expect(page.getByRole('status')).toContainText('یکپارچگی درخواست‌ها بررسی شد');
+ await expect(visible.locator('li')).toHaveCount(2);
+ for(const requestRef of requestRefs)await expect(visible).toContainText(requestRef);
+});
