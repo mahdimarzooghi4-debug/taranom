@@ -115,6 +115,32 @@ class LocalModelArtifactTests(unittest.TestCase):
                     ArtifactRejected, "UNSAFE_ARTIFACT_PATH_COMPONENT"):
                 verify_local_model_manifest(manifest("nested/weights.part"), root)
 
+    def test_rejects_undeclared_files_and_unsafe_directory_entries(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "weights.part").write_bytes(b"synthetic-model-bytes")
+            (root / "unexpected.part").write_bytes(b"unlisted")
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "UNDECLARED_LOCAL_ARTIFACT_FILE"):
+                verify_local_model_manifest(manifest(), root)
+            (root / "unexpected.part").unlink()
+
+            nested = root / "nested"
+            nested.mkdir()
+            (nested / "hidden.part").write_bytes(b"unlisted")
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "UNDECLARED_LOCAL_ARTIFACT_FILE"):
+                verify_local_model_manifest(manifest(), root)
+            (nested / "hidden.part").unlink()
+            nested.rmdir()
+
+            if hasattr(os, "mkfifo"):
+                os.mkfifo(root / "unexpected.pipe")
+                with self.assertRaisesRegex(
+                        ArtifactRejected, "UNSAFE_ARTIFACT_DIRECTORY_ENTRY"):
+                    verify_local_model_manifest(manifest(), root)
+
+
     def test_strict_local_manifest_cli_verifies_only_local_synthetic_bytes(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

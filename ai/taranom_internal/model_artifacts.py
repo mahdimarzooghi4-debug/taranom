@@ -69,6 +69,114 @@ def _open_beneath(root_fd: int, parts: tuple[str, ...]) -> int:
         os.close(current_fd)
 
 
+
+def _stat_signature(value: os.stat_result) -> tuple[int, int, int, int]:
+    return (value.st_dev, value.st_ino, value.st_mtime_ns, value.st_ctime_ns)
+
+
+def _open_directory_beneath(root_fd: int, parts: tuple[str, ...]) -> int:
+    current_fd = os.dup(root_fd)
+    try:
+        for part in parts:
+            next_fd = os.open(
+                part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=current_fd,
+            )
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except OSError:
+        os.close(current_fd)
+        raise
+
+
+def _check_exact_artifact_file_set(
+    root_fd: int, expected_files: set[str]
+) -> None:
+    """Reject unlisted or unsafe entries under the pinned artifact root."""
+    if os.listdir not in os.supports_fd or os.stat not in os.supports_dir_fd:
+        raise ArtifactRejected("SAFE_ARTIFACT_DIRECTORY_SCAN_NOT_SUPPORTED")
+
+    observed_files: set[str] = set()
+    directories: list[tuple[tuple[str, ...], tuple[int, int, int, int]]] = []
+
+    def visit(directory_fd: int, parts: tuple[str, ...]) -> None:
+        before = os.fstat(directory_fd)
+        directories.append((parts, _stat_signature(before)))
+        if len(directories) > _MAX_FILES:
+            raise ArtifactRejected("ARTIFACT_DIRECTORY_COUNT_LIMIT_EXCEEDED")
+        try:
+            entries = os.listdir(directory_fd)
+            for entry in entries:
+                child_parts = parts + (entry,)
+                try:
+                    child_stat = os.stat(
+                        entry, dir_fd=directory_fd, follow_symlinks=False
+                    )
+                except OSError as exc:
+                    raise ArtifactRejected(
+                        "ARTIFACT_DIRECTORY_CHANGED_DURING_INVENTORY"
+                    ) from exc
+
+                if stat.S_ISDIR(child_stat.st_mode):
+                    try:
+                        child_fd = os.open(
+                            entry,
+                            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                            dir_fd=directory_fd,
+                        )
+                    except OSError as exc:
+                        raise ArtifactRejected(
+                            "UNSAFE_ARTIFACT_DIRECTORY_ENTRY"
+                        ) from exc
+                    try:
+                        opened_stat = os.fstat(child_fd)
+                        if _stat_signature(opened_stat)[:2] != (
+                                child_stat.st_dev, child_stat.st_ino):
+                            raise ArtifactRejected(
+                                "ARTIFACT_DIRECTORY_CHANGED_DURING_INVENTORY"
+                            )
+                        visit(child_fd, child_parts)
+                    finally:
+                        os.close(child_fd)
+                elif stat.S_ISREG(child_stat.st_mode):
+                    observed_files.add(PurePosixPath(*child_parts).as_posix())
+                    if len(observed_files) > _MAX_FILES:
+                        raise ArtifactRejected("ARTIFACT_FILE_COUNT_LIMIT_EXCEEDED")
+                else:
+                    raise ArtifactRejected("UNSAFE_ARTIFACT_DIRECTORY_ENTRY")
+        except OSError as exc:
+            raise ArtifactRejected(
+                "ARTIFACT_DIRECTORY_CHANGED_DURING_INVENTORY"
+            ) from exc
+
+        after = os.fstat(directory_fd)
+        if _stat_signature(before) != _stat_signature(after):
+            raise ArtifactRejected("ARTIFACT_DIRECTORY_CHANGED_DURING_INVENTORY")
+
+    visit(root_fd, ())
+
+    # Reopen every directory through no-follow descriptors after enumeration to
+    # detect additions, removals, or directory replacement during the scan.
+    for parts, signature in directories:
+        try:
+            directory_fd = _open_directory_beneath(root_fd, parts)
+        except OSError as exc:
+            raise ArtifactRejected(
+                "ARTIFACT_DIRECTORY_CHANGED_DURING_INVENTORY"
+            ) from exc
+        try:
+            if _stat_signature(os.fstat(directory_fd)) != signature:
+                raise ArtifactRejected("ARTIFACT_DIRECTORY_CHANGED_DURING_INVENTORY")
+        finally:
+            os.close(directory_fd)
+
+    unexpected = observed_files - expected_files
+    if unexpected:
+        raise ArtifactRejected("UNDECLARED_LOCAL_ARTIFACT_FILE")
+    if observed_files != expected_files:
+        raise ArtifactRejected("DECLARED_ARTIFACT_FILE_MISSING")
+
 def _check_manifest_json_depth(text: str) -> None:
     depth = 0
     in_string = False
@@ -262,6 +370,7 @@ def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> 
                 "sha256": actual_sha,
                 "size_bytes": count,
             })
+        _check_exact_artifact_file_set(root_fd, set(names))
     finally:
         os.close(root_fd)
 
