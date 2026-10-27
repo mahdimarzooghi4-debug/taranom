@@ -262,6 +262,11 @@ app.MapPost("/internal/demo/v1/late-evidence/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.WriteAsync);
 if (appointmentQaEnabled)
 {
+    // No schedule adapter is configured until an authorized source is introduced.
+    Taranom.CenterWorkflow.Demo.AppointmentScheduleHttp.Reader =
+        new Taranom.MemberGovernance.AppointmentScheduleReadService(null);
+    app.MapGet("/internal/demo/v1/centers/{centerRef}/appointment-schedule",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AppointmentScheduleHttp.ReadAsync);
     app.MapPost("/internal/demo/v1/appointment-requests/{requestRef}",
         (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.WriteAsync);
     app.MapGet("/internal/demo/v1/appointment-requests/{requestRef}",
