@@ -802,7 +802,7 @@ jobs:
           export TARANOM_AI_WORKER_EVIDENCE_FILE="$bridge_tmp/worker-evidence.jsonl"
           TARANOM_AI_OFFLINE_TEST_ONLY=CI_EPHEMERAL_ONLY python3 -c 'import os; from ai.taranom_internal.registry import OfflineRegistry; OfflineRegistry(os.environ["TARANOM_AI_BRIDGE_TEST_DB"]).initialize()'
           cd src/Taranom.CenterWorkflow.Demo
-          TARANOM_AI_ADMIN_QA=CI_EPHEMERAL_ONLY TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
+          TARANOM_AI_ADMIN_QA=CI_EPHEMERAL_ONLY TARANOM_COST_JOURNAL_DEMO=CI_EPHEMERAL_ONLY TARANOM_APPOINTMENT_REQUEST_QA=CI_EPHEMERAL_ONLY TARANOM_ORG_DRAFT_QA=CI_EPHEMERAL_ONLY dotnet run --no-build --configuration Release > /tmp/taranom-center-ephemeral.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           cd "$GITHUB_WORKSPACE"
@@ -818,6 +818,7 @@ jobs:
           python3 tests/center_demo/test_ai_admin_denial_http.py
           python3 tests/center_demo/test_ai_worker_bridge_http.py
           python3 tests/center_demo/test_real_center_demo_http.py
+          python3 tests/center_demo/test_appointment_request_http.py
           python3 tests/center_demo/test_proofing_correction_http.py
           python3 tests/center_demo/test_late_evidence_work_item_http.py
           python3 tests/center_demo/test_care_coordination_http.py

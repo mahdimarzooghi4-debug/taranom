@@ -28,6 +28,24 @@ await PgLateEvidenceWorkItemJournal.InitializeIsolatedTestSchemaAsync(dataSource
 await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
     .InitializeAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
+// TRN-TECH-216: opt-in appointment intent journal, isolated PostgreSQL only.
+var appointmentQaEnabled = Environment.GetEnvironmentVariable(
+    "TARANOM_APPOINTMENT_REQUEST_QA") == "CI_EPHEMERAL_ONLY";
+NpgsqlDataSource? appointmentWriter = null;
+NpgsqlDataSource? appointmentReader = null;
+if (appointmentQaEnabled)
+{
+    await Taranom.CenterWorkflow.Demo.PgSyntheticAppointmentRequestJournal
+        .InitializeAsync(dataSource);
+    var appointmentSources =
+        await Taranom.CenterWorkflow.Demo.PgSyntheticAppointmentRequestJournal
+            .RestrictedSourcesAsync(dataSource, connection);
+    appointmentWriter = appointmentSources.Writer;
+    appointmentReader = appointmentSources.Reader;
+    Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.Store =
+        new Taranom.CenterWorkflow.Demo.PgSyntheticAppointmentRequestJournal(
+            appointmentWriter, appointmentReader);
+}
 // TRN-TECH-174: late-evidence HTTP may use only isolated writer/reader.
 var lateSources=await PgLateEvidenceWorkItemJournal.RestrictedTestSourcesAsync(
     dataSource,connection);
@@ -242,6 +260,14 @@ app.MapGet("/internal/demo/v1/late-evidence/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/late-evidence/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.WriteAsync);
+if (appointmentQaEnabled)
+{
+    app.MapPost("/internal/demo/v1/appointment-requests/{requestRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.WriteAsync);
+    app.MapGet("/internal/demo/v1/appointment-requests/{requestRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.ReadAsync);
+}
+
 app.MapGet("/internal/demo/v1/care-coordination-worklist",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareWorklistHttp.ListAsync);
 app.MapGet("/internal/demo/v1/care-coordination/{caseRef}/history",
@@ -305,6 +331,8 @@ app.UseStaticFiles();
 // Explicit root default file and explicit member entrypoint remain available.
 app.MapFallback(() => Results.NotFound());
 app.Run();
+if (appointmentWriter is not null) await appointmentWriter.DisposeAsync();
+if (appointmentReader is not null) await appointmentReader.DisposeAsync();
 if (aiAuditWriter is not null) await aiAuditWriter.DisposeAsync();
 if (aiAuditReader is not null) await aiAuditReader.DisposeAsync();
 if (orgQaDatabase is not null) await orgQaDatabase.DisposeAsync();
