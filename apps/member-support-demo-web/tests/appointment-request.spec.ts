@@ -86,7 +86,7 @@ test('MEMBER-APPOINTMENT-05: uncertain request survives reload and is reconciled
       return;
     }
     postCount++;
-    originalRequestRef = new URL(route.request().url()).pathname.split('/').pop() ?? '';
+    originalRequestRef = decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop() ?? '');
     await route.fetch();
     await route.abort();
   });
