@@ -256,16 +256,18 @@ export function AppointmentRequestDemo() {
         setMessage('وضعیت درخواست از دفتر ثبت قابل تأیید نیست؛ ارسال مجدد همچنان غیرفعال است.');
         return;
       }
+      const requestEvents = result.requests;
       if (result.revision === 1 && result.requestCount === 1 &&
-          result.requests.length === 1 && result.requests[0]?.command &&
-          sameCommand(result.requests[0].command, attempt.body)) {
+          Array.isArray(requestEvents) && requestEvents.length === 1 &&
+          requestEvents[0]?.command &&
+          sameCommand(requestEvents[0].command, attempt.body)) {
         setReceipt({ ...result, outcome: 'ReadBackConfirmed' });
         setRecovery(null);
         setMessage('ثبت همان درخواست با بازخوانی تأیید شد؛ نوبت هنوز تأیید نشده است.');
         return;
       }
       if (result.revision === 0 && result.requestCount === 0 &&
-          result.requests.length === 0) {
+          Array.isArray(requestEvents) && requestEvents.length === 0) {
         setRecovery('CONFIRMED_ABSENT');
         setMessage('دفتر ثبت نشان داد این درخواست هنوز ثبت نشده؛ اکنون ارسال دستی همان درخواست ممکن است.');
         return;
