@@ -326,6 +326,10 @@ app.MapGet("/member-demo/late-evidence", () =>
 app.MapGet("/member-demo/coordination", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
+if (appointmentQaEnabled)
+    app.MapGet("/member-demo/appointment-requests-qa", () =>
+        Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+            "member-demo", "index.html"), "text/html; charset=utf-8"));
 if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")
     app.MapGet("/member-demo/costs", () =>
         Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",

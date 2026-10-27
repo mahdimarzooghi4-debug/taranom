@@ -759,7 +759,7 @@ jobs:
           cd ../member-support-demo-web
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
-          npm run build
+          VITE_TARANOM_APPOINTMENT_REQUEST_QA=1 npm run build
           mkdir -p ../../src/Taranom.CenterWorkflow.Demo/wwwroot/member-demo
           cp -R dist/. ../../src/Taranom.CenterWorkflow.Demo/wwwroot/member-demo/
       - name: Build separate opt-in CI-only local QA link to genuine journal host
