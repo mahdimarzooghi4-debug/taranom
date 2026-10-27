@@ -107,3 +107,129 @@ public sealed class SyntheticAppointmentRequestTests
         Assert.DoesNotContain("ClinicalNote", commandProperties);
     }
 }
+
+
+public sealed class AppointmentScheduleReadServiceTests
+{
+    private static AppointmentScheduleQuery Query() =>
+        new("center:future-provider-01", null, "doctor:patient-selected-01");
+
+    private static AppointmentScheduleObservation Observation(
+        AppointmentScheduleQuery? query = null,
+        IReadOnlyList<AppointmentScheduleSlotClaim>? slots = null)
+    {
+        var selected = query ?? Query();
+        return new("source:future-provider", "revision-7",
+            selected.CenterRef, selected.DepartmentRef, selected.RequestedDoctorRef,
+            DateTimeOffset.Parse("2026-10-27T09:00:00Z"),
+            slots ?? Array.Empty<AppointmentScheduleSlotClaim>());
+    }
+
+    [Fact]
+    public async Task MissingSourceReturnsNoSlotsAndNoAuthority()
+    {
+        var result = await new AppointmentScheduleReadService(null).ReadAsync(Query());
+
+        Assert.Equal(AppointmentScheduleReadOutcome.SourceNotConfigured, result.Outcome);
+        Assert.Empty(result.SourceClaimedSlots);
+        Assert.False(result.SourceAuthenticated);
+        Assert.False(result.SlotAvailabilityVerified);
+        Assert.False(result.BookingConfirmed);
+        Assert.False(result.ClinicalActionAllowed);
+    }
+
+    [Fact]
+    public async Task ProviderClaimIsScopeBoundButNeverPromotedToVerifiedAvailability()
+    {
+        var query = Query();
+        var starts = DateTimeOffset.Parse("2026-10-28T10:00:00Z");
+        var claim = new AppointmentScheduleSlotClaim(
+            "slot:provider-123", starts, starts.AddMinutes(30));
+        var result = await new AppointmentScheduleReadService(
+            new FixedScheduleSource(Observation(query, [claim])))
+            .ReadAsync(query);
+
+        Assert.Equal(AppointmentScheduleReadOutcome.SourceClaimReceived, result.Outcome);
+        Assert.Equal([claim], result.SourceClaimedSlots);
+        Assert.False(result.SourceAuthenticated);
+        Assert.False(result.SlotAvailabilityVerified);
+        Assert.False(result.BookingConfirmed);
+        Assert.False(result.ClinicalActionAllowed);
+    }
+
+    [Fact]
+    public async Task MismatchedCenterOrPatientSelectedDoctorIsRejectedWithoutSlots()
+    {
+        var query = Query();
+        var starts = DateTimeOffset.Parse("2026-10-28T10:00:00Z");
+        var claim = new AppointmentScheduleSlotClaim(
+            "slot:provider-123", starts, starts.AddMinutes(30));
+        var wrongScope = Observation(query with { RequestedDoctorRef = "doctor:other" }, [claim]);
+
+        var result = await new AppointmentScheduleReadService(
+            new FixedScheduleSource(wrongScope)).ReadAsync(query);
+
+        Assert.Equal(AppointmentScheduleReadOutcome.InvalidSourceResponse, result.Outcome);
+        Assert.Empty(result.SourceClaimedSlots);
+        Assert.False(result.SlotAvailabilityVerified);
+    }
+
+    [Fact]
+    public async Task InvalidIntervalsDuplicateSlotRefsAndUnorderedClaimsAreRejected()
+    {
+        var query = Query();
+        var first = DateTimeOffset.Parse("2026-10-28T10:00:00Z");
+        var later = first.AddHours(1);
+        var cases = new[]
+        {
+            new[] { new AppointmentScheduleSlotClaim("slot:bad", first, first) },
+            new[]
+            {
+                new AppointmentScheduleSlotClaim("slot:dup", first, first.AddMinutes(30)),
+                new AppointmentScheduleSlotClaim("slot:dup", later, later.AddMinutes(30))
+            },
+            new[]
+            {
+                new AppointmentScheduleSlotClaim("slot:later", later, later.AddMinutes(30)),
+                new AppointmentScheduleSlotClaim("slot:earlier", first, first.AddMinutes(30))
+            }
+        };
+
+        foreach (var slots in cases)
+        {
+            var result = await new AppointmentScheduleReadService(
+                new FixedScheduleSource(Observation(query, slots))).ReadAsync(query);
+            Assert.Equal(AppointmentScheduleReadOutcome.InvalidSourceResponse, result.Outcome);
+            Assert.Empty(result.SourceClaimedSlots);
+        }
+    }
+
+    [Fact]
+    public async Task SourceFailureReturnsUnavailableWithoutLeakingAnAvailabilityClaim()
+    {
+        var result = await new AppointmentScheduleReadService(new FailingScheduleSource())
+            .ReadAsync(Query());
+
+        Assert.Equal(AppointmentScheduleReadOutcome.SourceUnavailable, result.Outcome);
+        Assert.Empty(result.SourceClaimedSlots);
+        Assert.False(result.SourceAuthenticated);
+        Assert.False(result.SlotAvailabilityVerified);
+        Assert.False(result.BookingConfirmed);
+    }
+
+    private sealed class FixedScheduleSource(
+        AppointmentScheduleObservation? observation) : IAppointmentScheduleSource
+    {
+        public ValueTask<AppointmentScheduleObservation?> ReadAsync(
+            AppointmentScheduleQuery query, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(observation);
+    }
+
+    private sealed class FailingScheduleSource : IAppointmentScheduleSource
+    {
+        public ValueTask<AppointmentScheduleObservation?> ReadAsync(
+            AppointmentScheduleQuery query, CancellationToken cancellationToken) =>
+            ValueTask.FromException<AppointmentScheduleObservation?>(
+                new IOException("synthetic source failure"));
+    }
+}
