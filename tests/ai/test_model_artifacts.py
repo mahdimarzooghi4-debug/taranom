@@ -179,8 +179,9 @@ class LocalModelArtifactTests(unittest.TestCase):
             manifest_path = root / "manifest.json"
             manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
             result = verify_local_model_artifact(manifest_path, root)
+            manifest_bytes = manifest_path.read_bytes()
         self.assertEqual("LOCAL_ARTIFACT_BYTES_VERIFIED_NOT_LOADED", result["status"])
-        self.assertEqual(hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        self.assertEqual(hashlib.sha256(manifest_bytes).hexdigest(),
                          result["manifest_sha256"])
         self.assertFalse(result["manifest_authenticity_verified"])
         self.assertFalse(result["network_used"])
