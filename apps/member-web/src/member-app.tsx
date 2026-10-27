@@ -4,7 +4,7 @@ import {SyntheticCostWorkbench} from './synthetic-cost-workbench';
 
 type PageKey =
   | 'overview' | 'membership' | 'credit' | 'consents' | 'care'
-  | 'records' | 'costs' | 'billing' | 'support' | 'prevention';
+  | 'records' | 'costs' | 'billing' | 'support' | 'prevention' | 'appointments' | 'prescriptions';
 
 type MemberPage = {
   key: PageKey;
@@ -27,6 +27,10 @@ export const memberPages: readonly MemberPage[] = [
     detail: 'مجوزهای درمان، اشتراک داده و پژوهش هوش مصنوعی مستقل‌اند و بدون شواهد معتبر فعال نمی‌شوند.', symbol: '⊙' },
   { key: 'care', path: '/member/care', label: 'هماهنگی درمان', subtitle: 'پیگیری خدمات سلامت', owner: 'هماهنگی درمان',
     detail: 'ارجاع و خدمات واقعی به اتصال معتبر شبکه ارائه‌دهندگان و تصمیم متخصص مجاز نیاز دارد.', symbol: '✳' },
+  { key: 'appointments', path: '/member/appointments', label: 'نوبت‌دهی', subtitle: 'انتخاب پزشک و پیگیری نوبت', owner: 'سامانه نوبت‌دهی و مرکز درمانی',
+    detail: 'جست‌وجو و ثبت نوبت واقعی به هویت عضو، برنامه معتبر مرکز و اتصال نوبت‌دهی نیاز دارد؛ این نسخه درخواستی را ثبت نمی‌کند.', symbol: '◷' },
+  { key: 'prescriptions', path: '/member/prescriptions', label: 'نسخه‌های من', subtitle: 'نسخه‌های ثبت‌شده در ترنم', owner: 'پرونده سلامت ترنم و صادرکننده مجاز',
+    detail: 'نمایش نسخه فقط پس از اتصال امن به پرونده عضو و مرجع صادرکننده ممکن است؛ نسخه‌ای در این محیط وجود ندارد.', symbol: '▧' },
   { key: 'prevention', path: '/member/prevention', label: 'آموزش و پیشگیری', subtitle: 'مشارکت اختیاری و مراقبت مستمر', owner: 'آموزش سلامت و تیم درمانی واجدصلاحیت',
     detail: 'مشارکت واقعی، محتوای دارای اعتبار علمی و مراقبت مستمر به منابع و مجوزهای مستقل نیاز دارند.', symbol: '✦' },
   { key: 'records', path: '/member/records', label: 'سوابق سلامت', subtitle: 'دسترسی‌های مجاز بالینی', owner: 'سوابق سلامت',
@@ -967,6 +971,46 @@ export function MemberApp() {
                   <p className="emergency-note">
                     در فوریت پزشکی دریافت کمک درمانی را به مشاهده صورتحساب یا بررسی بیمه موکول نکنید.
                   </p>
+                </section>
+              ) : null}
+              {page.key === 'appointments' ? (
+                <section aria-labelledby="member-appointments-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">نوبت‌دهی از خدمات اصلی ترنم</p>
+                      <h2 id="member-appointments-title">نوبت و انتخاب پزشک</h2>
+                    </div>
+                    <span className="readonly-pill">سرویس نوبت‌دهی متصل نیست</span>
+                  </div>
+                  <p className="quiet">
+                    تا اتصال به هویت معتبر عضو، برنامه واقعی مرکز و پزشک واجدصلاحیت،
+                    جست‌وجو، ثبت درخواست و رزرو نوبت انجام نمی‌شود.
+                  </p>
+                  <p className="quiet">
+                    انتخاب نهایی پزشک با بیمار است. دستیار هوشمند می‌تواند در راهنمایی و ارجاع کمک کند،
+                    اما به‌جای بیمار پزشک انتخاب یا نوبت رزرو نمی‌کند.
+                  </p>
+                  <button type="button" disabled>درخواست نوبت — پس از اتصال سرویس معتبر</button>
+                </section>
+              ) : null}
+              {page.key === 'prescriptions' ? (
+                <section aria-labelledby="member-prescriptions-title">
+                  <div className="section-header">
+                    <div>
+                      <p className="eyebrow">نسخه در پرونده ترنم باقی می‌ماند</p>
+                      <h2 id="member-prescriptions-title">نسخه‌های ثبت‌شده برای من</h2>
+                    </div>
+                    <span className="readonly-pill">پرونده عضو متصل نیست</span>
+                  </div>
+                  <p className="quiet">
+                    پس از صدور نسخه توسط پزشک و مرکز مجاز، نسخه باید در پرونده ترنم عضو نیز
+                    ثبت و برای خود او قابل مشاهده باشد.
+                  </p>
+                  <p className="quiet">
+                    در این محیط هیچ نسخه یا اطلاعات دارویی نمایش داده نمی‌شود؛ صدور، تغییر یا تمدید
+                    نسخه فقط از مسیر پزشک و منبع معتبر انجام می‌شود.
+                  </p>
+                  <button type="button" disabled>مشاهده نسخه‌ها — پس از اتصال پرونده معتبر</button>
                 </section>
               ) : null}
               {page.key === 'prevention' ? (
