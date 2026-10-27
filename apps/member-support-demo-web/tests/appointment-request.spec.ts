@@ -86,6 +86,7 @@ test('MEMBER-APPOINTMENT-06: member history is journal-backed, bounded, and isol
       { data: {
         requestId: crypto.randomUUID(), expectedRevision: 0, memberRef, centerRef,
         departmentRef, requestedDoctorRef, slotRef: ref('requested-slot'),
+        unverifiedScheduleSelection: null,
       } },
     );
     expect(response.status()).toBe(200);
@@ -96,6 +97,7 @@ test('MEMBER-APPOINTMENT-06: member history is journal-backed, bounded, and isol
     { data: {
       requestId: crypto.randomUUID(), expectedRevision: 0, memberRef: otherMemberRef, centerRef,
       departmentRef, requestedDoctorRef, slotRef: ref('requested-slot'),
+        unverifiedScheduleSelection: null,
     } },
   );
   expect(otherResponse.status()).toBe(200);
