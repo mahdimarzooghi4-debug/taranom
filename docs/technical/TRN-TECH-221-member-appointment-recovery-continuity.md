@@ -6,9 +6,9 @@ Preserve one uncertain synthetic appointment request across a page reload in the
 
 ## Browser storage contract
 
-The demo writes a versioned envelope to `sessionStorage` before sending the first POST. It contains only the exact `test:` request references and fixed non-clinical request body required for reconciliation. No diagnosis, prescription, free-form note, or real identity is accepted. The saved record expires after 24 hours and is scoped to the current tab session.
+The demo writes a versioned envelope to `sessionStorage` before sending the first POST. It contains only the exact `test:` request references and fixed non-clinical request body required for reconciliation. No diagnosis, prescription, free-form note, or real identity is accepted. The record is scoped to the current tab session and has no client-side expiry, avoiding a new request merely because a recovery window elapsed.
 
-On reload, the client validates the envelope version, age, request reference, UUID, exact field set, and synthetic reference format. Invalid or expired data is ignored. A restored attempt starts unresolved: the client must read the same server request reference and compare the complete command and deny-only flags. It never automatically resends a POST.
+On reload, the client validates the envelope version, request reference, UUID, exact field set, and synthetic reference format. Invalid data is ignored. A restored attempt starts unresolved: the client must read the same server request reference and compare the complete command and deny-only flags. It never automatically resends a POST.
 
 The exact stored envelope is removed after a valid receipt or exact readback confirmation. If browser storage is unavailable, the UI does not send the initial request because it could not preserve the recovery information.
 

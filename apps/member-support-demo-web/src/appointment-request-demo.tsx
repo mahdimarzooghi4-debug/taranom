@@ -87,17 +87,14 @@ const sameCommand = (left: RequestBody, right: RequestBody) =>
   left.slotRef === right.slotRef;
 
 const recoveryStorageKey = 'taranom.syntheticAppointmentAttempt.v1';
-const recoveryMaxAgeMs = 24 * 60 * 60 * 1000;
 function readStoredAttempt(): Attempt | null {
   try {
     const stored = sessionStorage.getItem(recoveryStorageKey);
     if (!stored) return null;
     const envelope = JSON.parse(stored) as {
-      version?: unknown; savedAt?: unknown; attempt?: unknown;
+      version?: unknown; attempt?: unknown;
     };
-    if (envelope.version !== 1 || !Number.isSafeInteger(envelope.savedAt) ||
-        Date.now() - Number(envelope.savedAt) < 0 ||
-        Date.now() - Number(envelope.savedAt) > recoveryMaxAgeMs ||
+    if (envelope.version !== 1 ||
         !envelope.attempt || typeof envelope.attempt !== 'object' ||
         Array.isArray(envelope.attempt)) return null;
     const candidate = envelope.attempt as Partial<Attempt>;
@@ -124,7 +121,7 @@ function readStoredAttempt(): Attempt | null {
 function persistAttempt(attempt: Attempt): boolean {
   try {
     sessionStorage.setItem(recoveryStorageKey, JSON.stringify({
-      version: 1, savedAt: Date.now(), attempt,
+      version: 1, attempt,
     }));
     return true;
   } catch {
