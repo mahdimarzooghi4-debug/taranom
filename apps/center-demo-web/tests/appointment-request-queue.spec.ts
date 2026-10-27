@@ -28,7 +28,7 @@ test('APPOINTMENT-QUEUE-01: center sees only verified synthetic request intent, 
  await expect(visible).not.toContainText(otherRequestRef);
  await expect(visible).toContainText('پزشک انتخاب‌شده توسط بیمار');
  await expect(visible).toContainText('نوبت تأیید نشده');
- await expect(page.getByRole('note')).toContainText('هیچ پذیرش، رد، رزرو یا تأیید نوبتی ندارد');
+ await expect(page.getByRole('note')).toContainText('هیچ رزرو یا اقدام بالینی انجام نمی‌شود');
 
  const response=await request.get('/internal/demo/v1/centers/'+
   encodeURIComponent(center)+'/appointment-requests?limit=10');
