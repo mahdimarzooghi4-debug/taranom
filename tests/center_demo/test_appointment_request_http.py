@@ -49,12 +49,22 @@ def main():
         "departmentRef": "test:department-" + uuid4().hex,
         "requestedDoctorRef": "test:doctor-" + uuid4().hex,
         "slotRef": "test:slot-" + uuid4().hex,
+        "unverifiedScheduleSelection": {
+            "sourceRef": "test:schedule-source-" + uuid4().hex,
+            "sourceRevision": "test:schedule-revision-7",
+            "observedAt": "2026-10-27T09:00:00Z",
+            "slotRef": "test:slot-placeholder",
+            "startsAt": "2026-10-28T10:00:00Z",
+            "endsAt": "2026-10-28T10:30:00Z",
+        },
     }
+    body["unverifiedScheduleSelection"]["slotRef"] = body["slotRef"]
 
     code, created = call(request_ref, body)
     assert code == 200 and created["outcome"] == "RecordedRequest"
     assert created["revision"] == 1 and created["requestCount"] == 1
     assert created["requests"][0]["command"]["requestedDoctorRef"] == body["requestedDoctorRef"]
+    assert created["requests"][0]["command"]["unverifiedScheduleSelection"] == body["unverifiedScheduleSelection"]
     for flag in (
         "memberAuthenticated", "centerAuthenticated", "requestedDoctorLicensed",
         "slotAvailabilityVerified", "bookingConfirmed", "clinicalActionAllowed",
@@ -142,7 +152,17 @@ def main():
         ]))
         assert code == 400, invalid_from
 
-    print("PASS: synthetic appointment request persisted; strict schedule timestamp syntax validated over HTTP")
+    null_body = dict(body, requestId=str(uuid4()), expectedRevision=0,
+                     unverifiedScheduleSelection=None)
+    code, null_receipt = call("test:null-selection-" + uuid4().hex, null_body)
+    assert code == 200 and null_receipt["requests"][0]["command"]["unverifiedScheduleSelection"] is None
+    nested_extra = dict(body, requestId=str(uuid4()), expectedRevision=0,
+                        unverifiedScheduleSelection=dict(
+                            body["unverifiedScheduleSelection"], approved=True))
+    code, _ = call("test:nested-extra-" + uuid4().hex, nested_extra)
+    assert code == 400
+
+    print("PASS: synthetic unverified schedule provenance persisted and read back over HTTP/PostgreSQL")
 
 
 if __name__ == "__main__":

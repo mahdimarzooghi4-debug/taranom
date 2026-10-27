@@ -14,7 +14,12 @@ internal static class SyntheticAppointmentHttp
     private static readonly string[] Fields =
     [
         "requestId", "expectedRevision", "memberRef", "centerRef",
-        "departmentRef", "requestedDoctorRef", "slotRef"
+        "departmentRef", "requestedDoctorRef", "slotRef",
+        "unverifiedScheduleSelection"
+    ];
+    private static readonly string[] ScheduleSelectionFields =
+    [
+        "sourceRef", "sourceRevision", "observedAt", "slotRef", "startsAt", "endsAt"
     ];
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
@@ -40,6 +45,8 @@ internal static class SyntheticAppointmentHttp
             foreach (var field in Fields)
                 if (!document.RootElement.TryGetProperty(field, out _))
                     return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_COMMAND");
+            if (!ValidScheduleSelectionShape(document.RootElement))
+                return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_COMMAND");
 
             var command = document.RootElement.Deserialize<SyntheticAppointmentRequestCommand>(JsonOptions);
             var requestRef = context.Request.RouteValues["requestRef"]!.ToString();
@@ -54,7 +61,7 @@ internal static class SyntheticAppointmentHttp
             };
             return Results.Json(new
             {
-                contract = "TRN-TECH-216",
+                contract = "TRN-TECH-232",
                 outcome = change.Outcome.ToString(),
                 result.Revision,
                 result.RequestCount,
@@ -206,7 +213,7 @@ internal static class SyntheticAppointmentHttp
             var result = SyntheticAppointmentRequestProjection.Project(snapshot);
             return Results.Json(new
             {
-                contract = "TRN-TECH-216",
+                contract = "TRN-TECH-232",
                 outcome = "Read",
                 result.Revision,
                 result.RequestCount,
@@ -227,6 +234,18 @@ internal static class SyntheticAppointmentHttp
         }
     }
 
+    private static bool ValidScheduleSelectionShape(JsonElement root)
+    {
+        if (!root.TryGetProperty("unverifiedScheduleSelection", out var selection))
+            return false;
+        if (selection.ValueKind == JsonValueKind.Null) return true;
+        return selection.ValueKind == JsonValueKind.Object &&
+            selection.EnumerateObject().Count() == ScheduleSelectionFields.Length &&
+            ScheduleSelectionFields.All(field => selection.TryGetProperty(field, out _)) &&
+            selection.EnumerateObject().All(property =>
+                ScheduleSelectionFields.Contains(property.Name));
+    }
+
     private static bool AllowedOrigin(string origin) =>
         origin.Length == 0 || origin is "http://127.0.0.1:4320" or "http://localhost:4320";
 
@@ -237,6 +256,6 @@ internal static class SyntheticAppointmentHttp
             char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or ':');
 
     private static IResult Denied(int status, string code) =>
-        Results.Json(new { contract = "TRN-TECH-216", outcome = code },
+        Results.Json(new { contract = "TRN-TECH-232", outcome = code },
             statusCode: status);
 }

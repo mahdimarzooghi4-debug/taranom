@@ -13,6 +13,14 @@ internal enum SyntheticAppointmentRequestOutcome
     StaleRevision = 5
 }
 
+internal readonly record struct SyntheticUnverifiedScheduleSelection(
+    string SourceRef,
+    string SourceRevision,
+    DateTimeOffset ObservedAt,
+    string SlotRef,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt);
+
 internal readonly record struct SyntheticAppointmentRequestCommand(
     Guid RequestId,
     long ExpectedRevision,
@@ -20,7 +28,8 @@ internal readonly record struct SyntheticAppointmentRequestCommand(
     string CenterRef,
     string DepartmentRef,
     string RequestedDoctorRef,
-    string SlotRef);
+    string SlotRef,
+    SyntheticUnverifiedScheduleSelection? UnverifiedScheduleSelection = null);
 
 internal readonly record struct SyntheticAppointmentRequestEntry(
     long Revision,
@@ -60,7 +69,7 @@ internal static class SyntheticAppointmentRequestDomain
             input.ExpectedRevision < 0 || input.ExpectedRevision == long.MaxValue ||
             !TestRef(input.MemberRef) || !TestRef(input.CenterRef) ||
             !TestRef(input.DepartmentRef) || !TestRef(input.RequestedDoctorRef) ||
-            !TestRef(input.SlotRef))
+            !TestRef(input.SlotRef) || !ValidScheduleSelection(input))
             return new(SyntheticAppointmentRequestOutcome.Invalid, snapshot);
 
         // An exact retry is idempotent. Reusing a request ID with altered
@@ -78,6 +87,18 @@ internal static class SyntheticAppointmentRequestDomain
 
         return new(SyntheticAppointmentRequestOutcome.RecordedRequest,
             snapshot.Append(input));
+    }
+
+    private static bool ValidScheduleSelection(
+        SyntheticAppointmentRequestCommand command)
+    {
+        if (command.UnverifiedScheduleSelection is not { } selection) return true;
+        return TestRef(selection.SourceRef) &&
+            TestRef(selection.SourceRevision) &&
+            selection.ObservedAt != default &&
+            selection.SlotRef == command.SlotRef &&
+            selection.StartsAt != default &&
+            selection.EndsAt > selection.StartsAt;
     }
 
     private static bool TestRef(string? value) =>

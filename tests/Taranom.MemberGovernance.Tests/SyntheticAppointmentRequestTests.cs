@@ -98,6 +98,81 @@ public sealed class SyntheticAppointmentRequestTests
     }
 
     [Fact]
+    public void UnverifiedScheduleSelectionIsPreservedWithoutBecomingVerified()
+    {
+        var selection = new SyntheticUnverifiedScheduleSelection(
+            "test:schedule-source-one",
+            "test:schedule-revision-seven",
+            DateTimeOffset.Parse("2026-10-27T09:00:00Z"),
+            "test:slot-one",
+            DateTimeOffset.Parse("2026-10-28T10:00:00Z"),
+            DateTimeOffset.Parse("2026-10-28T10:30:00Z"));
+        var command = Request() with { UnverifiedScheduleSelection = selection };
+        var change = SyntheticAppointmentRequestDomain.Apply(
+            SyntheticAppointmentRequestSnapshot.Empty, command);
+
+        Assert.Equal(SyntheticAppointmentRequestOutcome.RecordedRequest, change.Outcome);
+        Assert.Equal(selection, change.Snapshot.History[0].Command.UnverifiedScheduleSelection);
+        var read = SyntheticAppointmentRequestProjection.Project(change.Snapshot);
+        Assert.Equal(selection, read.Requests[0].Command.UnverifiedScheduleSelection);
+        Assert.False(read.SlotAvailabilityVerified);
+        Assert.False(read.BookingConfirmed);
+        Assert.False(read.ClinicalActionAllowed);
+    }
+
+    [Fact]
+    public void ChangedScheduleProvenanceConflictsOnExactRequestReplay()
+    {
+        var command = Request() with
+        {
+            UnverifiedScheduleSelection = new SyntheticUnverifiedScheduleSelection(
+                "test:schedule-source-one", "test:schedule-revision-one",
+                DateTimeOffset.Parse("2026-10-27T09:00:00Z"), "test:slot-one",
+                DateTimeOffset.Parse("2026-10-28T10:00:00Z"),
+                DateTimeOffset.Parse("2026-10-28T10:30:00Z"))
+        };
+        var first = SyntheticAppointmentRequestDomain.Apply(
+            SyntheticAppointmentRequestSnapshot.Empty, command);
+        var changed = SyntheticAppointmentRequestDomain.Apply(first.Snapshot,
+            command with
+            {
+                UnverifiedScheduleSelection =
+                    command.UnverifiedScheduleSelection!.Value with
+                    { SourceRevision = "test:schedule-revision-two" }
+            });
+
+        Assert.Equal(SyntheticAppointmentRequestOutcome.ConflictingReplay, changed.Outcome);
+    }
+
+    [Theory]
+    [InlineData("slot")]
+    [InlineData("source")]
+    [InlineData("revision")]
+    [InlineData("interval")]
+    public void InvalidUnverifiedScheduleSelectionIsRejected(string mutation)
+    {
+        var selection = new SyntheticUnverifiedScheduleSelection(
+            "test:schedule-source-one", "test:schedule-revision-one",
+            DateTimeOffset.Parse("2026-10-27T09:00:00Z"), "test:slot-one",
+            DateTimeOffset.Parse("2026-10-28T10:00:00Z"),
+            DateTimeOffset.Parse("2026-10-28T10:30:00Z"));
+        selection = mutation switch
+        {
+            "slot" => selection with { SlotRef = "test:different-slot" },
+            "source" => selection with { SourceRef = "real:schedule-source" },
+            "revision" => selection with { SourceRevision = "real:revision" },
+            "interval" => selection with { EndsAt = selection.StartsAt },
+            _ => throw new ArgumentException()
+        };
+
+        var result = SyntheticAppointmentRequestDomain.Apply(
+            SyntheticAppointmentRequestSnapshot.Empty,
+            Request() with { UnverifiedScheduleSelection = selection });
+        Assert.Equal(SyntheticAppointmentRequestOutcome.Invalid, result.Outcome);
+        Assert.Empty(result.Snapshot.History);
+    }
+
+    [Fact]
     public void DomainContainsNoDiagnosisOrPrescriptionPayload()
     {
         var commandProperties = typeof(SyntheticAppointmentRequestCommand)

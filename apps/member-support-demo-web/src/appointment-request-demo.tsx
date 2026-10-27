@@ -42,6 +42,7 @@ type RequestBody = {
   departmentRef: string;
   requestedDoctorRef: string;
   slotRef: string;
+  unverifiedScheduleSelection: null;
 };
 type Attempt = { requestRef: string; body: RequestBody };
 type Receipt = {
@@ -98,7 +99,9 @@ const sameCommand = (left: RequestBody, right: RequestBody) =>
   left.centerRef === right.centerRef &&
   left.departmentRef === right.departmentRef &&
   left.requestedDoctorRef === right.requestedDoctorRef &&
-  left.slotRef === right.slotRef;
+  left.slotRef === right.slotRef &&
+  (left.unverifiedScheduleSelection ?? null) ===
+    (right.unverifiedScheduleSelection ?? null);
 
 const recoveryStorageKey = 'taranom.syntheticAppointmentAttempt.v1';
 function readStoredAttempt(): Attempt | null {
@@ -117,17 +120,23 @@ function readStoredAttempt(): Attempt | null {
         !/^test:appointment-[a-f0-9]{32}$/.test(candidate.requestRef) ||
         !body || typeof body !== 'object' || Array.isArray(body) ||
         Object.keys(candidate).some(key => !['requestRef', 'body'].includes(key)) ||
-        Object.keys(body).length !== 7 ||
+        ![7, 8].includes(Object.keys(body).length) ||
         Object.keys(body).some(key => ![
           'requestId', 'expectedRevision', 'memberRef', 'centerRef',
           'departmentRef', 'requestedDoctorRef', 'slotRef',
+          'unverifiedScheduleSelection',
         ].includes(key)) ||
+        (body.unverifiedScheduleSelection !== undefined &&
+          body.unverifiedScheduleSelection !== null) ||
         typeof body.requestId !== 'string' ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.requestId) ||
         body.expectedRevision !== 0 ||
         ![body.memberRef, body.centerRef, body.departmentRef,
           body.requestedDoctorRef, body.slotRef].every(isTestRef)) return null;
-    return { requestRef: candidate.requestRef, body: body as RequestBody };
+    return {
+      requestRef: candidate.requestRef,
+      body: { ...body, unverifiedScheduleSelection: null } as RequestBody,
+    };
   } catch {
     return null;
   }
@@ -335,7 +344,7 @@ export function AppointmentRequestDemo() {
       );
       const result = await response.json() as Receipt;
       const validReceipt = response.ok &&
-        result.contract === 'TRN-TECH-216' &&
+        result.contract === 'TRN-TECH-232' &&
         (result.outcome === 'RecordedRequest' || result.outcome === 'Replayed') &&
         result.revision === 1 && result.requestCount === 1 &&
         result.requests?.length === 1 &&
@@ -372,7 +381,7 @@ export function AppointmentRequestDemo() {
       );
       const result = await response.json() as Receipt;
       const commonValid = response.ok &&
-        result.contract === 'TRN-TECH-216' &&
+        result.contract === 'TRN-TECH-232' &&
         result.outcome === 'Read' &&
         Number.isSafeInteger(result.revision) &&
         Number.isSafeInteger(result.requestCount) &&
@@ -427,6 +436,8 @@ export function AppointmentRequestDemo() {
       departmentRef,
       requestedDoctorRef,
       slotRef: slotRef.trim(),
+      // No schedule source is connected in this demo; preserve that absence explicitly.
+      unverifiedScheduleSelection: null,
     };
     const candidate = {
       requestRef: 'test:appointment-' + crypto.randomUUID().replaceAll('-', ''),
