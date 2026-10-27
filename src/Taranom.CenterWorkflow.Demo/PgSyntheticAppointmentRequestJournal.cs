@@ -82,7 +82,8 @@ internal sealed class PgSyntheticAppointmentRequestJournal(
               IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='{ReaderRole}') THEN
                 CREATE ROLE {ReaderRole} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
               END IF;
-            END $roles$;
+            END;
+            $roles$;
             ALTER ROLE {WriterRole} PASSWORD '{writerPassword}';
             ALTER ROLE {ReaderRole} PASSWORD '{readerPassword}';
             REVOKE ALL ON TABLE {CaseTable},{EventTable},{AuditTable} FROM PUBLIC;
