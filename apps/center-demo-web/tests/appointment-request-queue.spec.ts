@@ -16,7 +16,7 @@ test('APPOINTMENT-QUEUE-02: center queue filters by requested department and pat
   const response=await request.post('/internal/demo/v1/appointment-requests/'+
    encodeURIComponent(requestRef),{data:{
     requestId:crypto.randomUUID(),expectedRevision:0,memberRef:ref('member'),
-    centerRef,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
+    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
    }});
   expect(response.status()).toBe(200);
  };
