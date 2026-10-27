@@ -813,6 +813,7 @@ jobs:
           done
           if test "$ready" != "1"; then
             echo "Ephemeral test-only center host failed to start" >&2
+            cat /tmp/taranom-center-ephemeral.log >&2 || true
             exit 1
           fi
           python3 tests/center_demo/test_ai_admin_denial_http.py
