@@ -107,3 +107,47 @@ test('APPOINTMENT-QUEUE-01: center sees only verified synthetic request intent, 
   'requestedDoctorLicensed','slotAvailabilityVerified','bookingConfirmed',
   'clinicalActionAllowed','nationalReleaseAllowed'])expect(json[flag]).toBe(false);
 });
+
+test('APPOINTMENT-QUEUE-03: department and patient-selected doctor filters work independently',async({request})=>{
+ const center=ref('filter-alone-center');
+ const firstDepartment=ref('filter-alone-department');
+ const secondDepartment=ref('filter-alone-other-department');
+ const firstDoctor=ref('filter-alone-doctor');
+ const secondDoctor=ref('filter-alone-other-doctor');
+ const rows:{requestRef:string;departmentRef:string;doctorRef:string}[]=[];
+ const add=async(departmentRef:string,doctorRef:string)=>{
+  const requestRef=ref('filter-alone-request');
+  const response=await request.post('/internal/demo/v1/appointment-requests/'+
+   encodeURIComponent(requestRef),{data:{
+    requestId:crypto.randomUUID(),expectedRevision:0,memberRef:ref('member'),
+    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
+   }});
+  expect(response.status()).toBe(200);
+  rows.push({requestRef,departmentRef,doctorRef});
+ };
+ await add(firstDepartment,firstDoctor);
+ await add(firstDepartment,secondDoctor);
+ await add(secondDepartment,firstDoctor);
+
+ const endpoint='/internal/demo/v1/centers/'+encodeURIComponent(center)+
+  '/appointment-requests?limit=10';
+ const departmentResponse=await request.get(endpoint+'&departmentRef='+
+  encodeURIComponent(firstDepartment));
+ expect(departmentResponse.status()).toBe(200);
+ const departmentPage=await departmentResponse.json();
+ expect(departmentPage.departmentRefFilter).toBe(firstDepartment);
+ expect(departmentPage.requests.map((row:{requestRef:string})=>row.requestRef).sort())
+  .toEqual(rows.filter(row=>row.departmentRef===firstDepartment).map(row=>row.requestRef).sort());
+ expect(departmentPage.requests.every((row:{departmentRef:string})=>
+  row.departmentRef===firstDepartment)).toBe(true);
+
+ const doctorResponse=await request.get(endpoint+'&requestedDoctorRef='+
+  encodeURIComponent(firstDoctor));
+ expect(doctorResponse.status()).toBe(200);
+ const doctorPage=await doctorResponse.json();
+ expect(doctorPage.requestedDoctorRefFilter).toBe(firstDoctor);
+ expect(doctorPage.requests.map((row:{requestRef:string})=>row.requestRef).sort())
+  .toEqual(rows.filter(row=>row.doctorRef===firstDoctor).map(row=>row.requestRef).sort());
+ expect(doctorPage.requests.every((row:{requestedDoctorRef:string})=>
+  row.requestedDoctorRef===firstDoctor)).toBe(true);
+});
