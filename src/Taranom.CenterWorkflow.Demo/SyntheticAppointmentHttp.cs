@@ -84,7 +84,8 @@ internal static class SyntheticAppointmentHttp
         var centerRef = context.Request.RouteValues["centerRef"]?.ToString();
         if (!ValidRef(centerRef))
             return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_REFERENCE");
-        if (context.Request.Query.Keys.Any(k => k is not ("afterRequestRef" or "limit")))
+        if (context.Request.Query.Keys.Any(k => k is not
+            ("afterRequestRef" or "limit" or "departmentRef" or "requestedDoctorRef")))
             return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
 
         var afterValues = context.Request.Query["afterRequestRef"];
@@ -92,6 +93,18 @@ internal static class SyntheticAppointmentHttp
             return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
         string? after = afterValues.Count == 0 ? null : afterValues[0];
         if (string.IsNullOrEmpty(after)) after = null;
+        var departmentValues = context.Request.Query["departmentRef"];
+        var doctorValues = context.Request.Query["requestedDoctorRef"];
+        if (departmentValues.Count > 1 || doctorValues.Count > 1)
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
+        string? departmentFilter = departmentValues.Count == 0 ? null : departmentValues[0];
+        string? doctorFilter = doctorValues.Count == 0 ? null : doctorValues[0];
+        if (string.IsNullOrEmpty(departmentFilter)) departmentFilter = null;
+        if (string.IsNullOrEmpty(doctorFilter)) doctorFilter = null;
+        if ((departmentFilter is not null && !ValidRef(departmentFilter)) ||
+            (doctorFilter is not null && !ValidRef(doctorFilter)))
+            return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
+
         var limitValues = context.Request.Query["limit"];
         var limit = 10;
         if (limitValues.Count > 1 || limitValues.Count == 1 &&
@@ -101,13 +114,16 @@ internal static class SyntheticAppointmentHttp
 
         try
         {
-            var page = await Store.ReadForCenterAsync(centerRef!, after, limit);
+            var page = await Store.ReadForCenterAsync(
+                centerRef!, departmentFilter, doctorFilter, after, limit);
             return Results.Json(new
             {
                 contract = "TRN-TECH-217",
                 syntheticOnly = true,
                 source = "VERIFIED_ISOLATED_POSTGRES_APPOINTMENT_JOURNAL",
                 centerRef,
+                departmentRefFilter = departmentFilter ?? string.Empty,
+                requestedDoctorRefFilter = doctorFilter ?? string.Empty,
                 afterRequestRef = after ?? string.Empty,
                 limit,
                 hasMore = page.HasMore,

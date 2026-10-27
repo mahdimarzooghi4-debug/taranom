@@ -232,9 +232,12 @@ internal sealed class PgSyntheticAppointmentRequestJournal(
     // event and audit rows before inclusion; no member identity is projected.
     internal async Task<(IReadOnlyList<SyntheticAppointmentQueueRow> Requests,
         bool HasMore, string? NextAfterRequestRef)> ReadForCenterAsync(
-        string centerRef, string? afterRequestRef, int limit)
+        string centerRef, string? departmentRef, string? requestedDoctorRef,
+        string? afterRequestRef, int limit)
     {
         if (!TestReference(centerRef) ||
+            (departmentRef is not null && !TestReference(departmentRef)) ||
+            (requestedDoctorRef is not null && !TestReference(requestedDoctorRef)) ||
             (afterRequestRef is not null && !TestReference(afterRequestRef)) ||
             limit is < 1 or > 10)
             throw new InvalidOperationException("INVALID_APPOINTMENT_QUEUE_CURSOR");
@@ -275,7 +278,10 @@ internal sealed class PgSyntheticAppointmentRequestJournal(
                 !TestReference(latest.RequestedDoctorRef) ||
                 !TestReference(latest.SlotRef))
                 throw new InvalidOperationException("APPOINTMENT_QUEUE_PAYLOAD_UNVERIFIABLE");
-            if (latest.CenterRef != centerRef) continue;
+            if (latest.CenterRef != centerRef ||
+                (departmentRef is not null && latest.DepartmentRef != departmentRef) ||
+                (requestedDoctorRef is not null && latest.RequestedDoctorRef != requestedDoctorRef))
+                continue;
             matching.Add(new SyntheticAppointmentQueueRow(requestRef,
                 latest.CenterRef, snapshot.Revision, latest.DepartmentRef,
                 latest.RequestedDoctorRef, latest.SlotRef));

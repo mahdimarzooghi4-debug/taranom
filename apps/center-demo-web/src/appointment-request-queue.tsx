@@ -7,7 +7,8 @@ type RequestRow={
 type Queue={
   contract:'TRN-TECH-217';syntheticOnly:true;
   source:'VERIFIED_ISOLATED_POSTGRES_APPOINTMENT_JOURNAL';
-  centerRef:string;afterRequestRef:string;limit:10;
+  centerRef:string;departmentRefFilter:string;requestedDoctorRefFilter:string;
+  afterRequestRef:string;limit:10;
   hasMore:boolean;nextAfterRequestRef:string|null;requests:RequestRow[];
   memberAuthenticated:false;centerAuthenticated:false;
   requestedDoctorLicensed:false;slotAvailabilityVerified:false;
@@ -22,12 +23,13 @@ const falseKeys=[
  'slotAvailabilityVerified','bookingConfirmed','clinicalActionAllowed',
  'nationalReleaseAllowed'
 ] as const;
-function verified(value:unknown,center:string,after:string):value is Queue{
+function verified(value:unknown,center:string,departmentFilter:string,doctorFilter:string,after:string):value is Queue{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const q=value as Partial<Queue>;
  if(q.contract!=='TRN-TECH-217'||q.syntheticOnly!==true||
    q.source!=='VERIFIED_ISOLATED_POSTGRES_APPOINTMENT_JOURNAL'||
-   q.centerRef!==center||q.afterRequestRef!==after||q.limit!==limit||
+   q.centerRef!==center||q.departmentRefFilter!==departmentFilter||
+   q.requestedDoctorRefFilter!==doctorFilter||q.afterRequestRef!==after||q.limit!==limit||
    !falseKeys.every(key=>q[key]===false)||
    typeof q.hasMore!=='boolean'||!Array.isArray(q.requests)||
    q.requests.length>limit)return false;
@@ -46,26 +48,40 @@ function verified(value:unknown,center:string,after:string):value is Queue{
 
 export function AppointmentRequestQueueQa(){
  const [center,setCenter]=useState('test:center-demo');
+ const [departmentFilter,setDepartmentFilter]=useState('');
+ const [doctorFilter,setDoctorFilter]=useState('');
  const [page,setPage]=useState<Queue|null>(null);
  const [status,setStatus]=useState('صف هنوز از ژورنال PostgreSQL خوانده نشده است.');
  const [pending,setPending]=useState(false);
 
- async function read(after=''){
+ async function read(
+  after='',
+  selectedDepartment=departmentFilter.trim(),
+  selectedDoctor=doctorFilter.trim(),
+){
   if(pending)return;
   if(!isRef(center)){
    setPage(null);setStatus('فقط شناسه مرکز آزمایشی با پیشوند test: پذیرفته می‌شود.');
+   return;
+  }
+  if((selectedDepartment&&!isRef(selectedDepartment))||
+     (selectedDoctor&&!isRef(selectedDoctor))){
+   setPage(null);setStatus('فیلترها باید شناسه ساختگی با پیشوند test: باشند.');
    return;
   }
   setPending(true);setPage(null);
   try{
    const query=new URLSearchParams({limit:String(limit)});
    if(after)query.set('afterRequestRef',after);
+   if(selectedDepartment)query.set('departmentRef',selectedDepartment);
+   if(selectedDoctor)query.set('requestedDoctorRef',selectedDoctor);
    const response=await fetch('/internal/demo/v1/centers/'+
      encodeURIComponent(center)+'/appointment-requests?'+query.toString(),
      {credentials:'omit',cache:'no-store'});
    if(!response.ok)throw Error('QUEUE_READ_FAILED');
    const raw:unknown=await response.json();
-   if(!verified(raw,center,after))throw Error('QUEUE_UNVERIFIED');
+   if(!verified(raw,center,selectedDepartment,selectedDoctor,after))
+    throw Error('QUEUE_UNVERIFIED');
    setPage(raw);
    setStatus('صف فقط‌خواندنی از PostgreSQL خوانده و یکپارچگی درخواست‌ها بررسی شد.');
   }catch{
@@ -89,11 +105,24 @@ export function AppointmentRequestQueueQa(){
     <input id="appointment-queue-center" dir="ltr" autoComplete="off"
       disabled={pending} value={center} onChange={e=>{setCenter(e.target.value);setPage(null);}}/>
    </label>
+   <div className="fields">
+    <label htmlFor="appointment-queue-department">شناسه تخصص برای فیلتر (اختیاری)
+     <input id="appointment-queue-department" dir="ltr" autoComplete="off"
+       disabled={pending} value={departmentFilter}
+       onChange={e=>{setDepartmentFilter(e.target.value);setPage(null);}}/>
+    </label>
+    <label htmlFor="appointment-queue-doctor">شناسه پزشک برای فیلتر (اختیاری)
+     <input id="appointment-queue-doctor" dir="ltr" autoComplete="off"
+       disabled={pending} value={doctorFilter}
+       onChange={e=>{setDoctorFilter(e.target.value);setPage(null);}}/>
+    </label>
+   </div>
    <div className="actions">
     <button type="button" disabled={pending}
       onClick={()=>void read('')}>خواندن صف درخواست نوبت</button>
     <button type="button" disabled={pending||!page?.hasMore||!page.nextAfterRequestRef}
-      onClick={()=>{if(page?.nextAfterRequestRef)void read(page.nextAfterRequestRef);}}>
+      onClick={()=>{if(page?.nextAfterRequestRef)void read(
+        page.nextAfterRequestRef,page.departmentRefFilter,page.requestedDoctorRefFilter);}}>
       صفحه بعد درخواست‌ها
     </button>
    </div>
