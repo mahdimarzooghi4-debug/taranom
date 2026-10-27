@@ -90,8 +90,8 @@ internal static class SyntheticAppointmentHttp
         var afterValues = context.Request.Query["afterRequestRef"];
         if (afterValues.Count > 1)
             return Denied(StatusCodes.Status400BadRequest, "INVALID_TEST_QUERY");
-        var after = afterValues.Count == 0 || afterValues[0].Length == 0
-            ? null : afterValues[0];
+        string? after = afterValues.Count == 0 ? null : afterValues[0];
+        if (string.IsNullOrEmpty(after)) after = null;
         var limitValues = context.Request.Query["limit"];
         var limit = 10;
         if (limitValues.Count > 1 || limitValues.Count == 1 &&
