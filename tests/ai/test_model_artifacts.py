@@ -31,6 +31,11 @@ class LocalModelArtifactTests(unittest.TestCase):
             (root / "weights.part").write_bytes(b"synthetic-model-bytes")
             result = verify_local_model_manifest(manifest(), root)
         self.assertEqual("LOCAL_ARTIFACT_BYTES_VERIFIED_NOT_LOADED", result["status"])
+        self.assertEqual([{
+            "path": "weights.part",
+            "sha256": hashlib.sha256(b"synthetic-model-bytes").hexdigest(),
+            "size_bytes": len(b"synthetic-model-bytes"),
+        }], result["verified_files"])
         self.assertFalse(result["model_loaded"])
         self.assertFalse(result["network_used"])
         self.assertFalse(result["license_reviewed"])

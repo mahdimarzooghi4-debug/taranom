@@ -215,6 +215,7 @@ def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> 
     except OSError as exc:
         raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED") from exc
 
+    verified_files: list[dict[str, object]] = []
     try:
         for name, expected_sha, expected_size in normalized:
             digest = hashlib.sha256()
@@ -253,8 +254,14 @@ def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> 
                     raise ArtifactRejected("ARTIFACT_CHANGED_DURING_READ")
             finally:
                 os.close(file_fd)
-            if digest.hexdigest() != expected_sha:
+            actual_sha = digest.hexdigest()
+            if actual_sha != expected_sha:
                 raise ArtifactRejected("ARTIFACT_SHA256_MISMATCH")
+            verified_files.append({
+                "path": name,
+                "sha256": actual_sha,
+                "size_bytes": count,
+            })
     finally:
         os.close(root_fd)
 
@@ -264,6 +271,7 @@ def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> 
         "artifact_version": version,
         "file_count": len(normalized),
         "total_size_bytes": total_size,
+        "verified_files": verified_files,
         "model_loaded": False,
         "network_used": False,
         "manifest_authenticity_verified": False,
