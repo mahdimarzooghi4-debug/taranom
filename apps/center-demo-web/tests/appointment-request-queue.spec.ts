@@ -16,7 +16,7 @@ test('APPOINTMENT-QUEUE-02: center queue filters by requested department and pat
   const response=await request.post('/internal/demo/v1/appointment-requests/'+
    encodeURIComponent(requestRef),{data:{
     requestId:crypto.randomUUID(),expectedRevision:0,memberRef:ref('member'),
-    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
+    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),unverifiedScheduleSelection:null,
    }});
   expect(response.status()).toBe(200);
  };
@@ -77,7 +77,7 @@ test('APPOINTMENT-QUEUE-01: center sees only verified synthetic request intent, 
  const make=(target:string)=>({
   requestId:crypto.randomUUID(),expectedRevision:0,
   memberRef:ref('member'),centerRef:target,departmentRef:ref('department'),
-  requestedDoctorRef:ref('doctor'),slotRef:ref('slot')
+  requestedDoctorRef:ref('doctor'),slotRef:ref('slot'),unverifiedScheduleSelection:null
  });
  const first=await request.post('/internal/demo/v1/appointment-requests/'+
   encodeURIComponent(requestRef),{data:make(center)});
@@ -120,7 +120,7 @@ test('APPOINTMENT-QUEUE-03: department and patient-selected doctor filters work 
   const response=await request.post('/internal/demo/v1/appointment-requests/'+
    encodeURIComponent(requestRef),{data:{
     requestId:crypto.randomUUID(),expectedRevision:0,memberRef:ref('member'),
-    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
+    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),unverifiedScheduleSelection:null,
    }});
   expect(response.status()).toBe(200);
   rows.push({requestRef,departmentRef,doctorRef});
@@ -162,7 +162,7 @@ test('APPOINTMENT-QUEUE-04: clearing center queue filters reloads the unfiltered
   const response=await request.post('/internal/demo/v1/appointment-requests/'+
    encodeURIComponent(requestRef),{data:{
     requestId:crypto.randomUUID(),expectedRevision:0,memberRef:ref('member'),
-    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),
+    centerRef:center,departmentRef,requestedDoctorRef:doctorRef,slotRef:ref('slot'),unverifiedScheduleSelection:null,
    }});
   expect(response.status()).toBe(200);
   requestRefs.push(requestRef);
