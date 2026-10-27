@@ -58,6 +58,7 @@ type Receipt = {
   clinicalActionAllowed?: boolean;
   nationalReleaseAllowed?: boolean;
 };
+type RecoveryState = 'UNRESOLVED' | 'CONFIRMED_ABSENT' | null;
 
 const referencePattern = '^test:[A-Za-z0-9:_-]{1,123}$';
 const receiptFlags: Array<keyof Receipt> = [
@@ -97,6 +98,7 @@ export function AppointmentRequestDemo() {
   const [catalogMessage, setCatalogMessage] = useState('');
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryState>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -194,6 +196,7 @@ export function AppointmentRequestDemo() {
 
   const sendExactAttempt = async (candidate: Attempt) => {
     setBusy(true);
+    setRecovery('UNRESOLVED');
     setMessage('درخواست ساختگی در حال ارسال است؛ هنوز نوبتی تأیید نشده است.');
     try {
       const response = await fetch(
@@ -215,14 +218,63 @@ export function AppointmentRequestDemo() {
         allFalse(result as Record<string, unknown>, receiptFlags);
       if (!validReceipt) {
         setReceipt(null);
-        setMessage('پاسخ سرویس قابل تأیید نیست. همان شناسه و همان بدنه را فقط با اقدام دستی دوباره بفرستید.');
+        setRecovery('UNRESOLVED');
+        setMessage('پاسخ ارسال قابل تأیید نیست؛ ابتدا وضعیت همین شناسه را از دفتر ثبت بررسی کنید.');
         return;
       }
       setReceipt(result);
+      setRecovery(null);
       setMessage('درخواست ثبت شد؛ نوبت هنوز تأیید نشده است. مرکز باید جداگانه پاسخ دهد.');
     } catch {
       setReceipt(null);
-      setMessage('پاسخی دریافت نشد؛ ممکن است درخواست ثبت شده باشد. فقط ارسال دستیِ دقیق همان درخواست ممکن است.');
+      setRecovery('UNRESOLVED');
+      setMessage('پاسخی دریافت نشد و نتیجه نامشخص است؛ پیش از هر ارسال مجدد، وضعیت ثبت را بررسی کنید.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const checkExactAttempt = async () => {
+    if (!attempt || busy || receipt) return;
+    setBusy(true);
+    setMessage('در حال بررسی همان شناسه درخواست در دفتر ثبت آزمایشی…');
+    try {
+      const response = await fetch(
+        '/internal/demo/v1/appointment-requests/' + encodeURIComponent(attempt.requestRef),
+        { headers: { Accept: 'application/json' } },
+      );
+      const result = await response.json() as Receipt;
+      const commonValid = response.ok &&
+        result.contract === 'TRN-TECH-216' &&
+        result.outcome === 'Read' &&
+        Number.isSafeInteger(result.revision) &&
+        Number.isSafeInteger(result.requestCount) &&
+        Array.isArray(result.requests) &&
+        allFalse(result as Record<string, unknown>, receiptFlags);
+      if (!commonValid) {
+        setRecovery('UNRESOLVED');
+        setMessage('وضعیت درخواست از دفتر ثبت قابل تأیید نیست؛ ارسال مجدد همچنان غیرفعال است.');
+        return;
+      }
+      if (result.revision === 1 && result.requestCount === 1 &&
+          result.requests.length === 1 && result.requests[0]?.command &&
+          sameCommand(result.requests[0].command, attempt.body)) {
+        setReceipt({ ...result, outcome: 'ReadBackConfirmed' });
+        setRecovery(null);
+        setMessage('ثبت همان درخواست با بازخوانی تأیید شد؛ نوبت هنوز تأیید نشده است.');
+        return;
+      }
+      if (result.revision === 0 && result.requestCount === 0 &&
+          result.requests.length === 0) {
+        setRecovery('CONFIRMED_ABSENT');
+        setMessage('دفتر ثبت نشان داد این درخواست هنوز ثبت نشده؛ اکنون ارسال دستی همان درخواست ممکن است.');
+        return;
+      }
+      setRecovery('UNRESOLVED');
+      setMessage('محتوای دفتر ثبت با درخواست نگه‌داری‌شده منطبق نیست؛ ارسال مجدد غیرفعال ماند.');
+    } catch {
+      setRecovery('UNRESOLVED');
+      setMessage('دفتر ثبت پاسخ نداد؛ وضعیت نامشخص است و ارسال مجدد فعال نمی‌شود.');
     } finally {
       setBusy(false);
     }
@@ -255,7 +307,7 @@ export function AppointmentRequestDemo() {
   };
 
   const retry = () => {
-    if (!attempt || busy || receipt) return;
+    if (!attempt || recovery !== 'CONFIRMED_ABSENT' || busy || receipt) return;
     void sendExactAttempt(attempt);
   };
 
@@ -348,7 +400,13 @@ export function AppointmentRequestDemo() {
     </form>
     {message && <p role="status" aria-live="polite" className="status">{message}</p>}
     {attempt && !receipt && !busy && <div className="actions">
-      <button type="button" onClick={retry}>ارسال مجدد دقیق همان درخواست</button>
+      {recovery !== 'CONFIRMED_ABSENT' && <button type="button" onClick={() => void checkExactAttempt()}>
+        بررسی وضعیت همین درخواست
+      </button>}
+      {recovery === 'CONFIRMED_ABSENT' && <>
+        <button type="button" onClick={() => void checkExactAttempt()}>بازخوانی دوباره وضعیت</button>
+        <button type="button" onClick={retry}>ارسال مجدد دقیق همان درخواست</button>
+      </>}
     </div>}
     {receipt && attempt && <section className="panel" aria-labelledby="appointment-receipt-title">
       <h2 id="appointment-receipt-title">رسید درخواست آزمایشی</h2>
