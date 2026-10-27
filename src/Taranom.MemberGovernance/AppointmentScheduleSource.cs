@@ -75,6 +75,8 @@ internal sealed class AppointmentScheduleReadService(
         AppointmentScheduleQuery? query,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (query is null || !ValidRef(query.CenterRef) ||
             query.DepartmentRef is not null && !ValidRef(query.DepartmentRef) ||
             query.RequestedDoctorRef is not null && !ValidRef(query.RequestedDoctorRef) ||
@@ -88,7 +90,8 @@ internal sealed class AppointmentScheduleReadService(
 
         try
         {
-            var observation = await source.ReadAsync(query, cancellationToken);
+            var observation = await source.ReadAsync(query, cancellationToken)
+                .AsTask().WaitAsync(cancellationToken);
             if (observation is null)
                 return AppointmentScheduleReadResult.Denied(
                     AppointmentScheduleReadOutcome.SourceUnavailable);

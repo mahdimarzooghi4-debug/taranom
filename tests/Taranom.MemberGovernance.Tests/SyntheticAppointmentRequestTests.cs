@@ -257,6 +257,32 @@ public sealed class AppointmentScheduleReadServiceTests
                 .ReadAsync(Query(), cancellation.Token).AsTask());
     }
 
+
+    [Fact]
+    public async Task CancellationIsNotMaskedByInvalidOrUnconfiguredScheduleState()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new AppointmentScheduleReadService(null)
+                .ReadAsync(null, cancellation.Token).AsTask());
+    }
+
+    [Fact]
+    public async Task CallerDoesNotWaitForAdapterThatIgnoresCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var source = new DeferredScheduleSource();
+        var pending = new AppointmentScheduleReadService(source)
+            .ReadAsync(Query(), cancellation.Token).AsTask();
+
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        source.Complete();
+    }
+
     private sealed class FixedScheduleSource(
         AppointmentScheduleObservation? observation) : IAppointmentScheduleSource
     {
@@ -273,6 +299,18 @@ public sealed class AppointmentScheduleReadServiceTests
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult<AppointmentScheduleObservation?>(Observation(query));
         }
+    }
+
+    private sealed class DeferredScheduleSource : IAppointmentScheduleSource
+    {
+        private readonly TaskCompletionSource<AppointmentScheduleObservation?> pending =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ValueTask<AppointmentScheduleObservation?> ReadAsync(
+            AppointmentScheduleQuery query, CancellationToken cancellationToken) =>
+            new(pending.Task);
+
+        internal void Complete() => pending.TrySetResult(null);
     }
 
     private sealed class FailingScheduleSource : IAppointmentScheduleSource
