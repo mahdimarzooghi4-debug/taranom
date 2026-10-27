@@ -125,6 +125,10 @@ export function AppointmentRequestQueueQa(){
         page.nextAfterRequestRef,page.departmentRefFilter,page.requestedDoctorRefFilter);}}>
       صفحه بعد درخواست‌ها
     </button>
+    <button type="button" disabled={pending||(!departmentFilter&&!doctorFilter)}
+      onClick={()=>{setDepartmentFilter('');setDoctorFilter('');void read('','','');}}>
+      پاک‌کردن فیلترها
+    </button>
    </div>
    <p role="status" aria-live="polite" className="status">
     {pending?'در حال خواندن ژورنال آزمایشی…':status}
