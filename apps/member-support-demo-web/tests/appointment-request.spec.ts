@@ -1,11 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 function ref(label: string) {
   return 'test:' + label + '-' + crypto.randomUUID().replaceAll('-', '');
 }
 
 async function seedCenter(
-  request: Parameters<Parameters<typeof test>[1]>[0]['request'],
+  request: APIRequestContext,
   centerRef: string,
   departmentRef: string,
   doctorRef: string,
@@ -31,7 +31,7 @@ async function seedCenter(
 }
 
 async function prepareMemberForm(
-  page: Parameters<Parameters<typeof test>[1]>[0]['page'],
+  page: Page,
   memberRef: string,
   centerRef: string,
   departmentRef: string,
@@ -56,7 +56,7 @@ async function prepareMemberForm(
   await page.getByLabel('شناسه بازه زمانی درخواستی آزمایشی').fill(slotRef);
 }
 
-async function readCenterQueue(request: Parameters<Parameters<typeof test>[1]>[0]['request'], centerRef: string) {
+async function readCenterQueue(request: APIRequestContext, centerRef: string) {
   const response = await request.get(
     '/internal/demo/v1/centers/' + encodeURIComponent(centerRef) + '/appointment-requests?limit=10',
   );
