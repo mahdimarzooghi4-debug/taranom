@@ -93,6 +93,8 @@ internal readonly record struct SyntheticPrescriptionCopyChange(
 internal static class SyntheticPrescriptionCopyDomain
 {
     private const int MaximumDocumentBytes = 4 * 1024 * 1024;
+    internal const int MaximumHistoryVersions = 16;
+    internal const long MaximumHistoryDocumentBytes = 16L * 1024 * 1024;
 
     internal static SyntheticPrescriptionCopyChange Apply(
         SyntheticPrescriptionCopySnapshot? current,
@@ -129,6 +131,13 @@ internal static class SyntheticPrescriptionCopyDomain
 
         if (input.ExpectedRevision != snapshot.Revision)
             return new(SyntheticPrescriptionCopyOutcome.StaleRevision, snapshot);
+
+        long historyBytes = 0;
+        foreach (var version in snapshot.History)
+            historyBytes += version.DocumentBytes.Length;
+        if (snapshot.History.Length >= MaximumHistoryVersions ||
+            historyBytes + input.DocumentBytes.Length > MaximumHistoryDocumentBytes)
+            return new(SyntheticPrescriptionCopyOutcome.Invalid, snapshot);
 
         return new(SyntheticPrescriptionCopyOutcome.RecordedCopy,
             snapshot.Append(input));

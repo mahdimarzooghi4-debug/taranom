@@ -46,6 +46,23 @@ if (appointmentQaEnabled)
         new Taranom.CenterWorkflow.Demo.PgSyntheticAppointmentRequestJournal(
             appointmentWriter, appointmentReader);
 }
+// TRN-TECH-241: persistent prescription copies stay disabled outside explicit CI.
+var prescriptionCopyQaEnabled = Environment.GetEnvironmentVariable(
+    "TARANOM_PRESCRIPTION_COPY_QA") == "CI_EPHEMERAL_ONLY";
+NpgsqlDataSource? prescriptionCopyWriter = null;
+NpgsqlDataSource? prescriptionCopyReader = null;
+if (prescriptionCopyQaEnabled)
+{
+    await Taranom.CenterWorkflow.Demo.PgSyntheticPrescriptionCopyJournal
+        .InitializeAsync(dataSource);
+    var sources = await Taranom.CenterWorkflow.Demo.PgSyntheticPrescriptionCopyJournal
+        .RestrictedSourcesAsync(dataSource, connection);
+    prescriptionCopyWriter = sources.Writer;
+    prescriptionCopyReader = sources.Reader;
+    Taranom.CenterWorkflow.Demo.SyntheticPrescriptionCopyHttp.Store =
+        new Taranom.CenterWorkflow.Demo.PgSyntheticPrescriptionCopyJournal(
+            prescriptionCopyWriter, prescriptionCopyReader);
+}
 // TRN-TECH-174: late-evidence HTTP may use only isolated writer/reader.
 var lateSources=await PgLateEvidenceWorkItemJournal.RestrictedTestSourcesAsync(
     dataSource,connection);
@@ -278,6 +295,13 @@ if (appointmentQaEnabled)
     app.MapGet("/appointment-requests-qa", () =>
         Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
             "index.html"), "text/html; charset=utf-8"));
+}
+if (prescriptionCopyQaEnabled)
+{
+    app.MapPost("/internal/demo/v1/members/{memberRef}/prescriptions/{prescriptionRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticPrescriptionCopyHttp.WriteAsync);
+    app.MapGet("/internal/demo/v1/members/{memberRef}/prescriptions/{prescriptionRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticPrescriptionCopyHttp.ReadAsync);
 }
 
 app.MapGet("/internal/demo/v1/care-coordination-worklist",

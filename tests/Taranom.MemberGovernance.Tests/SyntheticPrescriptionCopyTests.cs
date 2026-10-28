@@ -172,4 +172,27 @@ public sealed class SyntheticPanelAccessPolicyTests
         Assert.False(SyntheticPanelAccessPolicy.Evaluate(null, "test:fund-taranom",
             SyntheticPanelCapability.TaranomFundRead).Allowed);
     }
+
+    [Fact]
+    public void Rejects_history_growth_beyond_bounded_storage_budget()
+    {
+        var snapshot = SyntheticPrescriptionCopySnapshot.Empty;
+        for (var revision = 0; revision < 16; revision++)
+        {
+            var command = Command(revision: revision,
+                sourceRevision: $"test:source-revision-{revision + 1}",
+                document: Document($"synthetic-copy-{revision}"));
+            var change = SyntheticPrescriptionCopyDomain.Apply(snapshot, command);
+            Assert.Equal(SyntheticPrescriptionCopyOutcome.RecordedCopy, change.Outcome);
+            snapshot = change.Snapshot;
+        }
+
+        var overflow = Command(revision: 16,
+            sourceRevision: "test:source-revision-17",
+            document: Document("synthetic-copy-overflow"));
+        var rejected = SyntheticPrescriptionCopyDomain.Apply(snapshot, overflow);
+        Assert.Equal(SyntheticPrescriptionCopyOutcome.Invalid, rejected.Outcome);
+        Assert.Equal(16, rejected.Snapshot.Revision);
+        Assert.Equal(16, rejected.Snapshot.History.Length);
+    }
 }
