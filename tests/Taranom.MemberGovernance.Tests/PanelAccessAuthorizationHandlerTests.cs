@@ -97,35 +97,12 @@ public sealed class PanelAccessAuthorizationHandlerTests
     [Fact]
     public async Task HttpMiddlewareDeniesDisconnectedPanelEvidenceWithStableResponse()
     {
-        var builder = WebApplication.CreateBuilder();
-        builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(IPAddress.Loopback, 0));
-        builder.Services
-            .AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = "synthetic-test";
-                options.DefaultChallengeScheme = "synthetic-test";
-            })
-            .AddScheme<AuthenticationSchemeOptions, SyntheticTestAuthenticationHandler>(
-                "synthetic-test", _ => { });
-        builder.Services.AddSingleton<IPanelAccessEvidenceSource>(
-            new FixedEvidenceSource(null));
-        builder.Services.Configure<PanelAccessOptions>(
-            options => options.TrustedIssuer = Issuer);
-        builder.Services.AddTaranomPanelAuthorization();
-
-        await using var app = builder.Build();
-        app.UseTaranomPanelAuthorization();
-        app.MapGet("/panel/center/revenue", () => Results.Text("endpoint reached"))
-            .RequireAuthorization(PanelAccessPolicyNames.CenterRevenueRead);
-
+        await using var host = await StartPanelTestHostAsync(
+            authenticated: true, evidence: null);
         var cancellationToken = TestContext.Current.CancellationToken;
-        await app.StartAsync(cancellationToken);
-        var address = app.Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()?.Addresses.Single()
-            ?? throw new InvalidOperationException("TEST_SERVER_ADDRESS_MISSING");
-        using var client = new HttpClient { BaseAddress = new Uri(address) };
-        using var response = await client.GetAsync("/panel/center/revenue", cancellationToken);
+
+        using var response = await host.Client.GetAsync(
+            "/panel/center/revenue", cancellationToken);
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
         Assert.Equal(StatusCodes.Status403Forbidden, (int)response.StatusCode);
@@ -138,6 +115,95 @@ public sealed class PanelAccessAuthorizationHandlerTests
         Assert.DoesNotContain("center:alpha", content);
         Assert.DoesNotContain(Issuer, content);
         Assert.DoesNotContain("endpoint reached", content);
+    }
+
+    [Fact]
+    public async Task HttpMiddlewareChallengesAnonymousPrincipalEvenWithPositiveEvidence()
+    {
+        await using var host = await StartPanelTestHostAsync(
+            authenticated: false, evidence: Evidence());
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var response = await host.Client.GetAsync(
+            "/panel/center/revenue", cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, (int)response.StatusCode);
+        Assert.Equal("application/problem+json",
+            response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("PANEL_AUTHENTICATION_REQUIRED",
+            JsonDocument.Parse(content).RootElement.GetProperty("code").GetString());
+        Assert.DoesNotContain("endpoint reached", content);
+    }
+
+    [Fact]
+    public async Task HttpMiddlewareReachesEndpointForExactSyntheticEvidence()
+    {
+        await using var host = await StartPanelTestHostAsync(
+            authenticated: true, evidence: Evidence());
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var response = await host.Client.GetAsync(
+            "/panel/center/revenue", cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        Assert.Equal(StatusCodes.Status200OK, (int)response.StatusCode);
+        Assert.Equal("endpoint reached", content);
+    }
+
+    private static async Task<PanelTestHost> StartPanelTestHostAsync(
+        bool authenticated,
+        PanelAccessEvidence? evidence)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.ConfigureKestrel(options =>
+            options.Listen(IPAddress.Loopback, 0));
+        builder.Services
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = "synthetic-test";
+                options.DefaultChallengeScheme = "synthetic-test";
+            })
+            .AddScheme<SyntheticTestAuthenticationOptions, SyntheticTestAuthenticationHandler>(
+                "synthetic-test", options => options.Authenticated = authenticated);
+        builder.Services.AddSingleton<IPanelAccessEvidenceSource>(
+            new FixedEvidenceSource(evidence));
+        builder.Services.Configure<PanelAccessOptions>(
+            options => options.TrustedIssuer = Issuer);
+        builder.Services.AddTaranomPanelAuthorization();
+
+        var app = builder.Build();
+        app.UseTaranomPanelAuthorization();
+        app.MapGet("/panel/center/revenue", () => Results.Text("endpoint reached"))
+            .RequireAuthorization(PanelAccessPolicyNames.CenterRevenueRead);
+
+        try
+        {
+            await app.StartAsync(TestContext.Current.CancellationToken);
+            var address = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()?.Addresses.Single()
+                ?? throw new InvalidOperationException("TEST_SERVER_ADDRESS_MISSING");
+            var client = new HttpClient { BaseAddress = new Uri(address) };
+            return new PanelTestHost(app, client);
+        }
+        catch
+        {
+            await app.DisposeAsync();
+            throw;
+        }
+    }
+
+    private sealed class PanelTestHost(
+        WebApplication app,
+        HttpClient client) : IAsyncDisposable
+    {
+        internal HttpClient Client { get; } = client;
+
+        public async ValueTask DisposeAsync()
+        {
+            Client.Dispose();
+            await app.DisposeAsync();
+        }
     }
 
     private const string Issuer = "https://identity.example.test/";
@@ -289,18 +355,25 @@ public sealed class PanelAccessAuthorizationHandlerTests
         return new PanelAccessEvidence(freshness, scope);
     }
 
+    private sealed class SyntheticTestAuthenticationOptions
+        : AuthenticationSchemeOptions
+    {
+        internal bool Authenticated { get; set; }
+    }
+
     private sealed class SyntheticTestAuthenticationHandler(
-        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        IOptionsMonitor<SyntheticTestAuthenticationOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder)
-        : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+        : AuthenticationHandler<SyntheticTestAuthenticationOptions>(
+            options, logger, encoder)
     {
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            var identity = new ClaimsIdentity(
-                [new Claim(ClaimTypes.NameIdentifier, "test:member")],
-                Scheme.Name);
-            var principal = new ClaimsPrincipal(identity);
+            if (!Options.Authenticated)
+                return Task.FromResult(AuthenticateResult.NoResult());
+
+            var principal = Principal(PanelCapability.CenterRevenueRead);
             var ticket = new AuthenticationTicket(principal, Scheme.Name);
             return Task.FromResult(AuthenticateResult.Success(ticket));
         }
