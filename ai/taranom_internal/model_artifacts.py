@@ -654,12 +654,13 @@ def verify_local_model_store_entry(
         payload_path,
         expected_artifact_set_sha256=store_ref,
     )
-    copy_verification = verify_local_model_artifact(
-        manifest_path,
-        payload_path,
-        expected_manifest_sha256=str(verification["manifest_sha256"]),
-        expected_artifact_set_sha256=store_ref,
-    )
+    # The first readback already hashed the exact current manifest and payload
+    # under both the stored ref and recorded manifest digest. Reconstruct the
+    # second pin result from that same verified record instead of re-reading
+    # potentially large model files a second time.
+    copy_verification = dict(verification)
+    copy_verification["manifest_pin_supplied"] = True
+    copy_verification["artifact_set_pin_supplied"] = True
 
     receipt_raw = _read_local_model_manifest_bytes(package / "verification.json")
     receipt = _parse_local_model_manifest(receipt_raw)

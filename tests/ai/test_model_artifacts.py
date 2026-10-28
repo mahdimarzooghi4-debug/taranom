@@ -6,6 +6,7 @@ from contextlib import redirect_stdout
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from ai.taranom_internal.model_artifacts import (
@@ -584,6 +585,43 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertFalse(result["clinical_use_allowed"])
         self.assertFalse(result["training_allowed"])
         self.assertFalse(result["production_allowed"])
+
+
+    def test_store_readback_hashes_payload_once_and_reconstructs_copy_pins(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            created = store_verified_local_model_artifact(
+                manifest_path, source, store
+            )
+
+            with patch(
+                    "ai.taranom_internal.model_artifacts.verify_local_model_artifact",
+                    wraps=verify_local_model_artifact,
+            ) as verify:
+                readback = verify_local_model_store_entry(
+                    store, created["store_ref"]
+                )
+
+        self.assertEqual(1, verify.call_count)
+        self.assertTrue(readback["stored_content_verified"])
+        self.assertTrue(readback["receipt_verified"])
+        self.assertEqual(
+            readback["verification"]["verified_files"],
+            readback["copy_verification"]["verified_files"],
+        )
+        self.assertTrue(readback["copy_verification"]["manifest_pin_supplied"])
+        self.assertTrue(readback["copy_verification"]["artifact_set_pin_supplied"])
+        self.assertFalse(readback["model_loaded"])
+        self.assertFalse(readback["clinical_use_allowed"])
+        self.assertFalse(readback["training_allowed"])
+        self.assertFalse(readback["production_allowed"])
 
 if __name__ == "__main__":
     unittest.main()
