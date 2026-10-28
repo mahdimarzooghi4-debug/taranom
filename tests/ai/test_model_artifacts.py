@@ -544,5 +544,46 @@ class LocalModelArtifactTests(unittest.TestCase):
                     ArtifactRejected, "UNSAFE_ARTIFACT_STORE_ENTRY"):
                 verify_local_model_store_entry(store, created["store_ref"])
 
+
+    def test_read_only_store_inventory_verifies_entries_and_reports_unknown_items(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            created = store_verified_local_model_artifact(
+                manifest_path, source, store
+            )
+            (store / "unexpected-entry").write_text("ignored?", encoding="utf-8")
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                status = artifact_cli_main(["--store-root", str(store), "--list-store"])
+            result = json.loads(output.getvalue())
+
+        self.assertEqual(0, status)
+        self.assertEqual("LOCAL_ARTIFACT_STORE_INVENTORY_READ_ONLY", result["status"])
+        self.assertEqual(2, result["entry_count"])
+        entries = {entry["store_ref"]: entry for entry in result["entries"]}
+        self.assertEqual(
+            "LOCAL_ARTIFACT_STORE_ENTRY_VERIFIED_NOT_LOADED",
+            entries[created["store_ref"]]["status"],
+        )
+        self.assertTrue(entries[created["store_ref"]]["stored_content_verified"])
+        self.assertTrue(entries[created["store_ref"]]["receipt_verified"])
+        self.assertEqual("DENIED", entries["unexpected-entry"]["status"])
+        self.assertFalse(entries["unexpected-entry"]["stored_content_verified"])
+        self.assertFalse(result["model_loaded"])
+        self.assertFalse(result["network_used"])
+        self.assertFalse(result["manifest_authenticity_verified"])
+        self.assertFalse(result["license_reviewed"])
+        self.assertFalse(result["clinical_use_allowed"])
+        self.assertFalse(result["training_allowed"])
+        self.assertFalse(result["production_allowed"])
+
 if __name__ == "__main__":
     unittest.main()

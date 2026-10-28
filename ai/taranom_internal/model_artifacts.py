@@ -25,6 +25,7 @@ _MAX_TOTAL_BYTES = 100 * 1024 * 1024 * 1024
 _CHUNK_SIZE = 1024 * 1024
 _MAX_MANIFEST_BYTES = 1024 * 1024
 _MAX_MANIFEST_JSON_DEPTH = 32
+_MAX_STORE_ENTRIES = 4096
 
 
 def _file_entry(raw: object) -> tuple[str, str, int]:
@@ -708,6 +709,79 @@ def verify_local_model_store_entry(
         "production_allowed": False,
     }
 
+
+
+def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
+    """Return a read-only inventory and verify each content-addressed entry."""
+    root = Path(store_root)
+    if root.is_symlink() or not root.is_dir():
+        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED")
+    root = root.resolve(strict=True)
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        root_fd = os.open(root, directory_flags)
+    except OSError as exc:
+        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED") from exc
+
+    try:
+        before = os.fstat(root_fd)
+        try:
+            names = sorted(os.listdir(root_fd))
+        except OSError as exc:
+            raise ArtifactRejected("ARTIFACT_STORE_INVENTORY_READ_FAILED") from exc
+        if len(names) > _MAX_STORE_ENTRIES:
+            raise ArtifactRejected("ARTIFACT_STORE_ENTRY_LIMIT_EXCEEDED")
+
+        entries: list[dict[str, object]] = []
+        for name in names:
+            if not _SHA256.fullmatch(name):
+                entries.append({
+                    "store_ref": name,
+                    "status": "DENIED",
+                    "error": "LOWERCASE_ARTIFACT_STORE_REF_REQUIRED",
+                    "stored_content_verified": False,
+                    "receipt_verified": False,
+                })
+                continue
+            try:
+                verified = verify_local_model_store_entry(root, name)
+                verification = verified["verification"]
+                entries.append({
+                    "store_ref": name,
+                    "status": verified["status"],
+                    "candidate_ref": verification["candidate_ref"],
+                    "artifact_version": verification["artifact_version"],
+                    "artifact_set_sha256": verification["artifact_set_sha256"],
+                    "stored_content_verified": verified["stored_content_verified"],
+                    "receipt_verified": verified["receipt_verified"],
+                })
+            except (ArtifactRejected, OSError, ValueError) as exc:
+                entries.append({
+                    "store_ref": name,
+                    "status": "DENIED",
+                    "error": str(exc),
+                    "stored_content_verified": False,
+                    "receipt_verified": False,
+                })
+
+        after = os.fstat(root_fd)
+        if _stat_signature(before) != _stat_signature(after):
+            raise ArtifactRejected("ARTIFACT_STORE_INVENTORY_CHANGED")
+    finally:
+        os.close(root_fd)
+
+    return {
+        "status": "LOCAL_ARTIFACT_STORE_INVENTORY_READ_ONLY",
+        "entry_count": len(entries),
+        "entries": entries,
+        "model_loaded": False,
+        "network_used": False,
+        "manifest_authenticity_verified": False,
+        "license_reviewed": False,
+        "clinical_use_allowed": False,
+        "training_allowed": False,
+        "production_allowed": False,
+    }
 
 def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> dict[str, object]:
     """Check declared bytes under a local root; this function never loads weights.
