@@ -55,7 +55,8 @@ public sealed class PanelAccessAuthorizationHandlerTests
             PolicyAuthorizationResult.Forbid());
 
         context.Response.Body.Position = 0;
-        using var body = await JsonDocument.ParseAsync(context.Response.Body);
+        using var body = await JsonDocument.ParseAsync(context.Response.Body,
+            cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
         Assert.Equal("application/problem+json", context.Response.ContentType);
         Assert.Equal("no-store", context.Response.Headers.CacheControl);
