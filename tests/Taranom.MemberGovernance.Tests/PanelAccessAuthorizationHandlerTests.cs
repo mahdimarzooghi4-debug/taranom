@@ -72,7 +72,9 @@ public sealed class PanelAccessAuthorizationHandlerTests
         var handler = services.GetRequiredService<IAuthorizationMiddlewareResultHandler>();
         var context = new DefaultHttpContext();
         var called = false;
-        var policy = new AuthorizationPolicyBuilder().Build();
+        var policy = new AuthorizationPolicyBuilder()
+            .RequireAssertion(_ => true)
+            .Build();
 
         await handler.HandleAsync(
             _ => { called = true; return Task.CompletedTask; },
