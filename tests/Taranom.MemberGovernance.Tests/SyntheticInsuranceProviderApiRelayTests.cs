@@ -39,7 +39,7 @@ public sealed class SyntheticInsuranceProviderApiRelayTests
         var exchangeId = Guid.NewGuid();
 
         var result = await relay.ForwardAsync(
-            exchangeId, "test:insurer-a", request);
+            exchangeId, "test:insurer-a", request, TestContext.Current.CancellationToken);
 
         Assert.Equal(InsuranceProviderRelayOutcome.ResponseReceived, result.Outcome);
         Assert.Equal(exchangeId, result.ExchangeId);
@@ -58,7 +58,7 @@ public sealed class SyntheticInsuranceProviderApiRelayTests
         var relay = new SyntheticInsuranceProviderApiRelay(api);
 
         var result = await relay.ForwardAsync(Guid.NewGuid(), "test:insurer-a",
-            ImmutableArray.CreateRange(new byte[] { 1, 2, 3 }));
+            ImmutableArray.CreateRange(new byte[] { 1, 2, 3 }), TestContext.Current.CancellationToken);
 
         Assert.Equal(InsuranceProviderRelayOutcome.ResponseReceived, result.Outcome);
         Assert.Equal(422, result.ProviderHttpStatusCode);
@@ -75,7 +75,7 @@ public sealed class SyntheticInsuranceProviderApiRelayTests
         var relay = new SyntheticInsuranceProviderApiRelay(api);
 
         var result = await relay.ForwardAsync(Guid.NewGuid(), providerRef,
-            ImmutableArray.CreateRange(new byte[] { 1 }));
+            ImmutableArray.CreateRange(new byte[] { 1 }), TestContext.Current.CancellationToken);
 
         Assert.Equal(InsuranceProviderRelayOutcome.Denied, result.Outcome);
         Assert.Equal(0, api.Calls);
@@ -88,9 +88,9 @@ public sealed class SyntheticInsuranceProviderApiRelayTests
         var relay = new SyntheticInsuranceProviderApiRelay(api);
 
         var empty = await relay.ForwardAsync(Guid.NewGuid(), "test:insurer-a",
-            ImmutableArray<byte>.Empty);
+            ImmutableArray<byte>.Empty, TestContext.Current.CancellationToken);
         var oversized = await relay.ForwardAsync(Guid.NewGuid(), "test:insurer-a",
-            ImmutableArray.CreateRange(new byte[SyntheticInsuranceProviderApiRelay.MaximumMessageBytes + 1]));
+            ImmutableArray.CreateRange(new byte[SyntheticInsuranceProviderApiRelay.MaximumMessageBytes + 1]), TestContext.Current.CancellationToken);
 
         Assert.Equal(InsuranceProviderRelayOutcome.Denied, empty.Outcome);
         Assert.Equal(InsuranceProviderRelayOutcome.Denied, oversized.Outcome);
@@ -104,7 +104,7 @@ public sealed class SyntheticInsuranceProviderApiRelayTests
         var relay = new SyntheticInsuranceProviderApiRelay(api);
 
         var result = await relay.ForwardAsync(Guid.NewGuid(), "test:insurer-a",
-            ImmutableArray.CreateRange(new byte[] { 1 }));
+            ImmutableArray.CreateRange(new byte[] { 1 }), TestContext.Current.CancellationToken);
 
         Assert.Equal(InsuranceProviderRelayOutcome.Denied, result.Outcome);
         Assert.Null(result.ProviderHttpStatusCode);
@@ -117,7 +117,7 @@ public sealed class SyntheticInsuranceProviderApiRelayTests
         var relay = new SyntheticInsuranceProviderApiRelay(api);
 
         var result = await relay.ForwardAsync(Guid.Empty, "test:insurer-a",
-            ImmutableArray.CreateRange(new byte[] { 1 }));
+            ImmutableArray.CreateRange(new byte[] { 1 }), TestContext.Current.CancellationToken);
 
         Assert.Equal(InsuranceProviderRelayOutcome.Denied, result.Outcome);
         Assert.Equal(Guid.Empty, result.ExchangeId);
