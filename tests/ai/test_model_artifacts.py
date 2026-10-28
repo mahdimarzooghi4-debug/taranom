@@ -161,7 +161,7 @@ class LocalModelArtifactTests(unittest.TestCase):
                 readback["status"],
             )
             self.assertTrue(readback["stored_content_verified"])
-            self.assertTrue(readback["receipt_verified"])
+            self.assertTrue(readback["receipt_consistency_verified"])
             self.assertEqual(
                 result["store_ref"],
                 readback["copy_verification"]["artifact_set_sha256"],
@@ -393,7 +393,7 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertEqual(
             "LOCAL_ARTIFACT_STORE_ENTRY_VERIFIED_NOT_LOADED", result["status"]
         )
-        self.assertTrue(result["receipt_verified"])
+        self.assertTrue(result["receipt_consistency_verified"])
         self.assertFalse(result["model_loaded"])
         self.assertFalse(result["clinical_use_allowed"])
         self.assertFalse(result["production_allowed"])
@@ -575,7 +575,7 @@ class LocalModelArtifactTests(unittest.TestCase):
             entries[created["store_ref"]]["status"],
         )
         self.assertTrue(entries[created["store_ref"]]["stored_content_verified"])
-        self.assertTrue(entries[created["store_ref"]]["receipt_verified"])
+        self.assertTrue(entries[created["store_ref"]]["receipt_consistency_verified"])
         self.assertEqual("DENIED", entries["unexpected-entry"]["status"])
         self.assertFalse(entries["unexpected-entry"]["stored_content_verified"])
         self.assertFalse(result["model_loaded"])
@@ -611,7 +611,7 @@ class LocalModelArtifactTests(unittest.TestCase):
 
         self.assertEqual(1, verify.call_count)
         self.assertTrue(readback["stored_content_verified"])
-        self.assertTrue(readback["receipt_verified"])
+        self.assertTrue(readback["receipt_consistency_verified"])
         self.assertEqual(
             readback["verification"]["verified_files"],
             readback["copy_verification"]["verified_files"],

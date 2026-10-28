@@ -698,7 +698,7 @@ def verify_local_model_store_entry(
         "status": "LOCAL_ARTIFACT_STORE_ENTRY_VERIFIED_NOT_LOADED",
         "store_ref": store_ref,
         "stored_content_verified": True,
-        "receipt_verified": True,
+        "receipt_consistency_verified": True,
         "verification": verification,
         "copy_verification": copy_verification,
         "model_loaded": False,
@@ -741,7 +741,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
                     "status": "DENIED",
                     "error": "LOWERCASE_ARTIFACT_STORE_REF_REQUIRED",
                     "stored_content_verified": False,
-                    "receipt_verified": False,
+                    "receipt_consistency_verified": False,
                 })
                 continue
             try:
@@ -754,7 +754,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
                     "artifact_version": verification["artifact_version"],
                     "artifact_set_sha256": verification["artifact_set_sha256"],
                     "stored_content_verified": verified["stored_content_verified"],
-                    "receipt_verified": verified["receipt_verified"],
+                    "receipt_consistency_verified": verified["receipt_consistency_verified"],
                 })
             except (ArtifactRejected, OSError, ValueError) as exc:
                 entries.append({
@@ -762,7 +762,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
                     "status": "DENIED",
                     "error": str(exc),
                     "stored_content_verified": False,
-                    "receipt_verified": False,
+                    "receipt_consistency_verified": False,
                 })
 
         after = os.fstat(root_fd)
