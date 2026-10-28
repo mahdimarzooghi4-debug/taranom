@@ -610,6 +610,7 @@ def verify_local_model_store_entry(
     if type(store_ref) is not str or not _SHA256.fullmatch(store_ref):
         raise ArtifactRejected("LOWERCASE_ARTIFACT_STORE_REF_REQUIRED")
 
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     if type(store_root) is int:
         try:
             root_fd = os.dup(store_root)
@@ -624,7 +625,6 @@ def verify_local_model_store_entry(
         if root.is_symlink() or not root.is_dir():
             raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED")
         root = root.resolve(strict=True)
-        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
         try:
             root_fd = os.open(root, directory_flags)
         except OSError as exc:
