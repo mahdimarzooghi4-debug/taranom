@@ -14,6 +14,13 @@ internal enum PanelCapability
     SupportedCaseFinanceRead = 6
 }
 
+// Values must come from server-side resource resolution. RequestScopeHint is
+// untrusted input and can only be checked against that resolved resource scope.
+internal readonly record struct PanelScopeContext(
+    string? ServerResolvedScopeRef,
+    string? RequestScopeHint,
+    string? ResourceOwnerScopeRef);
+
 internal readonly record struct PanelAccessDecision(bool Allowed, string Reason);
 
 internal static class PanelAccessPolicy
@@ -23,21 +30,37 @@ internal static class PanelAccessPolicy
     private const string GrantPrefix = "v1|";
 
     // The caller must pass a ClaimsPrincipal produced by the server's
-    // configured authentication handler. Constructing claims in application
-    // code or from request parameters does not establish identity or authority.
-    // Sprint 243 configures no handler, issuer, endpoint, or production gate.
+    // configured authentication handler and a scope context produced by the
+    // server's resource resolver. Constructing either from request parameters
+    // does not establish identity, ownership, or authority.
+    // Sprint 244 configures no handler, resolver, issuer, endpoint, or gate.
     internal static PanelAccessDecision Evaluate(
         ClaimsPrincipal? principal,
         string? trustedIssuer,
-        string? requestedScopeRef,
+        PanelScopeContext? scopeContext,
         PanelCapability capability)
     {
         if (principal is null)
             return new(false, "IDENTITY_MISSING");
         if (string.IsNullOrWhiteSpace(trustedIssuer))
             return new(false, "TRUSTED_ISSUER_NOT_CONFIGURED");
-        if (!IsValidScope(requestedScopeRef) || !Enum.IsDefined(capability))
-            return new(false, "INVALID_PANEL_REQUEST");
+        if (!Enum.IsDefined(capability))
+            return new(false, "INVALID_PANEL_CAPABILITY");
+        if (scopeContext is null ||
+            !IsValidScope(scopeContext.Value.ServerResolvedScopeRef))
+            return new(false, "SERVER_SCOPE_NOT_RESOLVED");
+
+        var scope = scopeContext.Value;
+        if (!IsValidScope(scope.ResourceOwnerScopeRef) ||
+            !string.Equals(scope.ServerResolvedScopeRef,
+                scope.ResourceOwnerScopeRef, StringComparison.Ordinal))
+            return new(false, "RESOURCE_SCOPE_MISMATCH");
+
+        if (scope.RequestScopeHint is not null &&
+            (!IsValidScope(scope.RequestScopeHint) ||
+             !string.Equals(scope.RequestScopeHint,
+                 scope.ServerResolvedScopeRef, StringComparison.Ordinal)))
+            return new(false, "REQUEST_SCOPE_HINT_MISMATCH");
 
         var capabilityName = capability.ToString();
         foreach (var identity in principal.Identities)
@@ -51,7 +74,7 @@ internal static class PanelAccessPolicy
                     continue;
 
                 if (TryReadGrant(claim.Value, out var scopeRef, out var claimedCapability) &&
-                    string.Equals(scopeRef, requestedScopeRef, StringComparison.Ordinal) &&
+                    string.Equals(scopeRef, scope.ServerResolvedScopeRef, StringComparison.Ordinal) &&
                     string.Equals(claimedCapability, capabilityName, StringComparison.Ordinal))
                     return new(true, "EXACT_TRUSTED_CAPABILITY_AND_SCOPE");
             }

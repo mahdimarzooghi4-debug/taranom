@@ -15,7 +15,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         var decision = PanelAccessPolicy.Evaluate(
-            principal, Issuer, Scope, PanelCapability.CenterRevenueRead);
+            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead);
 
         Assert.True(decision.Allowed);
         Assert.Equal("EXACT_TRUSTED_CAPABILITY_AND_SCOPE", decision.Reason);
@@ -29,7 +29,7 @@ public sealed class PanelAccessPolicyTests
             "https://untrusted.example.test/");
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, Scope, PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, "center:beta", PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, ScopeContext("center:beta"), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, Scope, PanelCapability.CenterAppointmentsManage).Allowed);
+            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterAppointmentsManage).Allowed);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class PanelAccessPolicyTests
         var principal = new ClaimsPrincipal(identity);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, Scope, PanelCapability.TaranomFundRead).Allowed);
+            principal, Issuer, ScopeContext(Scope), PanelCapability.TaranomFundRead).Allowed);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class PanelAccessPolicyTests
         var principal = new ClaimsPrincipal(identity);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, Scope, PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Theory]
@@ -84,7 +84,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         var decision = PanelAccessPolicy.Evaluate(
-            principal, issuer, Scope, PanelCapability.CenterRevenueRead);
+            principal, issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead);
 
         Assert.False(decision.Allowed);
         Assert.Equal("TRUSTED_ISSUER_NOT_CONFIGURED", decision.Reason);
@@ -96,7 +96,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, Scope, (PanelCapability)999).Allowed);
+            principal, Issuer, ScopeContext(Scope), (PanelCapability)999).Allowed);
     }
 
     [Fact]
@@ -105,8 +105,58 @@ public sealed class PanelAccessPolicyTests
         var malformed = Principal("v1|4|abc|CenterRevenueRead", Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            malformed, Issuer, Scope, PanelCapability.CenterRevenueRead).Allowed);
+            malformed, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
+
+
+    [Fact]
+    public void UnresolvedServerScopeDeniesEvenWhenRequestHintMatches()
+    {
+        var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
+        var context = new PanelScopeContext(null, Scope, Scope);
+
+        Assert.False(PanelAccessPolicy.Evaluate(
+            principal, Issuer, context, PanelCapability.CenterRevenueRead).Allowed);
+    }
+
+    [Fact]
+    public void RequestHintCannotSelectAnotherScope()
+    {
+        var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
+        var context = new PanelScopeContext(Scope, "center:attacker", Scope);
+
+        var decision = PanelAccessPolicy.Evaluate(
+            principal, Issuer, context, PanelCapability.CenterRevenueRead);
+
+        Assert.False(decision.Allowed);
+        Assert.Equal("REQUEST_SCOPE_HINT_MISMATCH", decision.Reason);
+    }
+
+    [Fact]
+    public void ResourceOwnershipMustMatchServerResolvedScope()
+    {
+        var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
+        var context = new PanelScopeContext(Scope, Scope, "center:other");
+
+        Assert.False(PanelAccessPolicy.Evaluate(
+            principal, Issuer, context, PanelCapability.CenterRevenueRead).Allowed);
+    }
+
+    [Fact]
+    public void MatchingRequestHintDoesNotReplaceMissingServerResolution()
+    {
+        var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
+        var context = new PanelScopeContext(null, Scope, Scope);
+
+        var decision = PanelAccessPolicy.Evaluate(
+            principal, Issuer, context, PanelCapability.CenterRevenueRead);
+
+        Assert.False(decision.Allowed);
+        Assert.Equal("SERVER_SCOPE_NOT_RESOLVED", decision.Reason);
+    }
+
+    private static PanelScopeContext ScopeContext(string? scope) =>
+        new(scope, scope, scope);
 
     private static ClaimsPrincipal Principal(string value, string issuer)
     {
