@@ -13,31 +13,44 @@ from .model_artifacts import (
     ArtifactRejected,
     store_verified_local_model_artifact,
     verify_local_model_artifact,
+    verify_local_model_store_entry,
 )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", required=True)
-    parser.add_argument("--artifact-root", required=True)
+    parser.add_argument("--manifest")
+    parser.add_argument("--artifact-root")
     parser.add_argument("--expected-manifest-sha256")
     parser.add_argument("--expected-artifact-set-sha256")
     parser.add_argument("--store-root")
+    parser.add_argument("--verify-store-ref")
     arguments = parser.parse_args(argv)
+    if arguments.verify_store_ref is not None:
+        if (arguments.store_root is None or arguments.manifest is not None
+                or arguments.artifact_root is not None
+                or arguments.expected_manifest_sha256 is not None
+                or arguments.expected_artifact_set_sha256 is not None):
+            parser.error(
+                "--verify-store-ref requires --store-root and cannot combine "
+                "with source manifest, artifact root, or expected pins"
+            )
+    elif arguments.manifest is None or arguments.artifact_root is None:
+        parser.error("--manifest and --artifact-root are required for source verification")
     try:
-        verifier = (
-            store_verified_local_model_artifact
-            if arguments.store_root is not None else verify_local_model_artifact
-        )
-        if arguments.store_root is None:
-            result = verifier(
+        if arguments.verify_store_ref is not None:
+            result = verify_local_model_store_entry(
+                arguments.store_root, arguments.verify_store_ref
+            )
+        elif arguments.store_root is None:
+            result = verify_local_model_artifact(
                 arguments.manifest,
                 arguments.artifact_root,
                 expected_manifest_sha256=arguments.expected_manifest_sha256,
                 expected_artifact_set_sha256=arguments.expected_artifact_set_sha256,
             )
         else:
-            result = verifier(
+            result = store_verified_local_model_artifact(
                 arguments.manifest,
                 arguments.artifact_root,
                 arguments.store_root,

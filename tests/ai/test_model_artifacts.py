@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ai.taranom_internal.model_artifacts import (
     ArtifactRejected, load_local_model_manifest,
-    store_verified_local_model_artifact,
+    store_verified_local_model_artifact, verify_local_model_store_entry,
     verify_local_model_artifact, verify_local_model_manifest,
 )
 from ai.taranom_internal.model_artifact_cli import main as artifact_cli_main
@@ -154,6 +154,17 @@ class LocalModelArtifactTests(unittest.TestCase):
             self.assertFalse(receipt["manifest_authenticity_verified"])
             self.assertFalse(receipt["clinical_use_allowed"])
             self.assertFalse(receipt["production_allowed"])
+            readback = verify_local_model_store_entry(store, result["store_ref"])
+            self.assertEqual(
+                "LOCAL_ARTIFACT_STORE_ENTRY_VERIFIED_NOT_LOADED",
+                readback["status"],
+            )
+            self.assertTrue(readback["stored_content_verified"])
+            self.assertTrue(readback["receipt_verified"])
+            self.assertEqual(
+                result["store_ref"],
+                readback["copy_verification"]["artifact_set_sha256"],
+            )
             self.assertEqual(
                 {result["store_ref"]}, {entry.name for entry in store.iterdir()}
             )
@@ -351,6 +362,37 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertTrue(result["store_created"])
         self.assertEqual(data, stored_payload)
         self.assertEqual(manifest_bytes, stored_manifest)
+        self.assertFalse(result["model_loaded"])
+        self.assertFalse(result["clinical_use_allowed"])
+        self.assertFalse(result["production_allowed"])
+
+    def test_cli_verifies_stored_package_read_only(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifact_root = root / "weights"
+            artifact_root.mkdir()
+            (artifact_root / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store_root = root / "managed-store"
+            store_root.mkdir()
+            created = store_verified_local_model_artifact(
+                manifest_path, artifact_root, store_root
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                status = artifact_cli_main([
+                    "--store-root", str(store_root),
+                    "--verify-store-ref", created["store_ref"],
+                ])
+            result = json.loads(output.getvalue())
+
+        self.assertEqual(0, status)
+        self.assertEqual(
+            "LOCAL_ARTIFACT_STORE_ENTRY_VERIFIED_NOT_LOADED", result["status"]
+        )
+        self.assertTrue(result["receipt_verified"])
         self.assertFalse(result["model_loaded"])
         self.assertFalse(result["clinical_use_allowed"])
         self.assertFalse(result["production_allowed"])

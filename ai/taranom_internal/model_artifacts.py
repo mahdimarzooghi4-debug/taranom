@@ -584,6 +584,131 @@ def _artifact_set_sha256(
     return digest.hexdigest()
 
 
+def verify_local_model_store_entry(
+    store_root: str | Path, store_ref: str
+) -> dict[str, object]:
+    """Read back a stored package and verify payload, manifest, and receipt."""
+    if type(store_ref) is not str or not _SHA256.fullmatch(store_ref):
+        raise ArtifactRejected("LOWERCASE_ARTIFACT_STORE_REF_REQUIRED")
+
+    root = Path(store_root)
+    if root.is_symlink() or not root.is_dir():
+        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED")
+    root = root.resolve(strict=True)
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        root_fd = os.open(root, directory_flags)
+    except OSError as exc:
+        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED") from exc
+
+    try:
+        try:
+            package_stat = os.stat(store_ref, dir_fd=root_fd, follow_symlinks=False)
+        except OSError as exc:
+            raise ArtifactRejected("LOCAL_ARTIFACT_STORE_ENTRY_MISSING") from exc
+        if not stat.S_ISDIR(package_stat.st_mode):
+            raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_ENTRY")
+        try:
+            package_fd = os.open(store_ref, directory_flags, dir_fd=root_fd)
+        except OSError as exc:
+            raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_ENTRY") from exc
+        try:
+            package_before = os.fstat(package_fd)
+            expected_names = {"payload", "manifest.json", "verification.json"}
+            try:
+                names = set(os.listdir(package_fd))
+                for name, is_directory in (
+                    ("payload", True),
+                    ("manifest.json", False),
+                    ("verification.json", False),
+                ):
+                    entry_stat = os.stat(
+                        name, dir_fd=package_fd, follow_symlinks=False
+                    )
+                    if is_directory:
+                        valid_type = stat.S_ISDIR(entry_stat.st_mode)
+                    else:
+                        valid_type = stat.S_ISREG(entry_stat.st_mode)
+                    if not valid_type:
+                        raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_ENTRY")
+            except ArtifactRejected:
+                raise
+            except OSError as exc:
+                raise ArtifactRejected("ARTIFACT_STORE_ENTRY_CHANGED") from exc
+            if names != expected_names:
+                raise ArtifactRejected("ARTIFACT_STORE_ENTRY_SCHEMA_INVALID")
+            package_after = os.fstat(package_fd)
+            if _stat_signature(package_before) != _stat_signature(package_after):
+                raise ArtifactRejected("ARTIFACT_STORE_ENTRY_CHANGED")
+        finally:
+            os.close(package_fd)
+    finally:
+        os.close(root_fd)
+
+    package = root / store_ref
+    manifest_path = package / "manifest.json"
+    payload_path = package / "payload"
+    verification = verify_local_model_artifact(
+        manifest_path,
+        payload_path,
+        expected_artifact_set_sha256=store_ref,
+    )
+    copy_verification = verify_local_model_artifact(
+        manifest_path,
+        payload_path,
+        expected_manifest_sha256=str(verification["manifest_sha256"]),
+        expected_artifact_set_sha256=store_ref,
+    )
+
+    receipt_raw = _read_local_model_manifest_bytes(package / "verification.json")
+    receipt = _parse_local_model_manifest(receipt_raw)
+    required_keys = {
+        "status", "store_ref", "verification", "copy_verification",
+        "model_loaded", "network_used", "manifest_authenticity_verified",
+        "license_reviewed", "clinical_use_allowed", "training_allowed",
+        "production_allowed",
+    }
+    if (type(receipt) is not dict or set(receipt) != required_keys
+            or receipt["status"] != "LOCAL_ARTIFACT_STORED_NOT_LOADED"
+            or receipt["store_ref"] != store_ref
+            or any(receipt[key] is not False for key in (
+                "model_loaded", "network_used", "manifest_authenticity_verified",
+                "license_reviewed", "clinical_use_allowed", "training_allowed",
+                "production_allowed",
+            ))):
+        raise ArtifactRejected("ARTIFACT_STORE_RECEIPT_INVALID")
+
+    source_record = receipt["verification"]
+    copy_record = receipt["copy_verification"]
+    pin_fields = {"manifest_pin_supplied", "artifact_set_pin_supplied"}
+    if (type(source_record) is not dict or set(source_record) != set(verification)
+            or type(copy_record) is not dict or set(copy_record) != set(copy_verification)
+            or any(type(source_record[key]) is not bool for key in pin_fields)
+            or source_record["manifest_pin_supplied"] not in (True, False)
+            or source_record["artifact_set_pin_supplied"] not in (True, False)
+            or any(copy_record[key] != value
+                   for key, value in copy_verification.items())
+            or any(source_record[key] != value for key, value in verification.items()
+                   if key not in pin_fields)):
+        raise ArtifactRejected("ARTIFACT_STORE_RECEIPT_INVALID")
+
+    return {
+        "status": "LOCAL_ARTIFACT_STORE_ENTRY_VERIFIED_NOT_LOADED",
+        "store_ref": store_ref,
+        "stored_content_verified": True,
+        "receipt_verified": True,
+        "verification": verification,
+        "copy_verification": copy_verification,
+        "model_loaded": False,
+        "network_used": False,
+        "manifest_authenticity_verified": False,
+        "license_reviewed": False,
+        "clinical_use_allowed": False,
+        "training_allowed": False,
+        "production_allowed": False,
+    }
+
+
 def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> dict[str, object]:
     """Check declared bytes under a local root; this function never loads weights.
 
