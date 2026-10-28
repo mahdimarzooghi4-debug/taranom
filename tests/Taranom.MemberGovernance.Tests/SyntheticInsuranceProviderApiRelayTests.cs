@@ -109,4 +109,18 @@ public sealed class SyntheticInsuranceProviderApiRelayTests
         Assert.Equal(InsuranceProviderRelayOutcome.Denied, result.Outcome);
         Assert.Null(result.ProviderHttpStatusCode);
     }
+
+    [Fact]
+    public async Task Denies_empty_exchange_id_without_calling_api()
+    {
+        var api = new FakeProviderApi(new(200, ImmutableArray<byte>.Empty));
+        var relay = new SyntheticInsuranceProviderApiRelay(api);
+
+        var result = await relay.ForwardAsync(Guid.Empty, "test:insurer-a",
+            ImmutableArray.CreateRange(new byte[] { 1 }));
+
+        Assert.Equal(InsuranceProviderRelayOutcome.Denied, result.Outcome);
+        Assert.Equal(Guid.Empty, result.ExchangeId);
+        Assert.Equal(0, api.Calls);
+    }
 }
