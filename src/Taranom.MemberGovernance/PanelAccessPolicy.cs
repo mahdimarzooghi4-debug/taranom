@@ -33,7 +33,7 @@ internal static class PanelAccessPolicy
     // configured authentication handler and a scope context produced by the
     // server's resource resolver. Constructing either from request parameters
     // does not establish identity, ownership, or authority.
-    // Sprint 244 configures no handler, resolver, issuer, endpoint, or gate.
+    // Sprint 245 configures no handler, resolver, issuer, endpoint, or gate.
     internal static PanelAccessDecision Evaluate(
         ClaimsPrincipal? principal,
         string? trustedIssuer,
@@ -44,7 +44,8 @@ internal static class PanelAccessPolicy
             return new(false, "IDENTITY_MISSING");
         if (string.IsNullOrWhiteSpace(trustedIssuer))
             return new(false, "TRUSTED_ISSUER_NOT_CONFIGURED");
-        if (!Enum.IsDefined(capability))
+        var capabilityToken = GetCapabilityToken(capability);
+        if (capabilityToken is null)
             return new(false, "INVALID_PANEL_CAPABILITY");
         if (scopeContext is null ||
             !IsValidScope(scopeContext.Value.ServerResolvedScopeRef))
@@ -62,7 +63,6 @@ internal static class PanelAccessPolicy
                  scope.ServerResolvedScopeRef, StringComparison.Ordinal)))
             return new(false, "REQUEST_SCOPE_HINT_MISMATCH");
 
-        var capabilityName = capability.ToString();
         foreach (var identity in principal.Identities)
         {
             if (!identity.IsAuthenticated)
@@ -75,12 +75,44 @@ internal static class PanelAccessPolicy
 
                 if (TryReadGrant(claim.Value, out var scopeRef, out var claimedCapability) &&
                     string.Equals(scopeRef, scope.ServerResolvedScopeRef, StringComparison.Ordinal) &&
-                    string.Equals(claimedCapability, capabilityName, StringComparison.Ordinal))
+                    claimedCapability == capability)
                     return new(true, "EXACT_TRUSTED_CAPABILITY_AND_SCOPE");
             }
         }
 
         return new(false, "CAPABILITY_SCOPE_OR_ISSUER_DENIED");
+    }
+
+    // These tokens are the v1 claim contract. Keep them explicit so renaming
+    // an internal enum member cannot silently change values already in tokens.
+    internal static string? GetCapabilityToken(PanelCapability capability) =>
+        capability switch
+        {
+            PanelCapability.MemberOwnPrescriptionRead => "MemberOwnPrescriptionRead",
+            PanelCapability.CenterRosterManage => "CenterRosterManage",
+            PanelCapability.CenterAppointmentsManage => "CenterAppointmentsManage",
+            PanelCapability.CenterRevenueRead => "CenterRevenueRead",
+            PanelCapability.TaranomFundRead => "TaranomFundRead",
+            PanelCapability.SupportedCaseFinanceRead => "SupportedCaseFinanceRead",
+            _ => null
+        };
+
+    private static bool TryParseCapabilityToken(
+        string value,
+        out PanelCapability capability)
+    {
+        capability = value switch
+        {
+            "MemberOwnPrescriptionRead" => PanelCapability.MemberOwnPrescriptionRead,
+            "CenterRosterManage" => PanelCapability.CenterRosterManage,
+            "CenterAppointmentsManage" => PanelCapability.CenterAppointmentsManage,
+            "CenterRevenueRead" => PanelCapability.CenterRevenueRead,
+            "TaranomFundRead" => PanelCapability.TaranomFundRead,
+            "SupportedCaseFinanceRead" => PanelCapability.SupportedCaseFinanceRead,
+            _ => default
+        };
+        return GetCapabilityToken(capability) is not null &&
+            string.Equals(GetCapabilityToken(capability), value, StringComparison.Ordinal);
     }
 
     private static bool IsValidScope(string? scopeRef) =>
@@ -93,10 +125,10 @@ internal static class PanelAccessPolicy
     private static bool TryReadGrant(
         string? value,
         out string scopeRef,
-        out string capability)
+        out PanelCapability capability)
     {
         scopeRef = string.Empty;
-        capability = string.Empty;
+        capability = default;
 
         if (value is null || !value.StartsWith(GrantPrefix, StringComparison.Ordinal))
             return false;
@@ -118,11 +150,10 @@ internal static class PanelAccessPolicy
             return false;
 
         var parsedCapability = value[(capabilitySeparator + 1)..];
-        if (!Enum.GetNames<PanelCapability>().Contains(parsedCapability, StringComparer.Ordinal))
+        if (!TryParseCapabilityToken(parsedCapability, out capability))
             return false;
 
         scopeRef = value.Substring(scopeStart, scopeLength);
-        capability = parsedCapability;
         return true;
     }
 }

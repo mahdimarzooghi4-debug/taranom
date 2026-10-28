@@ -90,9 +90,23 @@ public sealed class PanelAccessPolicyTests
         Assert.Equal("TRUSTED_ISSUER_NOT_CONFIGURED", decision.Reason);
     }
 
-    [Fact]
-    public void UndefinedCapabilityFailsClosed()
+    [Theory]
+    [InlineData(1, "MemberOwnPrescriptionRead")]
+    [InlineData(2, "CenterRosterManage")]
+    [InlineData(3, "CenterAppointmentsManage")]
+    [InlineData(4, "CenterRevenueRead")]
+    [InlineData(5, "TaranomFundRead")]
+    [InlineData(6, "SupportedCaseFinanceRead")]
+    public void CapabilityClaimTokensRemainStable(int value, string expected)
     {
+        Assert.Equal(expected,
+            PanelAccessPolicy.GetCapabilityToken((PanelCapability)value));
+    }
+
+    [Fact]
+    public void CapabilityWithoutStableTokenFailsClosed()
+    {
+        Assert.Null(PanelAccessPolicy.GetCapabilityToken((PanelCapability)999));
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
@@ -108,6 +122,16 @@ public sealed class PanelAccessPolicyTests
             malformed, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
+
+    [Fact]
+    public void CapabilityTokensAreCaseSensitive()
+    {
+        var principal = Principal(
+            $"v1|{Scope.Length}|{Scope}|centerRevenueRead", Issuer);
+
+        Assert.False(PanelAccessPolicy.Evaluate(
+            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+    }
 
     [Fact]
     public void UnresolvedServerScopeDeniesEvenWhenRequestHintMatches()
@@ -165,6 +189,10 @@ public sealed class PanelAccessPolicyTests
         return new ClaimsPrincipal(new ClaimsIdentity([claim], authenticationType: "test-authentication"));
     }
 
-    private static string Grant(string scope, PanelCapability capability) =>
-        $"v1|{scope.Length}|{scope}|{capability}";
+    private static string Grant(string scope, PanelCapability capability)
+    {
+        var token = PanelAccessPolicy.GetCapabilityToken(capability)
+            ?? throw new ArgumentOutOfRangeException(nameof(capability));
+        return $"v1|{scope.Length}|{scope}|{token}";
+    }
 }
