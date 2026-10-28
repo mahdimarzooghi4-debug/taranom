@@ -632,6 +632,7 @@ def _declared_artifact_total_size(manifest: object) -> int:
 def verify_local_model_store_entry(
     store_root: str | Path | int, store_ref: str, *,
     max_payload_bytes: int | None = None,
+    _inventory_payload_bytes_reserved: list[int] | None = None,
 ) -> dict[str, object]:
     """Read back a stored package from pinned directories and verify its contents."""
     if type(store_ref) is not str or not _SHA256.fullmatch(store_ref):
@@ -718,6 +719,15 @@ def verify_local_model_store_entry(
             declared_size = _declared_artifact_total_size(manifest)
             if declared_size > max_payload_bytes:
                 raise ArtifactRejected("ARTIFACT_STORE_INVENTORY_BYTE_LIMIT_EXCEEDED")
+            if _inventory_payload_bytes_reserved is not None:
+                if (type(_inventory_payload_bytes_reserved) is not list
+                        or len(_inventory_payload_bytes_reserved) != 1
+                        or type(_inventory_payload_bytes_reserved[0]) is not int
+                        or _inventory_payload_bytes_reserved[0] < 0):
+                    raise ArtifactRejected("ARTIFACT_STORE_INVENTORY_BYTE_BUDGET_INVALID")
+                # Reserve before hashing. A later receipt or identity rejection
+                # must not make already-read payload bytes available again.
+                _inventory_payload_bytes_reserved[0] += declared_size
         verification = verify_local_model_manifest(manifest, payload_fd)
         artifact_set = str(verification["artifact_set_sha256"])
         if artifact_set != store_ref:
@@ -821,6 +831,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
 
         entries: list[dict[str, object]] = []
         verified_payload_bytes = 0
+        inventory_payload_bytes_reserved = [0]
         for name in names:
             if not _SHA256.fullmatch(name):
                 entries.append({
@@ -836,8 +847,9 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
                     root_fd,
                     name,
                     max_payload_bytes=(
-                        _MAX_STORE_INVENTORY_BYTES - verified_payload_bytes
+                        _MAX_STORE_INVENTORY_BYTES - inventory_payload_bytes_reserved[0]
                     ),
+                    _inventory_payload_bytes_reserved=inventory_payload_bytes_reserved,
                 )
                 verification = verified["verification"]
                 verified_payload_bytes += int(verification["total_size_bytes"])
@@ -875,6 +887,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
         "status": "LOCAL_ARTIFACT_STORE_INVENTORY_READ_ONLY",
         "entry_count": len(entries),
         "verified_payload_bytes": verified_payload_bytes,
+        "inventory_payload_bytes_reserved": inventory_payload_bytes_reserved[0],
         "entries": entries,
         "model_loaded": False,
         "network_used": False,

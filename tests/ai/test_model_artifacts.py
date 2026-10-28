@@ -727,5 +727,57 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertFalse(inventory["clinical_use_allowed"])
         self.assertFalse(inventory["production_allowed"])
 
+    def test_inventory_reserves_budget_before_payload_hash_even_if_receipt_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            store = root / "store"
+            store.mkdir()
+            refs = []
+            payloads = (b"first-synthetic-payload", b"second-larger-synthetic-payload")
+            for index, payload in enumerate(payloads):
+                source = root / f"source-{index}"
+                source.mkdir()
+                (source / "weights.part").write_bytes(payload)
+                manifest_path = root / f"manifest-{index}.json"
+                manifest_path.write_text(
+                    json.dumps(manifest(data=payload)), encoding="utf-8"
+                )
+                created = store_verified_local_model_artifact(
+                    manifest_path, source, store
+                )
+                refs.append(created["store_ref"])
+
+            first_ref, second_ref = sorted(refs)
+            receipt_path = store / first_ref / "verification.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["status"] = "CORRUPTED_AFTER_PAYLOAD_COPY"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            first_payload_size = len(payloads[refs.index(first_ref)])
+
+            with patch(
+                    "ai.taranom_internal.model_artifacts._MAX_STORE_INVENTORY_BYTES",
+                    first_payload_size,
+            ), patch(
+                    "ai.taranom_internal.model_artifacts.verify_local_model_manifest",
+                    wraps=verify_local_model_manifest,
+            ) as verify_payload:
+                inventory = list_local_model_store_entries(store)
+
+        self.assertEqual(0, inventory["verified_payload_bytes"])
+        self.assertEqual(first_payload_size, inventory["inventory_payload_bytes_reserved"])
+        self.assertEqual([first_ref, second_ref],
+                         [entry["store_ref"] for entry in inventory["entries"]])
+        self.assertEqual("DENIED", inventory["entries"][0]["status"])
+        self.assertEqual("ARTIFACT_STORE_RECEIPT_INVALID",
+                         inventory["entries"][0]["error"])
+        self.assertEqual("DENIED", inventory["entries"][1]["status"])
+        self.assertEqual("ARTIFACT_STORE_INVENTORY_BYTE_LIMIT_EXCEEDED",
+                         inventory["entries"][1]["error"])
+        verify_payload.assert_called_once()
+        self.assertFalse(inventory["model_loaded"])
+        self.assertFalse(inventory["training_allowed"])
+        self.assertFalse(inventory["clinical_use_allowed"])
+        self.assertFalse(inventory["production_allowed"])
+
 if __name__ == "__main__":
     unittest.main()
