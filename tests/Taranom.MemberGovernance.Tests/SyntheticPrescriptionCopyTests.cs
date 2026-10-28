@@ -143,7 +143,7 @@ public sealed class SyntheticPrescriptionCopyTests
         Assert.Equal(SyntheticPrescriptionCopyOutcome.Invalid, rejected.Outcome);
         Assert.Equal(16, rejected.Snapshot.Revision);
         Assert.Equal(16, rejected.Snapshot.History.Length);
-   
+    }
 }
 
 public sealed class SyntheticPanelAccessPolicyTests
