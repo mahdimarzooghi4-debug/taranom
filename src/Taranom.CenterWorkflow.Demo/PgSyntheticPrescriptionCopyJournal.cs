@@ -260,7 +260,7 @@ internal sealed class PgSyntheticPrescriptionCopyJournal(
         await using var tx = await cn.BeginTransactionAsync(
             System.Data.IsolationLevel.RepeatableRead);
         await using (var ro = new NpgsqlCommand("SET TRANSACTION READ ONLY", cn, tx))
-            await ro.ExecuteNonQuery();
+            ro.ExecuteNonQuery();
 
         await using (var scope = new NpgsqlCommand("""
             SELECT member_ref FROM internal_test_prescription_copy
