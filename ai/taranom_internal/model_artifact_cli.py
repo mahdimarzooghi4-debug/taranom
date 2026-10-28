@@ -16,10 +16,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--artifact-root", required=True)
+    parser.add_argument("--expected-manifest-sha256")
+    parser.add_argument("--expected-artifact-set-sha256")
     arguments = parser.parse_args(argv)
     try:
         result = verify_local_model_artifact(
-            arguments.manifest, arguments.artifact_root
+            arguments.manifest,
+            arguments.artifact_root,
+            expected_manifest_sha256=arguments.expected_manifest_sha256,
+            expected_artifact_set_sha256=arguments.expected_artifact_set_sha256,
         )
     except (ArtifactRejected, OSError, ValueError) as exc:
         result = {
@@ -29,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
             "network_used": False,
             "manifest_sha256": None,
             "artifact_set_sha256": None,
+            "manifest_pin_supplied": arguments.expected_manifest_sha256 is not None,
+            "artifact_set_pin_supplied": arguments.expected_artifact_set_sha256 is not None,
             "manifest_authenticity_verified": False,
             "license_reviewed": False,
             "clinical_use_allowed": False,

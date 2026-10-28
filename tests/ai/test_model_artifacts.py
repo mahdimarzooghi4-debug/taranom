@@ -115,6 +115,43 @@ class LocalModelArtifactTests(unittest.TestCase):
                     ArtifactRejected, "UNSAFE_ARTIFACT_PATH_COMPONENT"):
                 verify_local_model_manifest(manifest("nested/weights.part"), root)
 
+    def test_expected_manifest_and_artifact_set_pins_match_or_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifact_root = root / "artifacts"
+            artifact_root.mkdir()
+            data = b"synthetic-model-bytes"
+            (artifact_root / "weights.part").write_bytes(data)
+            manifest_path = root / "manifest.json"
+            raw = json.dumps(manifest()).encode("utf-8")
+            manifest_path.write_bytes(raw)
+
+            baseline = verify_local_model_artifact(manifest_path, artifact_root)
+            verified = verify_local_model_artifact(
+                manifest_path,
+                artifact_root,
+                expected_manifest_sha256=baseline["manifest_sha256"],
+                expected_artifact_set_sha256=baseline["artifact_set_sha256"],
+            )
+            self.assertTrue(verified["manifest_pin_supplied"])
+            self.assertTrue(verified["artifact_set_pin_supplied"])
+
+            with self.assertRaisesRegex(ArtifactRejected, "MODEL_MANIFEST_PIN_MISMATCH"):
+                verify_local_model_artifact(
+                    manifest_path, artifact_root, expected_manifest_sha256="0" * 64
+                )
+            with self.assertRaisesRegex(ArtifactRejected, "ARTIFACT_SET_PIN_MISMATCH"):
+                verify_local_model_artifact(
+                    manifest_path,
+                    artifact_root,
+                    expected_artifact_set_sha256="0" * 64,
+                )
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "LOWERCASE_MODEL_MANIFEST_SHA256_PIN_REQUIRED"):
+                verify_local_model_artifact(
+                    manifest_path, artifact_root, expected_manifest_sha256="not-a-digest"
+                )
+
     def test_artifact_set_fingerprint_is_order_independent_and_versioned(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -191,11 +228,17 @@ class LocalModelArtifactTests(unittest.TestCase):
             manifest_bytes = json.dumps(manifest()).encode("utf-8")
             manifest_path.write_bytes(manifest_bytes)
 
+            expected_artifact_set = verify_local_model_manifest(
+                manifest(), artifact_root
+            )["artifact_set_sha256"]
             output = io.StringIO()
             with redirect_stdout(output):
                 status = artifact_cli_main([
                     "--manifest", str(manifest_path),
                     "--artifact-root", str(artifact_root),
+                    "--expected-manifest-sha256",
+                    hashlib.sha256(manifest_bytes).hexdigest(),
+                    "--expected-artifact-set-sha256", expected_artifact_set,
                 ])
             result = json.loads(output.getvalue())
 
@@ -204,10 +247,39 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(manifest_bytes).hexdigest(),
                          result["manifest_sha256"])
         self.assertRegex(result["artifact_set_sha256"], r"^[0-9a-f]{64}$")
+        self.assertTrue(result["manifest_pin_supplied"])
+        self.assertTrue(result["artifact_set_pin_supplied"])
         self.assertFalse(result["manifest_authenticity_verified"])
         self.assertFalse(result["model_loaded"])
         self.assertFalse(result["network_used"])
         self.assertFalse(result["license_reviewed"])
+        self.assertFalse(result["clinical_use_allowed"])
+        self.assertFalse(result["production_allowed"])
+
+    def test_cli_rejects_mismatched_manifest_pin(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifact_root = root / "weights"
+            artifact_root.mkdir()
+            (artifact_root / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                status = artifact_cli_main([
+                    "--manifest", str(manifest_path),
+                    "--artifact-root", str(artifact_root),
+                    "--expected-manifest-sha256", "0" * 64,
+                ])
+            result = json.loads(output.getvalue())
+
+        self.assertEqual(2, status)
+        self.assertEqual("DENIED", result["status"])
+        self.assertEqual("MODEL_MANIFEST_PIN_MISMATCH", result["error"])
+        self.assertTrue(result["manifest_pin_supplied"])
+        self.assertFalse(result["artifact_set_pin_supplied"])
+        self.assertFalse(result["manifest_authenticity_verified"])
         self.assertFalse(result["clinical_use_allowed"])
         self.assertFalse(result["production_allowed"])
 

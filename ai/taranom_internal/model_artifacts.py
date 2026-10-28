@@ -275,14 +275,42 @@ def load_local_model_manifest(manifest_path: str | Path) -> object:
     )
 
 
+def _validate_expected_sha256(value: object, reason: str) -> str | None:
+    if value is None:
+        return None
+    if type(value) is not str or not _SHA256.fullmatch(value):
+        raise ArtifactRejected(reason)
+    return value
+
+
 def verify_local_model_artifact(
-    manifest_path: str | Path, artifact_root: str | Path
+    manifest_path: str | Path,
+    artifact_root: str | Path,
+    *,
+    expected_manifest_sha256: str | None = None,
+    expected_artifact_set_sha256: str | None = None,
 ) -> dict[str, object]:
-    """Verify exact local manifest bytes and declared files; never load weights."""
+    """Verify local bytes and optional comparison pins; never load weights."""
+    expected_manifest = _validate_expected_sha256(
+        expected_manifest_sha256, "LOWERCASE_MODEL_MANIFEST_SHA256_PIN_REQUIRED"
+    )
+    expected_artifact_set = _validate_expected_sha256(
+        expected_artifact_set_sha256, "LOWERCASE_ARTIFACT_SET_SHA256_PIN_REQUIRED"
+    )
     raw = _read_local_model_manifest_bytes(manifest_path)
+    manifest_sha = hashlib.sha256(raw).hexdigest()
+    if expected_manifest is not None and manifest_sha != expected_manifest:
+        raise ArtifactRejected("MODEL_MANIFEST_PIN_MISMATCH")
+
     manifest = _parse_local_model_manifest(raw)
     result = verify_local_model_manifest(manifest, artifact_root)
-    result["manifest_sha256"] = hashlib.sha256(raw).hexdigest()
+    artifact_set_sha = str(result["artifact_set_sha256"])
+    if expected_artifact_set is not None and artifact_set_sha != expected_artifact_set:
+        raise ArtifactRejected("ARTIFACT_SET_PIN_MISMATCH")
+
+    result["manifest_sha256"] = manifest_sha
+    result["manifest_pin_supplied"] = expected_manifest is not None
+    result["artifact_set_pin_supplied"] = expected_artifact_set is not None
     return result
 
 
