@@ -29,7 +29,8 @@ public sealed class PanelAccessAuthorizationHandlerTests
             PolicyAuthorizationResult.Challenge());
 
         context.Response.Body.Position = 0;
-        using var body = await JsonDocument.ParseAsync(context.Response.Body);
+        using var body = await JsonDocument.ParseAsync(context.Response.Body,
+            cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
         Assert.Equal("application/problem+json", context.Response.ContentType);
         Assert.Equal("no-store", context.Response.Headers.CacheControl);
