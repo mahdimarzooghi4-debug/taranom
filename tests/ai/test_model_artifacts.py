@@ -9,8 +9,9 @@ import unittest
 from pathlib import Path
 
 from ai.taranom_internal.model_artifacts import (
-    ArtifactRejected, load_local_model_manifest, verify_local_model_artifact,
-    verify_local_model_manifest,
+    ArtifactRejected, load_local_model_manifest,
+    store_verified_local_model_artifact,
+    verify_local_model_artifact, verify_local_model_manifest,
 )
 from ai.taranom_internal.model_artifact_cli import main as artifact_cli_main
 
@@ -114,6 +115,61 @@ class LocalModelArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(
                     ArtifactRejected, "UNSAFE_ARTIFACT_PATH_COMPONENT"):
                 verify_local_model_manifest(manifest("nested/weights.part"), root)
+
+    def test_local_store_publishes_verified_copy_atomically(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            store = root / "managed-store"
+            store.mkdir()
+            data = b"synthetic-model-bytes"
+            (source / "weights.part").write_bytes(data)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+
+            result = store_verified_local_model_artifact(
+                manifest_path, source, store
+            )
+            target = store / result["store_ref"]
+
+            self.assertEqual("LOCAL_ARTIFACT_STORED_NOT_LOADED", result["status"])
+            self.assertTrue(result["store_created"])
+            self.assertEqual(data, (target / "payload" / "weights.part").read_bytes())
+            self.assertEqual(
+                manifest_path.read_bytes(), (target / "manifest.json").read_bytes()
+            )
+            receipt = json.loads((target / "verification.json").read_text("utf-8"))
+            self.assertEqual(result["store_ref"], receipt["store_ref"])
+            self.assertFalse(receipt["model_loaded"])
+            self.assertFalse(receipt["manifest_authenticity_verified"])
+            self.assertFalse(receipt["clinical_use_allowed"])
+            self.assertFalse(receipt["production_allowed"])
+            self.assertEqual(
+                {result["store_ref"]}, {entry.name for entry in store.iterdir()}
+            )
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "ARTIFACT_STORE_TARGET_ALREADY_EXISTS"):
+                store_verified_local_model_artifact(manifest_path, source, store)
+
+    def test_local_store_rejects_symlinked_store_root(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            real_store = root / "real-store"
+            real_store.mkdir()
+            linked_store = root / "linked-store"
+            linked_store.symlink_to(real_store, target_is_directory=True)
+
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED"):
+                store_verified_local_model_artifact(
+                    manifest_path, source, linked_store
+                )
 
     def test_expected_manifest_and_artifact_set_pins_match_or_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -253,6 +309,38 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertFalse(result["model_loaded"])
         self.assertFalse(result["network_used"])
         self.assertFalse(result["license_reviewed"])
+        self.assertFalse(result["clinical_use_allowed"])
+        self.assertFalse(result["production_allowed"])
+
+    def test_cli_stores_verified_package_when_explicit_store_root_is_given(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifact_root = root / "weights"
+            artifact_root.mkdir()
+            data = b"synthetic-model-bytes"
+            (artifact_root / "weights.part").write_bytes(data)
+            manifest_path = root / "manifest.json"
+            manifest_bytes = json.dumps(manifest()).encode("utf-8")
+            manifest_path.write_bytes(manifest_bytes)
+            store_root = root / "managed-store"
+            store_root.mkdir()
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                status = artifact_cli_main([
+                    "--manifest", str(manifest_path),
+                    "--artifact-root", str(artifact_root),
+                    "--store-root", str(store_root),
+                ])
+            result = json.loads(output.getvalue())
+
+        stored = store_root / result["store_ref"]
+        self.assertEqual(0, status)
+        self.assertEqual("LOCAL_ARTIFACT_STORED_NOT_LOADED", result["status"])
+        self.assertTrue(result["store_created"])
+        self.assertEqual(data, (stored / "payload" / "weights.part").read_bytes())
+        self.assertEqual(manifest_bytes, (stored / "manifest.json").read_bytes())
+        self.assertFalse(result["model_loaded"])
         self.assertFalse(result["clinical_use_allowed"])
         self.assertFalse(result["production_allowed"])
 

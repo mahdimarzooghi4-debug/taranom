@@ -8,6 +8,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import uuid
 
 
 class ArtifactRejected(ValueError):
@@ -176,6 +177,246 @@ def _check_exact_artifact_file_set(
         raise ArtifactRejected("UNDECLARED_LOCAL_ARTIFACT_FILE")
     if observed_files != expected_files:
         raise ArtifactRejected("DECLARED_ARTIFACT_FILE_MISSING")
+
+
+def _open_or_create_child_directory(parent_fd: int, name: str) -> int:
+    try:
+        os.mkdir(name, mode=0o700, dir_fd=parent_fd)
+    except FileExistsError:
+        try:
+            info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        except OSError as exc:
+            raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_PATH") from exc
+        if not stat.S_ISDIR(info.st_mode):
+            raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_PATH")
+    try:
+        return os.open(
+            name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd
+        )
+    except OSError as exc:
+        raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_PATH") from exc
+
+
+def _write_new_file(parent_fd: int, name: str, content: bytes) -> None:
+    try:
+        descriptor = os.open(
+            name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=parent_fd,
+        )
+    except OSError as exc:
+        raise ArtifactRejected("ARTIFACT_STORE_FILE_CREATE_FAILED") from exc
+    try:
+        remaining = memoryview(content)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise ArtifactRejected("ARTIFACT_STORE_WRITE_FAILED")
+            remaining = remaining[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _remove_tree_at(parent_fd: int, name: str) -> None:
+    """Remove one private temporary tree without following filesystem links."""
+    child_fd = os.open(
+        name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd
+    )
+    try:
+        for entry in os.listdir(child_fd):
+            info = os.stat(entry, dir_fd=child_fd, follow_symlinks=False)
+            if stat.S_ISDIR(info.st_mode):
+                _remove_tree_at(child_fd, entry)
+            else:
+                os.unlink(entry, dir_fd=child_fd)
+    finally:
+        os.close(child_fd)
+    os.rmdir(name, dir_fd=parent_fd)
+
+
+def store_verified_local_model_artifact(
+    manifest_path: str | Path,
+    artifact_root: str | Path,
+    store_root: str | Path,
+    *,
+    expected_manifest_sha256: str | None = None,
+    expected_artifact_set_sha256: str | None = None,
+) -> dict[str, object]:
+    """Copy verified local files into a new content-addressed directory."""
+    if os.rename not in os.supports_dir_fd:
+        raise ArtifactRejected("SAFE_ATOMIC_ARTIFACT_STORE_NOT_SUPPORTED")
+    verified = verify_local_model_artifact(
+        manifest_path,
+        artifact_root,
+        expected_manifest_sha256=expected_manifest_sha256,
+        expected_artifact_set_sha256=expected_artifact_set_sha256,
+    )
+    manifest_bytes = _read_local_model_manifest_bytes(manifest_path)
+    if hashlib.sha256(manifest_bytes).hexdigest() != verified["manifest_sha256"]:
+        raise ArtifactRejected("MODEL_MANIFEST_CHANGED_BEFORE_STORE")
+
+    source = Path(artifact_root)
+    if source.is_symlink() or not source.is_dir():
+        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED")
+    source = source.resolve(strict=True)
+    destination = Path(store_root)
+    if destination.is_symlink() or not destination.is_dir():
+        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED")
+    destination = destination.resolve(strict=True)
+
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        source_fd = os.open(source, directory_flags)
+    except OSError as exc:
+        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED") from exc
+    try:
+        store_fd = os.open(destination, directory_flags)
+    except OSError as exc:
+        os.close(source_fd)
+        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED") from exc
+
+    store_ref = str(verified["artifact_set_sha256"])
+    temporary_name = ".tmp-" + uuid.uuid4().hex
+    published = False
+    temporary_created = False
+    try:
+        try:
+            os.stat(store_ref, dir_fd=store_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise ArtifactRejected("ARTIFACT_STORE_TARGET_CHECK_FAILED") from exc
+        else:
+            raise ArtifactRejected("ARTIFACT_STORE_TARGET_ALREADY_EXISTS")
+
+        try:
+            os.mkdir(temporary_name, mode=0o700, dir_fd=store_fd)
+            temporary_created = True
+            temporary_fd = os.open(
+                temporary_name, directory_flags, dir_fd=store_fd
+            )
+        except OSError as exc:
+            raise ArtifactRejected("ARTIFACT_STORE_TEMP_CREATE_FAILED") from exc
+
+        try:
+            payload_fd = _open_or_create_child_directory(temporary_fd, "payload")
+            try:
+                for item in verified["verified_files"]:
+                    relative = PurePosixPath(str(item["path"]))
+                    parts = relative.parts
+                    source_file_fd = _open_beneath(source_fd, parts)
+                    parent_fd = os.dup(payload_fd)
+                    try:
+                        for part in parts[:-1]:
+                            next_fd = _open_or_create_child_directory(parent_fd, part)
+                            os.close(parent_fd)
+                            parent_fd = next_fd
+                        target_fd = os.open(
+                            parts[-1],
+                            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                            0o600,
+                            dir_fd=parent_fd,
+                        )
+                        try:
+                            before = os.fstat(source_file_fd)
+                            if (not stat.S_ISREG(before.st_mode)
+                                    or before.st_size != item["size_bytes"]):
+                                raise ArtifactRejected("ARTIFACT_CHANGED_BEFORE_STORE")
+                            copied = 0
+                            digest = hashlib.sha256()
+                            while True:
+                                chunk = os.read(source_file_fd, _CHUNK_SIZE)
+                                if not chunk:
+                                    break
+                                copied += len(chunk)
+                                digest.update(chunk)
+                                remaining = memoryview(chunk)
+                                while remaining:
+                                    written = os.write(target_fd, remaining)
+                                    if written <= 0:
+                                        raise ArtifactRejected("ARTIFACT_STORE_WRITE_FAILED")
+                                    remaining = remaining[written:]
+                            after = os.fstat(source_file_fd)
+                            stable_before = (before.st_dev, before.st_ino, before.st_size,
+                                             before.st_mtime_ns, before.st_ctime_ns)
+                            stable_after = (after.st_dev, after.st_ino, after.st_size,
+                                            after.st_mtime_ns, after.st_ctime_ns)
+                            if (stable_before != stable_after
+                                    or copied != item["size_bytes"]
+                                    or digest.hexdigest() != item["sha256"]):
+                                raise ArtifactRejected("ARTIFACT_CHANGED_DURING_STORE")
+                            os.fsync(target_fd)
+                        finally:
+                            os.close(target_fd)
+                    finally:
+                        os.close(parent_fd)
+                        os.close(source_file_fd)
+                _check_exact_artifact_file_set(
+                    source_fd,
+                    {str(item["path"]) for item in verified["verified_files"]},
+                )
+                os.fsync(payload_fd)
+            finally:
+                os.close(payload_fd)
+
+            _write_new_file(temporary_fd, "manifest.json", manifest_bytes)
+            receipt = {
+                "status": "LOCAL_ARTIFACT_STORED_NOT_LOADED",
+                "store_ref": store_ref,
+                "verification": verified,
+                "model_loaded": False,
+                "network_used": False,
+                "manifest_authenticity_verified": False,
+                "license_reviewed": False,
+                "clinical_use_allowed": False,
+                "training_allowed": False,
+                "production_allowed": False,
+            }
+            receipt_bytes = json.dumps(
+                receipt, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8")
+            _write_new_file(temporary_fd, "verification.json", receipt_bytes)
+            os.fsync(temporary_fd)
+
+            try:
+                os.rename(
+                    temporary_name,
+                    store_ref,
+                    src_dir_fd=store_fd,
+                    dst_dir_fd=store_fd,
+                )
+            except OSError as exc:
+                raise ArtifactRejected("ARTIFACT_STORE_PUBLISH_FAILED") from exc
+            published = True
+            temporary_created = False
+            os.fsync(store_fd)
+        finally:
+            os.close(temporary_fd)
+    finally:
+        if temporary_created and not published:
+            try:
+                _remove_tree_at(store_fd, temporary_name)
+            except OSError:
+                pass
+        os.close(source_fd)
+        os.close(store_fd)
+
+    return {
+        "status": "LOCAL_ARTIFACT_STORED_NOT_LOADED",
+        "store_ref": store_ref,
+        "store_created": True,
+        "verification": verified,
+        "model_loaded": False,
+        "network_used": False,
+        "manifest_authenticity_verified": False,
+        "license_reviewed": False,
+        "clinical_use_allowed": False,
+        "training_allowed": False,
+        "production_allowed": False,
+    }
+
 
 def _check_manifest_json_depth(text: str) -> None:
     depth = 0

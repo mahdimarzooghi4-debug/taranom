@@ -9,7 +9,11 @@ import argparse
 import json
 import sys
 
-from .model_artifacts import ArtifactRejected, verify_local_model_artifact
+from .model_artifacts import (
+    ArtifactRejected,
+    store_verified_local_model_artifact,
+    verify_local_model_artifact,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -18,14 +22,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--artifact-root", required=True)
     parser.add_argument("--expected-manifest-sha256")
     parser.add_argument("--expected-artifact-set-sha256")
+    parser.add_argument("--store-root")
     arguments = parser.parse_args(argv)
     try:
-        result = verify_local_model_artifact(
-            arguments.manifest,
-            arguments.artifact_root,
-            expected_manifest_sha256=arguments.expected_manifest_sha256,
-            expected_artifact_set_sha256=arguments.expected_artifact_set_sha256,
+        verifier = (
+            store_verified_local_model_artifact
+            if arguments.store_root is not None else verify_local_model_artifact
         )
+        if arguments.store_root is None:
+            result = verifier(
+                arguments.manifest,
+                arguments.artifact_root,
+                expected_manifest_sha256=arguments.expected_manifest_sha256,
+                expected_artifact_set_sha256=arguments.expected_artifact_set_sha256,
+            )
+        else:
+            result = verifier(
+                arguments.manifest,
+                arguments.artifact_root,
+                arguments.store_root,
+                expected_manifest_sha256=arguments.expected_manifest_sha256,
+                expected_artifact_set_sha256=arguments.expected_artifact_set_sha256,
+            )
     except (ArtifactRejected, OSError, ValueError) as exc:
         result = {
             "status": "DENIED",
@@ -34,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
             "network_used": False,
             "manifest_sha256": None,
             "artifact_set_sha256": None,
+            "store_ref": None,
+            "store_created": False,
             "manifest_pin_supplied": arguments.expected_manifest_sha256 is not None,
             "artifact_set_pin_supplied": arguments.expected_artifact_set_sha256 is not None,
             "manifest_authenticity_verified": False,
