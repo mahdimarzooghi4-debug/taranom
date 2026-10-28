@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
             "model_loaded": False,
             "network_used": False,
             "manifest_sha256": None,
+            "artifact_set_sha256": None,
             "manifest_authenticity_verified": False,
             "license_reviewed": False,
             "clinical_use_allowed": False,

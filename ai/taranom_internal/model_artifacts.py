@@ -286,6 +286,26 @@ def verify_local_model_artifact(
     return result
 
 
+def _artifact_set_sha256(
+    candidate: str, version: str, verified_files: list[dict[str, object]]
+) -> str:
+    """Return a versioned, deterministic fingerprint for a verified file set."""
+    digest = hashlib.sha256()
+    digest.update(b"TRN-MODEL-ARTIFACT-SET\\x00v1\\x00")
+
+    def add_field(value: bytes) -> None:
+        digest.update(len(value).to_bytes(8, "big"))
+        digest.update(value)
+
+    add_field(candidate.encode("utf-8"))
+    add_field(version.encode("utf-8"))
+    for item in sorted(verified_files, key=lambda value: str(value["path"])):
+        add_field(str(item["path"]).encode("utf-8"))
+        digest.update(int(item["size_bytes"]).to_bytes(8, "big"))
+        add_field(str(item["sha256"]).encode("ascii"))
+    return digest.hexdigest()
+
+
 def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> dict[str, object]:
     """Check declared bytes under a local root; this function never loads weights.
 
@@ -381,6 +401,9 @@ def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> 
         "file_count": len(normalized),
         "total_size_bytes": total_size,
         "verified_files": verified_files,
+        "artifact_set_sha256": _artifact_set_sha256(
+            candidate, version, verified_files
+        ),
         "model_loaded": False,
         "network_used": False,
         "manifest_authenticity_verified": False,

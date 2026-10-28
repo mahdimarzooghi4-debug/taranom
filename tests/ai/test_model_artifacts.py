@@ -115,6 +115,45 @@ class LocalModelArtifactTests(unittest.TestCase):
                     ArtifactRejected, "UNSAFE_ARTIFACT_PATH_COMPONENT"):
                 verify_local_model_manifest(manifest("nested/weights.part"), root)
 
+    def test_artifact_set_fingerprint_is_order_independent_and_versioned(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first_bytes = b"synthetic-first"
+            second_bytes = b"synthetic-second"
+            (root / "first.part").write_bytes(first_bytes)
+            (root / "second.part").write_bytes(second_bytes)
+            first_entry = {
+                "path": "first.part",
+                "sha256": hashlib.sha256(first_bytes).hexdigest(),
+                "size_bytes": len(first_bytes),
+            }
+            second_entry = {
+                "path": "second.part",
+                "sha256": hashlib.sha256(second_bytes).hexdigest(),
+                "size_bytes": len(second_bytes),
+            }
+            base_manifest = {
+                "schema_version": 1,
+                "candidate_ref": "QWEN_QWEN2_5_7B_INSTRUCT",
+                "artifact_version": "snapshot-test-1",
+                "files": [first_entry, second_entry],
+            }
+            forward = verify_local_model_manifest(base_manifest, root)
+            reverse = verify_local_model_manifest({
+                **base_manifest, "files": [second_entry, first_entry],
+            }, root)
+            next_version = verify_local_model_manifest({
+                **base_manifest, "artifact_version": "snapshot-test-2",
+            }, root)
+
+        self.assertRegex(forward["artifact_set_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            forward["artifact_set_sha256"], reverse["artifact_set_sha256"]
+        )
+        self.assertNotEqual(
+            forward["artifact_set_sha256"], next_version["artifact_set_sha256"]
+        )
+
     def test_rejects_undeclared_files_and_unsafe_directory_entries(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -164,6 +203,7 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertEqual("LOCAL_ARTIFACT_BYTES_VERIFIED_NOT_LOADED", result["status"])
         self.assertEqual(hashlib.sha256(manifest_bytes).hexdigest(),
                          result["manifest_sha256"])
+        self.assertRegex(result["artifact_set_sha256"], r"^[0-9a-f]{64}$")
         self.assertFalse(result["manifest_authenticity_verified"])
         self.assertFalse(result["model_loaded"])
         self.assertFalse(result["network_used"])
