@@ -333,13 +333,15 @@ class LocalModelArtifactTests(unittest.TestCase):
                     "--store-root", str(store_root),
                 ])
             result = json.loads(output.getvalue())
+            stored = store_root / result["store_ref"]
+            stored_payload = (stored / "payload" / "weights.part").read_bytes()
+            stored_manifest = (stored / "manifest.json").read_bytes()
 
-        stored = store_root / result["store_ref"]
         self.assertEqual(0, status)
         self.assertEqual("LOCAL_ARTIFACT_STORED_NOT_LOADED", result["status"])
         self.assertTrue(result["store_created"])
-        self.assertEqual(data, (stored / "payload" / "weights.part").read_bytes())
-        self.assertEqual(manifest_bytes, (stored / "manifest.json").read_bytes())
+        self.assertEqual(data, stored_payload)
+        self.assertEqual(manifest_bytes, stored_manifest)
         self.assertFalse(result["model_loaded"])
         self.assertFalse(result["clinical_use_allowed"])
         self.assertFalse(result["production_allowed"])
