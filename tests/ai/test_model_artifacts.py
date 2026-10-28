@@ -141,6 +141,15 @@ class LocalModelArtifactTests(unittest.TestCase):
             )
             receipt = json.loads((target / "verification.json").read_text("utf-8"))
             self.assertEqual(result["store_ref"], receipt["store_ref"])
+            self.assertEqual(
+                result["store_ref"],
+                receipt["copy_verification"]["artifact_set_sha256"],
+            )
+            self.assertEqual(
+                result["verification"]["verified_files"],
+                receipt["copy_verification"]["verified_files"],
+            )
+            self.assertFalse(receipt["copy_verification"]["model_loaded"])
             self.assertFalse(receipt["model_loaded"])
             self.assertFalse(receipt["manifest_authenticity_verified"])
             self.assertFalse(receipt["clinical_use_allowed"])

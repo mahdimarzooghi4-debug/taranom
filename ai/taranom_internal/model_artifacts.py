@@ -362,10 +362,18 @@ def store_verified_local_model_artifact(
                 os.close(payload_fd)
 
             _write_new_file(temporary_fd, "manifest.json", manifest_bytes)
+            temporary_path = destination / temporary_name
+            copy_verification = verify_local_model_artifact(
+                temporary_path / "manifest.json",
+                temporary_path / "payload",
+                expected_manifest_sha256=str(verified["manifest_sha256"]),
+                expected_artifact_set_sha256=store_ref,
+            )
             receipt = {
                 "status": "LOCAL_ARTIFACT_STORED_NOT_LOADED",
                 "store_ref": store_ref,
                 "verification": verified,
+                "copy_verification": copy_verification,
                 "model_loaded": False,
                 "network_used": False,
                 "manifest_authenticity_verified": False,
@@ -408,6 +416,7 @@ def store_verified_local_model_artifact(
         "store_ref": store_ref,
         "store_created": True,
         "verification": verified,
+        "copy_verification": copy_verification,
         "model_loaded": False,
         "network_used": False,
         "manifest_authenticity_verified": False,
