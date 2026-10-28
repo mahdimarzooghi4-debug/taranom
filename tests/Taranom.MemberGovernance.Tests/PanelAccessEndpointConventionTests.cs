@@ -44,19 +44,12 @@ public sealed class PanelAccessEndpointConventionTests
     }
 
     [Fact]
-    public void EndpointRejectsCapabilityMissingFromThePolicyCatalog()
+    public async Task EndpointRejectsCapabilityMissingFromThePolicyCatalog()
     {
-        var app = WebApplication.CreateBuilder().Build();
-        try
-        {
-            Assert.Throws<ArgumentOutOfRangeException>(() =>
-                app.MapGet("/invalid", () => Results.NoContent())
-                    .RequirePanelCapability((PanelCapability)999));
-        }
-        finally
-        {
-            app.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
+        await using var app = WebApplication.CreateBuilder().Build();
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            app.MapGet("/invalid", () => Results.NoContent())
+                .RequirePanelCapability((PanelCapability)999));
     }
 
     private static async Task<TestHost> StartHostAsync(
