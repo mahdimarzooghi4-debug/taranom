@@ -604,21 +604,31 @@ def _artifact_set_sha256(
 
 
 def verify_local_model_store_entry(
-    store_root: str | Path, store_ref: str
+    store_root: str | Path | int, store_ref: str
 ) -> dict[str, object]:
     """Read back a stored package from pinned directories and verify its contents."""
     if type(store_ref) is not str or not _SHA256.fullmatch(store_ref):
         raise ArtifactRejected("LOWERCASE_ARTIFACT_STORE_REF_REQUIRED")
 
-    root = Path(store_root)
-    if root.is_symlink() or not root.is_dir():
-        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED")
-    root = root.resolve(strict=True)
-    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    try:
-        root_fd = os.open(root, directory_flags)
-    except OSError as exc:
-        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED") from exc
+    if type(store_root) is int:
+        try:
+            root_fd = os.dup(store_root)
+            root_stat = os.fstat(root_fd)
+            if not stat.S_ISDIR(root_stat.st_mode):
+                os.close(root_fd)
+                raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED")
+        except OSError as exc:
+            raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED") from exc
+    else:
+        root = Path(store_root)
+        if root.is_symlink() or not root.is_dir():
+            raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED")
+        root = root.resolve(strict=True)
+        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        try:
+            root_fd = os.open(root, directory_flags)
+        except OSError as exc:
+            raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED") from exc
 
     package_fd: int | None = None
     payload_fd: int | None = None
@@ -788,7 +798,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
                 })
                 continue
             try:
-                verified = verify_local_model_store_entry(root, name)
+                verified = verify_local_model_store_entry(root_fd, name)
                 verification = verified["verification"]
                 entries.append({
                     "store_ref": name,
@@ -809,7 +819,13 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
                 })
 
         after = os.fstat(root_fd)
-        if _stat_signature(before) != _stat_signature(after):
+        try:
+            current_root = os.stat(root, follow_symlinks=False)
+        except OSError as exc:
+            raise ArtifactRejected("ARTIFACT_STORE_INVENTORY_CHANGED") from exc
+        if (not stat.S_ISDIR(current_root.st_mode)
+                or _stat_signature(before) != _stat_signature(after)
+                or _stat_signature(before) != _stat_signature(current_root)):
             raise ArtifactRejected("ARTIFACT_STORE_INVENTORY_CHANGED")
     finally:
         os.close(root_fd)

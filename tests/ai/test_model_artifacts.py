@@ -12,7 +12,8 @@ from pathlib import Path
 from ai.taranom_internal.model_artifacts import (
     ArtifactRejected, load_local_model_manifest,
     store_verified_local_model_artifact, verify_local_model_store_entry,
-    verify_local_model_artifact, verify_local_model_manifest,
+    list_local_model_store_entries, verify_local_model_artifact,
+    verify_local_model_manifest,
 )
 from ai.taranom_internal.model_artifact_cli import main as artifact_cli_main
 
@@ -657,6 +658,38 @@ class LocalModelArtifactTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                         ArtifactRejected, "ARTIFACT_STORE_ENTRY_CHANGED"):
                     verify_local_model_store_entry(store, created["store_ref"])
+
+ 
+    def test_inventory_rejects_store_root_replacement_during_entry_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            store_verified_local_model_artifact(manifest_path, source, store)
+            moved_store = root / "displaced-store"
+            real_reader = __import__(
+                "ai.taranom_internal.model_artifacts",
+                fromlist=["_read_local_model_manifest_at"],
+            )._read_local_model_manifest_at
+
+            def replace_root_then_read(directory_fd, name):
+                if name == "manifest.json":
+                    store.rename(moved_store)
+                    store.symlink_to(moved_store, target_is_directory=True)
+                return real_reader(directory_fd, name)
+
+            with patch(
+                    "ai.taranom_internal.model_artifacts._read_local_model_manifest_at",
+                    side_effect=replace_root_then_read,
+            ):
+                with self.assertRaisesRegex(
+                        ArtifactRejected, "ARTIFACT_STORE_INVENTORY_CHANGED"):
+                    list_local_model_store_entries(store)
 
 if __name__ == "__main__":
     unittest.main()
