@@ -124,6 +124,27 @@ public sealed class PanelAccessPolicyTests
 
 
     [Fact]
+    public void LengthPrefixWithLeadingZeroIsDenied()
+    {
+        var canonicalGrant = Grant(Scope, PanelCapability.CenterRevenueRead);
+        var noncanonicalGrant = canonicalGrant.Replace(
+            $"v1|{Scope.Length}|", $"v1|0{Scope.Length}|", StringComparison.Ordinal);
+        var principal = Principal(noncanonicalGrant, Issuer);
+
+        Assert.False(PanelAccessPolicy.Evaluate(
+            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+    }
+
+    [Fact]
+    public void OversizedGrantValueIsDenied()
+    {
+        var principal = Principal("v1|" + new string('x', 1024), Issuer);
+
+        Assert.False(PanelAccessPolicy.Evaluate(
+            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+    }
+
+    [Fact]
     public void CapabilityTokensAreCaseSensitive()
     {
         var principal = Principal(

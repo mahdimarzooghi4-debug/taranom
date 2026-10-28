@@ -27,6 +27,7 @@ internal static class PanelAccessPolicy
 {
     internal const string GrantClaimType = "urn:taranom:panel-grant:v1";
     private const int MaximumScopeLength = 256;
+    private const int MaximumGrantValueLength = 320;
     private const string GrantPrefix = "v1|";
 
     // The caller must pass a ClaimsPrincipal produced by the server's
@@ -130,7 +131,9 @@ internal static class PanelAccessPolicy
         scopeRef = string.Empty;
         capability = default;
 
-        if (value is null || !value.StartsWith(GrantPrefix, StringComparison.Ordinal))
+        if (value is null ||
+            value.Length > MaximumGrantValueLength ||
+            !value.StartsWith(GrantPrefix, StringComparison.Ordinal))
             return false;
 
         var lengthEnd = value.IndexOf('|', GrantPrefix.Length);
@@ -139,7 +142,11 @@ internal static class PanelAccessPolicy
                 System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out var scopeLength) ||
-            scopeLength is <= 0 or > MaximumScopeLength)
+            scopeLength is <= 0 or > MaximumScopeLength ||
+            !string.Equals(
+                value.Substring(GrantPrefix.Length, lengthEnd - GrantPrefix.Length),
+                scopeLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                StringComparison.Ordinal))
             return false;
 
         var scopeStart = lengthEnd + 1;
