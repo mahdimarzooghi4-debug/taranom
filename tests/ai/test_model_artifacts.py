@@ -474,5 +474,75 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertFalse(result["clinical_use_allowed"])
 
 
+
+    def test_readback_denies_same_size_payload_corruption(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            created = store_verified_local_model_artifact(
+                manifest_path, source, store
+            )
+            payload = store / created["store_ref"] / "payload" / "weights.part"
+            payload.write_bytes(b"x" * len(b"synthetic-model-bytes"))
+
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "ARTIFACT_SHA256_MISMATCH"):
+                verify_local_model_store_entry(store, created["store_ref"])
+
+    def test_readback_denies_tampered_receipt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            created = store_verified_local_model_artifact(
+                manifest_path, source, store
+            )
+            receipt_path = store / created["store_ref"] / "verification.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["status"] = "LOCAL_ARTIFACT_STORED_AND_APPROVED"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "ARTIFACT_STORE_RECEIPT_INVALID"):
+                verify_local_model_store_entry(store, created["store_ref"])
+
+    def test_readback_denies_extra_store_entries_and_symlinked_payload(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            created = store_verified_local_model_artifact(
+                manifest_path, source, store
+            )
+            package = store / created["store_ref"]
+            (package / "unexpected.json").write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "ARTIFACT_STORE_ENTRY_SCHEMA_INVALID"):
+                verify_local_model_store_entry(store, created["store_ref"])
+            (package / "unexpected.json").unlink()
+
+            payload = package / "payload"
+            payload.rename(package / "payload.real")
+            payload.symlink_to(package / "payload.real", target_is_directory=True)
+            with self.assertRaisesRegex(
+                    ArtifactRejected, "UNSAFE_ARTIFACT_STORE_ENTRY"):
+                verify_local_model_store_entry(store, created["store_ref"])
+
 if __name__ == "__main__":
     unittest.main()
