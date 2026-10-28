@@ -21,6 +21,22 @@ internal readonly record struct PanelScopeContext(
     string? RequestScopeHint,
     string? ResourceOwnerScopeRef);
 
+internal enum PanelEvidenceState
+{
+    Missing = 0,
+    Confirmed = 1,
+    Rejected = 2
+}
+
+// This snapshot must come from the server authentication and current grant/audit
+// authorities. It is never supplied by a browser request.
+internal readonly record struct PanelAccessFreshness(
+    PanelEvidenceState SessionCurrent,
+    PanelEvidenceState SubjectMappingCurrent,
+    PanelEvidenceState PermissionVersionCurrent,
+    PanelEvidenceState GrantNotRevoked,
+    PanelEvidenceState AuditReady);
+
 internal readonly record struct PanelAccessDecision(bool Allowed, string Reason);
 
 internal static class PanelAccessPolicy
@@ -34,10 +50,12 @@ internal static class PanelAccessPolicy
     // configured authentication handler and a scope context produced by the
     // server's resource resolver. Constructing either from request parameters
     // does not establish identity, ownership, or authority.
-    // Sprint 245 configures no handler, resolver, issuer, endpoint, or gate.
+    // Sprint 247 configures no handler, resolver, issuer, grant store, audit
+    // source, endpoint, or production gate.
     internal static PanelAccessDecision Evaluate(
         ClaimsPrincipal? principal,
         string? trustedIssuer,
+        PanelAccessFreshness? freshness,
         PanelScopeContext? scopeContext,
         PanelCapability capability)
     {
@@ -45,6 +63,9 @@ internal static class PanelAccessPolicy
             return new(false, "IDENTITY_MISSING");
         if (string.IsNullOrWhiteSpace(trustedIssuer))
             return new(false, "TRUSTED_ISSUER_NOT_CONFIGURED");
+        var freshnessFailure = GetFreshnessFailure(freshness);
+        if (freshnessFailure is not null)
+            return new(false, freshnessFailure);
         var capabilityToken = GetCapabilityToken(capability);
         if (capabilityToken is null)
             return new(false, "INVALID_PANEL_CAPABILITY");
@@ -82,6 +103,25 @@ internal static class PanelAccessPolicy
         }
 
         return new(false, "CAPABILITY_SCOPE_OR_ISSUER_DENIED");
+    }
+
+    private static string? GetFreshnessFailure(PanelAccessFreshness? freshness)
+    {
+        if (freshness is null)
+            return "AUTHORIZATION_FRESHNESS_UNAVAILABLE";
+
+        var evidence = freshness.Value;
+        if (evidence.SessionCurrent != PanelEvidenceState.Confirmed)
+            return "SESSION_NOT_CURRENT";
+        if (evidence.SubjectMappingCurrent != PanelEvidenceState.Confirmed)
+            return "SUBJECT_MAPPING_NOT_CURRENT";
+        if (evidence.PermissionVersionCurrent != PanelEvidenceState.Confirmed)
+            return "PERMISSION_VERSION_NOT_CURRENT";
+        if (evidence.GrantNotRevoked != PanelEvidenceState.Confirmed)
+            return "GRANT_REVOCATION_NOT_CONFIRMED";
+        if (evidence.AuditReady != PanelEvidenceState.Confirmed)
+            return "AUDIT_NOT_READY";
+        return null;
     }
 
     // These tokens are the v1 claim contract. Keep them explicit so renaming

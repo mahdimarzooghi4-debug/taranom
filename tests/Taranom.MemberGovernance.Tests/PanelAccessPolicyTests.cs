@@ -15,7 +15,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         var decision = PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead);
+            principal, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterRevenueRead);
 
         Assert.True(decision.Allowed);
         Assert.Equal("EXACT_TRUSTED_CAPABILITY_AND_SCOPE", decision.Reason);
@@ -29,7 +29,7 @@ public sealed class PanelAccessPolicyTests
             "https://untrusted.example.test/");
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext("center:beta"), PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, Freshness(), ScopeContext("center:beta"), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterAppointmentsManage).Allowed);
+            principal, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterAppointmentsManage).Allowed);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class PanelAccessPolicyTests
         var principal = new ClaimsPrincipal(identity);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), PanelCapability.TaranomFundRead).Allowed);
+            principal, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.TaranomFundRead).Allowed);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class PanelAccessPolicyTests
         var principal = new ClaimsPrincipal(identity);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Theory]
@@ -84,10 +84,56 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         var decision = PanelAccessPolicy.Evaluate(
-            principal, issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead);
+            principal, issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterRevenueRead);
 
         Assert.False(decision.Allowed);
         Assert.Equal("TRUSTED_ISSUER_NOT_CONFIGURED", decision.Reason);
+    }
+
+    [Fact]
+    public void MissingFreshnessEvidenceDenies()
+    {
+        var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
+
+        var decision = PanelAccessPolicy.Evaluate(
+            principal, Issuer, null, ScopeContext(Scope), PanelCapability.CenterRevenueRead);
+
+        Assert.False(decision.Allowed);
+        Assert.Equal("AUTHORIZATION_FRESHNESS_UNAVAILABLE", decision.Reason);
+    }
+
+    [Theory]
+    [InlineData("session", 0, "SESSION_NOT_CURRENT")]
+    [InlineData("session", 2, "SESSION_NOT_CURRENT")]
+    [InlineData("subject", 0, "SUBJECT_MAPPING_NOT_CURRENT")]
+    [InlineData("subject", 2, "SUBJECT_MAPPING_NOT_CURRENT")]
+    [InlineData("permission", 0, "PERMISSION_VERSION_NOT_CURRENT")]
+    [InlineData("permission", 2, "PERMISSION_VERSION_NOT_CURRENT")]
+    [InlineData("revocation", 0, "GRANT_REVOCATION_NOT_CONFIRMED")]
+    [InlineData("revocation", 2, "GRANT_REVOCATION_NOT_CONFIRMED")]
+    [InlineData("audit", 0, "AUDIT_NOT_READY")]
+    [InlineData("audit", 2, "AUDIT_NOT_READY")]
+    public void MissingOrRejectedFreshnessEvidenceDenies(
+        string evidenceName, int state, string expectedReason)
+    {
+        var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
+        var evidence = (PanelEvidenceState)state;
+        var freshness = evidenceName switch
+        {
+            "session" => Freshness() with { SessionCurrent = evidence },
+            "subject" => Freshness() with { SubjectMappingCurrent = evidence },
+            "permission" => Freshness() with { PermissionVersionCurrent = evidence },
+            "revocation" => Freshness() with { GrantNotRevoked = evidence },
+            "audit" => Freshness() with { AuditReady = evidence },
+            _ => throw new ArgumentOutOfRangeException(nameof(evidenceName))
+        };
+
+        var decision = PanelAccessPolicy.Evaluate(
+            principal, Issuer, freshness, ScopeContext(Scope),
+            PanelCapability.CenterRevenueRead);
+
+        Assert.False(decision.Allowed);
+        Assert.Equal(expectedReason, decision.Reason);
     }
 
     [Theory]
@@ -110,7 +156,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(Grant(Scope, PanelCapability.CenterRevenueRead), Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), (PanelCapability)999).Allowed);
+            principal, Issuer, Freshness(), ScopeContext(Scope), (PanelCapability)999).Allowed);
     }
 
     [Fact]
@@ -119,7 +165,7 @@ public sealed class PanelAccessPolicyTests
         var malformed = Principal("v1|4|abc|CenterRevenueRead", Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            malformed, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+            malformed, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
 
@@ -132,7 +178,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal(noncanonicalGrant, Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -141,7 +187,7 @@ public sealed class PanelAccessPolicyTests
         var principal = Principal("v1|" + new string('x', 1024), Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -151,7 +197,7 @@ public sealed class PanelAccessPolicyTests
             $"v1|{Scope.Length}|{Scope}|centerRevenueRead", Issuer);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, Freshness(), ScopeContext(Scope), PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -161,7 +207,7 @@ public sealed class PanelAccessPolicyTests
         var context = new PanelScopeContext(null, Scope, Scope);
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, context, PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, Freshness(), context, PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -171,7 +217,7 @@ public sealed class PanelAccessPolicyTests
         var context = new PanelScopeContext(Scope, "center:attacker", Scope);
 
         var decision = PanelAccessPolicy.Evaluate(
-            principal, Issuer, context, PanelCapability.CenterRevenueRead);
+            principal, Issuer, Freshness(), context, PanelCapability.CenterRevenueRead);
 
         Assert.False(decision.Allowed);
         Assert.Equal("REQUEST_SCOPE_HINT_MISMATCH", decision.Reason);
@@ -184,7 +230,7 @@ public sealed class PanelAccessPolicyTests
         var context = new PanelScopeContext(Scope, Scope, "center:other");
 
         Assert.False(PanelAccessPolicy.Evaluate(
-            principal, Issuer, context, PanelCapability.CenterRevenueRead).Allowed);
+            principal, Issuer, Freshness(), context, PanelCapability.CenterRevenueRead).Allowed);
     }
 
     [Fact]
@@ -194,11 +240,16 @@ public sealed class PanelAccessPolicyTests
         var context = new PanelScopeContext(null, Scope, Scope);
 
         var decision = PanelAccessPolicy.Evaluate(
-            principal, Issuer, context, PanelCapability.CenterRevenueRead);
+            principal, Issuer, Freshness(), context, PanelCapability.CenterRevenueRead);
 
         Assert.False(decision.Allowed);
         Assert.Equal("SERVER_SCOPE_NOT_RESOLVED", decision.Reason);
     }
+
+    private static PanelAccessFreshness Freshness() => new(
+        PanelEvidenceState.Confirmed, PanelEvidenceState.Confirmed,
+        PanelEvidenceState.Confirmed, PanelEvidenceState.Confirmed,
+        PanelEvidenceState.Confirmed);
 
     private static PanelScopeContext ScopeContext(string? scope) =>
         new(scope, scope, scope);
