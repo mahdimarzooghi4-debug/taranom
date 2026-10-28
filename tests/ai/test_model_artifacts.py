@@ -623,5 +623,40 @@ class LocalModelArtifactTests(unittest.TestCase):
         self.assertFalse(readback["training_allowed"])
         self.assertFalse(readback["production_allowed"])
 
+
+    def test_readback_rejects_package_replacement_during_pinned_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            created = store_verified_local_model_artifact(
+                manifest_path, source, store
+            )
+            package = store / created["store_ref"]
+            moved = store / "displaced-package"
+            real_reader = __import__(
+                "ai.taranom_internal.model_artifacts",
+                fromlist=["_read_local_model_manifest_at"],
+            )._read_local_model_manifest_at
+
+            def replace_entry_then_read(directory_fd, name):
+                if name == "manifest.json":
+                    package.rename(moved)
+                    package.symlink_to(moved, target_is_directory=True)
+                return real_reader(directory_fd, name)
+
+            with patch(
+                    "ai.taranom_internal.model_artifacts._read_local_model_manifest_at",
+                    side_effect=replace_entry_then_read,
+            ):
+                with self.assertRaisesRegex(
+                        ArtifactRejected, "ARTIFACT_STORE_ENTRY_CHANGED"):
+                    verify_local_model_store_entry(store, created["store_ref"])
+
 if __name__ == "__main__":
     unittest.main()

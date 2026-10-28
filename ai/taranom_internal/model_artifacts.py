@@ -464,18 +464,8 @@ def _reject_manifest_constant(value: str) -> object:
     raise ArtifactRejected("NONFINITE_MODEL_MANIFEST_NUMBER_DENIED")
 
 
-def _read_local_model_manifest_bytes(manifest_path: str | Path) -> bytes:
-    """Read bounded manifest bytes through one pinned, no-follow regular file handle."""
-    if not getattr(os, "O_NOFOLLOW", 0):
-        raise ArtifactRejected("SAFE_MANIFEST_OPEN_NOT_SUPPORTED")
-    try:
-        descriptor = os.open(
-            manifest_path,
-            os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0),
-        )
-    except OSError as exc:
-        raise ArtifactRejected("SAFE_LOCAL_MANIFEST_OPEN_FAILED") from exc
-
+def _read_local_model_manifest_descriptor(descriptor: int) -> bytes:
+    """Read bounded strict JSON bytes from an already opened regular file."""
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
@@ -503,6 +493,34 @@ def _read_local_model_manifest_bytes(manifest_path: str | Path) -> bytes:
     finally:
         os.close(descriptor)
 
+
+def _read_local_model_manifest_bytes(manifest_path: str | Path) -> bytes:
+    """Read bounded manifest bytes through one pinned, no-follow regular file handle."""
+    if not getattr(os, "O_NOFOLLOW", 0):
+        raise ArtifactRejected("SAFE_MANIFEST_OPEN_NOT_SUPPORTED")
+    try:
+        descriptor = os.open(
+            manifest_path,
+            os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0),
+        )
+    except OSError as exc:
+        raise ArtifactRejected("SAFE_LOCAL_MANIFEST_OPEN_FAILED") from exc
+    return _read_local_model_manifest_descriptor(descriptor)
+
+
+def _read_local_model_manifest_at(directory_fd: int, name: str) -> bytes:
+    """Read a manifest relative to a pinned directory without following links."""
+    if not getattr(os, "O_NOFOLLOW", 0):
+        raise ArtifactRejected("SAFE_MANIFEST_OPEN_NOT_SUPPORTED")
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=directory_fd,
+        )
+    except OSError as exc:
+        raise ArtifactRejected("SAFE_LOCAL_MANIFEST_OPEN_FAILED") from exc
+    return _read_local_model_manifest_descriptor(descriptor)
 
 def _parse_local_model_manifest(raw: bytes) -> object:
     try:
@@ -588,7 +606,7 @@ def _artifact_set_sha256(
 def verify_local_model_store_entry(
     store_root: str | Path, store_ref: str
 ) -> dict[str, object]:
-    """Read back a stored package and verify payload, manifest, and receipt."""
+    """Read back a stored package from pinned directories and verify its contents."""
     if type(store_ref) is not str or not _SHA256.fullmatch(store_ref):
         raise ArtifactRejected("LOWERCASE_ARTIFACT_STORE_REF_REQUIRED")
 
@@ -602,6 +620,8 @@ def verify_local_model_store_entry(
     except OSError as exc:
         raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_STORE_ROOT_REQUIRED") from exc
 
+    package_fd: int | None = None
+    payload_fd: int | None = None
     try:
         try:
             package_stat = os.stat(store_ref, dir_fd=root_fd, follow_symlinks=False)
@@ -613,86 +633,111 @@ def verify_local_model_store_entry(
             package_fd = os.open(store_ref, directory_flags, dir_fd=root_fd)
         except OSError as exc:
             raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_ENTRY") from exc
+
+        package_before = os.fstat(package_fd)
+        expected_names = {"payload", "manifest.json", "verification.json"}
         try:
-            package_before = os.fstat(package_fd)
-            expected_names = {"payload", "manifest.json", "verification.json"}
-            try:
-                names = set(os.listdir(package_fd))
-                for name, is_directory in (
-                    ("payload", True),
-                    ("manifest.json", False),
-                    ("verification.json", False),
-                ):
-                    entry_stat = os.stat(
-                        name, dir_fd=package_fd, follow_symlinks=False
-                    )
-                    if is_directory:
-                        valid_type = stat.S_ISDIR(entry_stat.st_mode)
-                    else:
-                        valid_type = stat.S_ISREG(entry_stat.st_mode)
-                    if not valid_type:
-                        raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_ENTRY")
-            except ArtifactRejected:
-                raise
-            except OSError as exc:
-                raise ArtifactRejected("ARTIFACT_STORE_ENTRY_CHANGED") from exc
-            if names != expected_names:
-                raise ArtifactRejected("ARTIFACT_STORE_ENTRY_SCHEMA_INVALID")
-            package_after = os.fstat(package_fd)
-            if _stat_signature(package_before) != _stat_signature(package_after):
-                raise ArtifactRejected("ARTIFACT_STORE_ENTRY_CHANGED")
-        finally:
-            os.close(package_fd)
+            names = set(os.listdir(package_fd))
+            for name, is_directory in (
+                ("payload", True),
+                ("manifest.json", False),
+                ("verification.json", False),
+            ):
+                entry_stat = os.stat(
+                    name, dir_fd=package_fd, follow_symlinks=False
+                )
+                valid_type = (
+                    stat.S_ISDIR(entry_stat.st_mode)
+                    if is_directory
+                    else stat.S_ISREG(entry_stat.st_mode)
+                )
+                if not valid_type:
+                    raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_ENTRY")
+        except ArtifactRejected:
+            raise
+        except OSError as exc:
+            raise ArtifactRejected("ARTIFACT_STORE_ENTRY_CHANGED") from exc
+        if names != expected_names:
+            raise ArtifactRejected("ARTIFACT_STORE_ENTRY_SCHEMA_INVALID")
+        package_after_layout = os.fstat(package_fd)
+        if _stat_signature(package_before) != _stat_signature(package_after_layout):
+            raise ArtifactRejected("ARTIFACT_STORE_ENTRY_CHANGED")
+
+        try:
+            payload_fd = os.open("payload", directory_flags, dir_fd=package_fd)
+        except OSError as exc:
+            raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_ENTRY") from exc
+        payload_before = os.fstat(payload_fd)
+        if not stat.S_ISDIR(payload_before.st_mode):
+            raise ArtifactRejected("UNSAFE_ARTIFACT_STORE_ENTRY")
+
+        manifest_raw = _read_local_model_manifest_at(package_fd, "manifest.json")
+        receipt_raw = _read_local_model_manifest_at(package_fd, "verification.json")
+        manifest_sha = hashlib.sha256(manifest_raw).hexdigest()
+        manifest = _parse_local_model_manifest(manifest_raw)
+        verification = verify_local_model_manifest(manifest, payload_fd)
+        artifact_set = str(verification["artifact_set_sha256"])
+        if artifact_set != store_ref:
+            raise ArtifactRejected("ARTIFACT_SET_PIN_MISMATCH")
+        verification["manifest_sha256"] = manifest_sha
+        verification["manifest_pin_supplied"] = False
+        verification["artifact_set_pin_supplied"] = True
+
+        copy_verification = dict(verification)
+        copy_verification["manifest_pin_supplied"] = True
+        copy_verification["artifact_set_pin_supplied"] = True
+
+        receipt = _parse_local_model_manifest(receipt_raw)
+        required_keys = {
+            "status", "store_ref", "verification", "copy_verification",
+            "model_loaded", "network_used", "manifest_authenticity_verified",
+            "license_reviewed", "clinical_use_allowed", "training_allowed",
+            "production_allowed",
+        }
+        if (type(receipt) is not dict or set(receipt) != required_keys
+                or receipt["status"] != "LOCAL_ARTIFACT_STORED_NOT_LOADED"
+                or receipt["store_ref"] != store_ref
+                or any(receipt[key] is not False for key in (
+                    "model_loaded", "network_used", "manifest_authenticity_verified",
+                    "license_reviewed", "clinical_use_allowed", "training_allowed",
+                    "production_allowed",
+                ))):
+            raise ArtifactRejected("ARTIFACT_STORE_RECEIPT_INVALID")
+
+        source_record = receipt["verification"]
+        copy_record = receipt["copy_verification"]
+        pin_fields = {"manifest_pin_supplied", "artifact_set_pin_supplied"}
+        if (type(source_record) is not dict or set(source_record) != set(verification)
+                or type(copy_record) is not dict or set(copy_record) != set(copy_verification)
+                or any(type(source_record[key]) is not bool for key in pin_fields)
+                or any(type(copy_record[key]) is not bool for key in pin_fields)
+                or any(source_record[key] not in (True, False) for key in pin_fields)
+                or any(copy_record[key] not in (True, False) for key in pin_fields)
+                or any(copy_record[key] != value
+                       for key, value in copy_verification.items())
+                or any(source_record[key] != value for key, value in verification.items()
+                       if key not in pin_fields)):
+            raise ArtifactRejected("ARTIFACT_STORE_RECEIPT_INVALID")
+
+        payload_after = os.fstat(payload_fd)
+        package_after_read = os.fstat(package_fd)
+        try:
+            current_package = os.stat(
+                store_ref, dir_fd=root_fd, follow_symlinks=False
+            )
+        except OSError as exc:
+            raise ArtifactRejected("ARTIFACT_STORE_ENTRY_CHANGED") from exc
+        if (not stat.S_ISDIR(current_package.st_mode)
+                or _stat_signature(package_before) != _stat_signature(current_package)
+                or _stat_signature(package_before) != _stat_signature(package_after_read)
+                or _stat_signature(payload_before) != _stat_signature(payload_after)):
+            raise ArtifactRejected("ARTIFACT_STORE_ENTRY_CHANGED")
     finally:
+        if payload_fd is not None:
+            os.close(payload_fd)
+        if package_fd is not None:
+            os.close(package_fd)
         os.close(root_fd)
-
-    package = root / store_ref
-    manifest_path = package / "manifest.json"
-    payload_path = package / "payload"
-    verification = verify_local_model_artifact(
-        manifest_path,
-        payload_path,
-        expected_artifact_set_sha256=store_ref,
-    )
-    # The first readback already hashed the exact current manifest and payload
-    # under both the stored ref and recorded manifest digest. Reconstruct the
-    # second pin result from that same verified record instead of re-reading
-    # potentially large model files a second time.
-    copy_verification = dict(verification)
-    copy_verification["manifest_pin_supplied"] = True
-    copy_verification["artifact_set_pin_supplied"] = True
-
-    receipt_raw = _read_local_model_manifest_bytes(package / "verification.json")
-    receipt = _parse_local_model_manifest(receipt_raw)
-    required_keys = {
-        "status", "store_ref", "verification", "copy_verification",
-        "model_loaded", "network_used", "manifest_authenticity_verified",
-        "license_reviewed", "clinical_use_allowed", "training_allowed",
-        "production_allowed",
-    }
-    if (type(receipt) is not dict or set(receipt) != required_keys
-            or receipt["status"] != "LOCAL_ARTIFACT_STORED_NOT_LOADED"
-            or receipt["store_ref"] != store_ref
-            or any(receipt[key] is not False for key in (
-                "model_loaded", "network_used", "manifest_authenticity_verified",
-                "license_reviewed", "clinical_use_allowed", "training_allowed",
-                "production_allowed",
-            ))):
-        raise ArtifactRejected("ARTIFACT_STORE_RECEIPT_INVALID")
-
-    source_record = receipt["verification"]
-    copy_record = receipt["copy_verification"]
-    pin_fields = {"manifest_pin_supplied", "artifact_set_pin_supplied"}
-    if (type(source_record) is not dict or set(source_record) != set(verification)
-            or type(copy_record) is not dict or set(copy_record) != set(copy_verification)
-            or any(type(source_record[key]) is not bool for key in pin_fields)
-            or source_record["manifest_pin_supplied"] not in (True, False)
-            or source_record["artifact_set_pin_supplied"] not in (True, False)
-            or any(copy_record[key] != value
-                   for key, value in copy_verification.items())
-            or any(source_record[key] != value for key, value in verification.items()
-                   if key not in pin_fields)):
-        raise ArtifactRejected("ARTIFACT_STORE_RECEIPT_INVALID")
 
     return {
         "status": "LOCAL_ARTIFACT_STORE_ENTRY_VERIFIED_NOT_LOADED",
@@ -709,8 +754,6 @@ def verify_local_model_store_entry(
         "training_allowed": False,
         "production_allowed": False,
     }
-
-
 
 def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
     """Return a read-only inventory and verify each content-addressed entry."""
@@ -784,7 +827,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
         "production_allowed": False,
     }
 
-def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> dict[str, object]:
+def verify_local_model_manifest(manifest: object, artifact_root: str | Path | int) -> dict[str, object]:
     """Check declared bytes under a local root; this function never loads weights.
 
     The root must already exist. Network identifiers, path traversal, symlinks,
@@ -811,15 +854,25 @@ def verify_local_model_manifest(manifest: object, artifact_root: str | Path) -> 
     if total_size > _MAX_TOTAL_BYTES:
         raise ArtifactRejected("ARTIFACT_SIZE_LIMIT_EXCEEDED")
 
-    root = Path(artifact_root)
-    if root.is_symlink() or not root.is_dir():
-        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED")
-    root = root.resolve(strict=True)
-    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        root_fd = os.open(root, directory_flags)
-    except OSError as exc:
-        raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED") from exc
+    if type(artifact_root) is int:
+        try:
+            root_fd = os.dup(artifact_root)
+            root_stat = os.fstat(root_fd)
+            if not stat.S_ISDIR(root_stat.st_mode):
+                os.close(root_fd)
+                raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED")
+        except OSError as exc:
+            raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED") from exc
+    else:
+        root = Path(artifact_root)
+        if root.is_symlink() or not root.is_dir():
+            raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED")
+        root = root.resolve(strict=True)
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            root_fd = os.open(root, directory_flags)
+        except OSError as exc:
+            raise ArtifactRejected("EXISTING_LOCAL_ARTIFACT_ROOT_REQUIRED") from exc
 
     verified_files: list[dict[str, object]] = []
     try:
