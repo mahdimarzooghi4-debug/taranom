@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -96,6 +97,9 @@ internal static class PanelAccessServiceCollectionExtensions
             DisconnectedPanelAccessEvidenceSource>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<
             IAuthorizationHandler, PanelAccessAuthorizationHandler>());
+
+        services.TryAddSingleton<IAuthorizationMiddlewareResultHandler,
+            PanelAuthorizationMiddlewareResultHandler>();
 
         services.AddAuthorization(options =>
         {
