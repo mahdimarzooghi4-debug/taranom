@@ -602,8 +602,8 @@ class LocalModelArtifactTests(unittest.TestCase):
             )
 
             with patch(
-                    "ai.taranom_internal.model_artifacts.verify_local_model_artifact",
-                    wraps=verify_local_model_artifact,
+                    "ai.taranom_internal.model_artifacts.verify_local_model_manifest",
+                    wraps=verify_local_model_manifest,
             ) as verify:
                 readback = verify_local_model_store_entry(
                     store, created["store_ref"]
