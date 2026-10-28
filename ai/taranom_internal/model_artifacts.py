@@ -26,6 +26,7 @@ _CHUNK_SIZE = 1024 * 1024
 _MAX_MANIFEST_BYTES = 1024 * 1024
 _MAX_MANIFEST_JSON_DEPTH = 32
 _MAX_STORE_ENTRIES = 4096
+_MAX_STORE_INVENTORY_BYTES = _MAX_TOTAL_BYTES
 
 
 def _file_entry(raw: object) -> tuple[str, str, int]:
@@ -603,8 +604,34 @@ def _artifact_set_sha256(
     return digest.hexdigest()
 
 
+
+def _declared_artifact_total_size(manifest: object) -> int:
+    """Validate manifest bounds and return declared payload bytes before hashing."""
+    if type(manifest) is not dict or set(manifest) != _MANIFEST_KEYS:
+        raise ArtifactRejected("EXACT_LOCAL_MODEL_MANIFEST_REQUIRED")
+    if type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1:
+        raise ArtifactRejected("UNSUPPORTED_MODEL_MANIFEST_VERSION")
+    candidate = manifest["candidate_ref"]
+    if type(candidate) is not str or candidate not in _CANDIDATES:
+        raise ArtifactRejected("UNAPPROVED_INTERNAL_CANDIDATE_REF")
+    version = manifest["artifact_version"]
+    if type(version) is not str or not _VERSION.fullmatch(version):
+        raise ArtifactRejected("BOUNDED_ARTIFACT_VERSION_REQUIRED")
+    entries = manifest["files"]
+    if type(entries) is not list or not entries or len(entries) > _MAX_FILES:
+        raise ArtifactRejected("BOUNDED_NONEMPTY_ARTIFACT_FILE_LIST_REQUIRED")
+    normalized = [_file_entry(entry) for entry in entries]
+    names = [entry[0] for entry in normalized]
+    if len(set(names)) != len(names):
+        raise ArtifactRejected("DUPLICATE_ARTIFACT_PATH")
+    total = sum(entry[2] for entry in normalized)
+    if total > _MAX_TOTAL_BYTES:
+        raise ArtifactRejected("ARTIFACT_SIZE_LIMIT_EXCEEDED")
+    return total
+
 def verify_local_model_store_entry(
-    store_root: str | Path | int, store_ref: str
+    store_root: str | Path | int, store_ref: str, *,
+    max_payload_bytes: int | None = None,
 ) -> dict[str, object]:
     """Read back a stored package from pinned directories and verify its contents."""
     if type(store_ref) is not str or not _SHA256.fullmatch(store_ref):
@@ -685,6 +712,12 @@ def verify_local_model_store_entry(
         receipt_raw = _read_local_model_manifest_at(package_fd, "verification.json")
         manifest_sha = hashlib.sha256(manifest_raw).hexdigest()
         manifest = _parse_local_model_manifest(manifest_raw)
+        if max_payload_bytes is not None:
+            if type(max_payload_bytes) is not int or max_payload_bytes < 0:
+                raise ArtifactRejected("ARTIFACT_STORE_INVENTORY_BYTE_BUDGET_INVALID")
+            declared_size = _declared_artifact_total_size(manifest)
+            if declared_size > max_payload_bytes:
+                raise ArtifactRejected("ARTIFACT_STORE_INVENTORY_BYTE_LIMIT_EXCEEDED")
         verification = verify_local_model_manifest(manifest, payload_fd)
         artifact_set = str(verification["artifact_set_sha256"])
         if artifact_set != store_ref:
@@ -787,6 +820,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
             raise ArtifactRejected("ARTIFACT_STORE_ENTRY_LIMIT_EXCEEDED")
 
         entries: list[dict[str, object]] = []
+        verified_payload_bytes = 0
         for name in names:
             if not _SHA256.fullmatch(name):
                 entries.append({
@@ -798,8 +832,15 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
                 })
                 continue
             try:
-                verified = verify_local_model_store_entry(root_fd, name)
+                verified = verify_local_model_store_entry(
+                    root_fd,
+                    name,
+                    max_payload_bytes=(
+                        _MAX_STORE_INVENTORY_BYTES - verified_payload_bytes
+                    ),
+                )
                 verification = verified["verification"]
+                verified_payload_bytes += int(verification["total_size_bytes"])
                 entries.append({
                     "store_ref": name,
                     "status": verified["status"],
@@ -833,6 +874,7 @@ def list_local_model_store_entries(store_root: str | Path) -> dict[str, object]:
     return {
         "status": "LOCAL_ARTIFACT_STORE_INVENTORY_READ_ONLY",
         "entry_count": len(entries),
+        "verified_payload_bytes": verified_payload_bytes,
         "entries": entries,
         "model_loaded": False,
         "network_used": False,

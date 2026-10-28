@@ -691,5 +691,41 @@ class LocalModelArtifactTests(unittest.TestCase):
                         ArtifactRejected, "ARTIFACT_STORE_INVENTORY_CHANGED"):
                     list_local_model_store_entries(store)
 
+ 
+    def test_inventory_denies_package_over_remaining_byte_budget_before_hashing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            source.mkdir()
+            (source / "weights.part").write_bytes(b"synthetic-model-bytes")
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            created = store_verified_local_model_artifact(
+                manifest_path, source, store
+            )
+
+            with patch(
+                    "ai.taranom_internal.model_artifacts._MAX_STORE_INVENTORY_BYTES",
+                    1,
+            ), patch(
+                    "ai.taranom_internal.model_artifacts.verify_local_model_manifest",
+                    wraps=verify_local_model_manifest,
+            ) as verify_payload:
+                inventory = list_local_model_store_entries(store)
+
+        self.assertEqual(0, inventory["verified_payload_bytes"])
+        self.assertEqual("DENIED", inventory["entries"][0]["status"])
+        self.assertEqual(
+            "ARTIFACT_STORE_INVENTORY_BYTE_LIMIT_EXCEEDED",
+            inventory["entries"][0]["error"],
+        )
+        verify_payload.assert_not_called()
+        self.assertFalse(inventory["model_loaded"])
+        self.assertFalse(inventory["training_allowed"])
+        self.assertFalse(inventory["clinical_use_allowed"])
+        self.assertFalse(inventory["production_allowed"])
+
 if __name__ == "__main__":
     unittest.main()
