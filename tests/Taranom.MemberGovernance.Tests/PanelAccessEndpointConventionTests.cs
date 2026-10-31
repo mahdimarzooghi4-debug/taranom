@@ -44,6 +44,44 @@ public sealed class PanelAccessEndpointConventionTests
     }
 
     [Fact]
+    public async Task UnboundEndpointsDenyAuthenticatedRequestsAndChallengeAnonymousRequests()
+    {
+        var routes = new[]
+        {
+            "/panel-unbound-fallback",
+            "/panel-unbound-explicit"
+        };
+
+        await using (var authenticatedHost = await StartHostAsync(
+                         PanelCapability.CenterRevenueRead))
+        {
+            foreach (var route in routes)
+            {
+                using var response = await authenticatedHost.Client.GetAsync(
+                    route, TestContext.Current.CancellationToken);
+                var content = await response.Content.ReadAsStringAsync(
+                    TestContext.Current.CancellationToken);
+                Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+                Assert.DoesNotContain("endpoint reached", content);
+            }
+        }
+
+        await using (var anonymousHost = await StartHostAsync(
+                         PanelCapability.CenterRevenueRead, authenticated: false))
+        {
+            foreach (var route in routes)
+            {
+                using var response = await anonymousHost.Client.GetAsync(
+                    route, TestContext.Current.CancellationToken);
+                var content = await response.Content.ReadAsStringAsync(
+                    TestContext.Current.CancellationToken);
+                Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+                Assert.DoesNotContain("endpoint reached", content);
+            }
+        }
+    }
+
+    [Fact]
     public async Task EndpointRejectsCapabilityMissingFromThePolicyCatalog()
     {
         await using var app = WebApplication.CreateBuilder().Build();
@@ -53,7 +91,8 @@ public sealed class PanelAccessEndpointConventionTests
     }
 
     private static async Task<TestHost> StartHostAsync(
-        PanelCapability authenticatedCapability)
+        PanelCapability authenticatedCapability,
+        bool authenticated = true)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.ConfigureKestrel(options =>
@@ -65,7 +104,11 @@ public sealed class PanelAccessEndpointConventionTests
             })
             .AddScheme<SyntheticAuthenticationOptions, SyntheticAuthenticationHandler>(
                 "synthetic-test",
-                options => options.Capability = authenticatedCapability);
+                options =>
+                {
+                    options.Capability = authenticatedCapability;
+                    options.Authenticated = authenticated;
+                });
         builder.Services.AddSingleton<IPanelAccessEvidenceSource, SyntheticEvidenceSource>();
         builder.Services.Configure<PanelAccessOptions>(
             options => options.TrustedIssuer = Issuer);
@@ -80,6 +123,9 @@ public sealed class PanelAccessEndpointConventionTests
                     () => Results.NoContent())
                 .RequirePanelCapability(definition.Capability);
         }
+        app.MapGet("/panel-unbound-fallback", () => Results.Text("endpoint reached"));
+        app.MapGet("/panel-unbound-explicit", () => Results.Text("endpoint reached"))
+            .RequireAuthorization();
 
         try
         {
@@ -110,6 +156,7 @@ public sealed class PanelAccessEndpointConventionTests
     private sealed class SyntheticAuthenticationOptions : AuthenticationSchemeOptions
     {
         internal PanelCapability Capability { get; set; }
+        internal bool Authenticated { get; set; } = true;
     }
 
     private sealed class SyntheticAuthenticationHandler(
@@ -120,6 +167,9 @@ public sealed class PanelAccessEndpointConventionTests
     {
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
+            if (!Options.Authenticated)
+                return Task.FromResult(AuthenticateResult.NoResult());
+
             var token = PanelAccessPolicy.GetCapabilityToken(Options.Capability)!;
             var claim = new Claim(
                 PanelAccessPolicy.GrantClaimType,
