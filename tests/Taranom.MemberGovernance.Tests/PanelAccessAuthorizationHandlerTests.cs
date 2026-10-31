@@ -210,6 +210,42 @@ public sealed class PanelAccessAuthorizationHandlerTests
     private const string Scope = "center:alpha";
 
     [Fact]
+    public async Task AllPanelPoliciesAuthorizeOnlyTheirDeclaredCapability()
+    {
+        var expected = new[]
+        {
+            (PanelAccessPolicyNames.MemberOwnPrescriptionRead,
+                PanelCapability.MemberOwnPrescriptionRead),
+            (PanelAccessPolicyNames.CenterRosterManage,
+                PanelCapability.CenterRosterManage),
+            (PanelAccessPolicyNames.CenterAppointmentsManage,
+                PanelCapability.CenterAppointmentsManage),
+            (PanelAccessPolicyNames.CenterRevenueRead,
+                PanelCapability.CenterRevenueRead),
+            (PanelAccessPolicyNames.TaranomFundRead,
+                PanelCapability.TaranomFundRead),
+            (PanelAccessPolicyNames.SupportedCaseFinanceRead,
+                PanelCapability.SupportedCaseFinanceRead)
+        };
+        Assert.Equal(expected, PanelAccessPolicyNames.All
+            .Select(item => (item.Name, item.Capability)));
+
+        using var services = BuildServices(new FixedEvidenceSource(Evidence()), Issuer);
+        var authorization = services.GetRequiredService<IAuthorizationService>();
+
+        foreach (var (policyName, requiredCapability) in expected)
+        foreach (var (claimPolicyName, claimedCapability) in expected)
+        {
+            var result = await authorization.AuthorizeAsync(
+                Principal(claimedCapability),
+                new object(),
+                policyName);
+
+            Assert.Equal(requiredCapability == claimedCapability, result.Succeeded);
+        }
+    }
+
+    [Fact]
     public async Task ExactEvidenceAuthorizesThroughAspNetAuthorizationService()
     {
         var resource = new object();

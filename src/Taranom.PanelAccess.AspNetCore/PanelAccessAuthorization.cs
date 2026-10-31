@@ -9,6 +9,10 @@ using Taranom.MemberGovernance;
 
 namespace Taranom.PanelAccess.AspNetCore;
 
+internal readonly record struct PanelAccessPolicyDefinition(
+    string Name,
+    PanelCapability Capability);
+
 internal static class PanelAccessPolicyNames
 {
     internal const string MemberOwnPrescriptionRead = "panel.member.own-prescription.read";
@@ -17,6 +21,23 @@ internal static class PanelAccessPolicyNames
     internal const string CenterRevenueRead = "panel.center.revenue.read";
     internal const string TaranomFundRead = "panel.taranom.fund.read";
     internal const string SupportedCaseFinanceRead = "panel.supported-case.finance.read";
+
+    internal static IReadOnlyList<PanelAccessPolicyDefinition> All { get; } =
+        Array.AsReadOnly(new[]
+        {
+            new PanelAccessPolicyDefinition(
+                MemberOwnPrescriptionRead, PanelCapability.MemberOwnPrescriptionRead),
+            new PanelAccessPolicyDefinition(
+                CenterRosterManage, PanelCapability.CenterRosterManage),
+            new PanelAccessPolicyDefinition(
+                CenterAppointmentsManage, PanelCapability.CenterAppointmentsManage),
+            new PanelAccessPolicyDefinition(
+                CenterRevenueRead, PanelCapability.CenterRevenueRead),
+            new PanelAccessPolicyDefinition(
+                TaranomFundRead, PanelCapability.TaranomFundRead),
+            new PanelAccessPolicyDefinition(
+                SupportedCaseFinanceRead, PanelCapability.SupportedCaseFinanceRead)
+        });
 }
 
 internal sealed class PanelAccessOptions
@@ -104,18 +125,8 @@ internal static class PanelAccessServiceCollectionExtensions
 
         services.AddAuthorization(options =>
         {
-            AddPolicy(options, PanelAccessPolicyNames.MemberOwnPrescriptionRead,
-                PanelCapability.MemberOwnPrescriptionRead);
-            AddPolicy(options, PanelAccessPolicyNames.CenterRosterManage,
-                PanelCapability.CenterRosterManage);
-            AddPolicy(options, PanelAccessPolicyNames.CenterAppointmentsManage,
-                PanelCapability.CenterAppointmentsManage);
-            AddPolicy(options, PanelAccessPolicyNames.CenterRevenueRead,
-                PanelCapability.CenterRevenueRead);
-            AddPolicy(options, PanelAccessPolicyNames.TaranomFundRead,
-                PanelCapability.TaranomFundRead);
-            AddPolicy(options, PanelAccessPolicyNames.SupportedCaseFinanceRead,
-                PanelCapability.SupportedCaseFinanceRead);
+            foreach (var definition in PanelAccessPolicyNames.All)
+                AddPolicy(options, definition.Name, definition.Capability);
         });
         return services;
     }
