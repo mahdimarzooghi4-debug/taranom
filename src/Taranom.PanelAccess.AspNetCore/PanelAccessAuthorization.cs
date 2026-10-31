@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -117,6 +118,14 @@ internal static class PanelAccessServiceCollectionExtensions
                 PanelCapability.SupportedCaseFinanceRead);
         });
         return services;
+    }
+
+    internal static IApplicationBuilder UseTaranomPanelAuthorization(
+        this IApplicationBuilder app)
+    {
+        app.UseAuthentication();
+        app.UseAuthorization();
+        return app;
     }
 
     private static void AddPolicy(
