@@ -83,9 +83,31 @@ test('WEB-11: mobile navigation is accessible and collapses after selecting a ro
   await expect(page.getByRole('button', { name: 'باز کردن فهرست بخش‌ها' })).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('all ten member routes are shell-only and unknown routes render safe 404', async ({ page }) => {
+
+test('MEMBER-APPOINTMENT-01: appointment route preserves member choice and never invents a booking', async ({ page }) => {
+  await page.goto('/member/appointments');
+  await expect(page.getByRole('heading', { name: 'نوبت‌دهی', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'نوبت و انتخاب پزشک' })).toBeVisible();
+  await expect(page.getByText(/انتخاب نهایی پزشک با بیمار است/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /درخواست نوبت/ })).toBeDisabled();
+  await expect(page.locator('table tbody tr, [data-record="appointment"], [data-record="doctor"]')).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('متصل نیست');
+});
+
+test('MEMBER-PRESCRIPTION-01: member prescriptions stay in Taranom without fabricated medication data', async ({ page }) => {
+  await page.goto('/member/prescriptions');
+  await expect(page.getByRole('heading', { name: 'نسخه‌های من', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'نسخه‌های ثبت‌شده برای من' })).toBeVisible();
+  await expect(page.getByText(/نسخه باید در پرونده ترنم عضو نیز ثبت/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /مشاهده نسخه‌ها/ })).toBeDisabled();
+  await expect(page.locator('table tbody tr, [data-record="prescription"], [data-medication]')).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('متصل نیست');
+});
+
+test('all twelve member routes are shell-only and unknown routes render safe 404', async ({ page }) => {
   const routes = ['/member', '/member/membership', '/member/credit', '/member/consents', '/member/care',
-    '/member/records', '/member/costs', '/member/billing', '/member/support', '/member/prevention'];
+    '/member/records', '/member/costs', '/member/billing', '/member/support', '/member/prevention',
+    '/member/appointments', '/member/prescriptions'];
   for (const route of routes) {
     await page.goto(route);
     await expect(page.getByRole('main')).toBeVisible();

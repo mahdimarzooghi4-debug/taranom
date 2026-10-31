@@ -2,8 +2,6 @@ name: Sprint 167 Guided Nonclinical Coordination Full Regression
 on:
   push:
     branches: [sprint-167-guided-nonclinical-coordination]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

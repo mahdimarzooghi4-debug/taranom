@@ -28,6 +28,41 @@ await PgLateEvidenceWorkItemJournal.InitializeIsolatedTestSchemaAsync(dataSource
 await Taranom.CenterWorkflow.Demo.PgSyntheticCareCoordinationJournal
     .InitializeAsync(dataSource);
 await Taranom.CenterWorkflow.Demo.PgSyntheticSupportJournal.InitializeAsync(dataSource);
+// TRN-TECH-216: opt-in appointment intent journal, isolated PostgreSQL only.
+var appointmentQaEnabled = Environment.GetEnvironmentVariable(
+    "TARANOM_APPOINTMENT_REQUEST_QA") == "CI_EPHEMERAL_ONLY";
+NpgsqlDataSource? appointmentWriter = null;
+NpgsqlDataSource? appointmentReader = null;
+if (appointmentQaEnabled)
+{
+    await Taranom.CenterWorkflow.Demo.PgSyntheticAppointmentRequestJournal
+        .InitializeAsync(dataSource);
+    var appointmentSources =
+        await Taranom.CenterWorkflow.Demo.PgSyntheticAppointmentRequestJournal
+            .RestrictedSourcesAsync(dataSource, connection);
+    appointmentWriter = appointmentSources.Writer;
+    appointmentReader = appointmentSources.Reader;
+    Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.Store =
+        new Taranom.CenterWorkflow.Demo.PgSyntheticAppointmentRequestJournal(
+            appointmentWriter, appointmentReader);
+}
+// TRN-TECH-241: persistent prescription copies stay disabled outside explicit CI.
+var prescriptionCopyQaEnabled = Environment.GetEnvironmentVariable(
+    "TARANOM_PRESCRIPTION_COPY_QA") == "CI_EPHEMERAL_ONLY";
+NpgsqlDataSource? prescriptionCopyWriter = null;
+NpgsqlDataSource? prescriptionCopyReader = null;
+if (prescriptionCopyQaEnabled)
+{
+    await Taranom.CenterWorkflow.Demo.PgSyntheticPrescriptionCopyJournal
+        .InitializeAsync(dataSource);
+    var sources = await Taranom.CenterWorkflow.Demo.PgSyntheticPrescriptionCopyJournal
+        .RestrictedSourcesAsync(dataSource, connection);
+    prescriptionCopyWriter = sources.Writer;
+    prescriptionCopyReader = sources.Reader;
+    Taranom.CenterWorkflow.Demo.SyntheticPrescriptionCopyHttp.Store =
+        new Taranom.CenterWorkflow.Demo.PgSyntheticPrescriptionCopyJournal(
+            prescriptionCopyWriter, prescriptionCopyReader);
+}
 // TRN-TECH-174: late-evidence HTTP may use only isolated writer/reader.
 var lateSources=await PgLateEvidenceWorkItemJournal.RestrictedTestSourcesAsync(
     dataSource,connection);
@@ -242,6 +277,33 @@ app.MapGet("/internal/demo/v1/late-evidence/{caseRef}",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.ReadAsync);
 app.MapPost("/internal/demo/v1/late-evidence/{caseRef}/commands",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.LateEvidenceHttp.WriteAsync);
+if (appointmentQaEnabled)
+{
+    // No schedule adapter is configured until an authorized source is introduced.
+    Taranom.CenterWorkflow.Demo.AppointmentScheduleHttp.Reader =
+        new Taranom.MemberGovernance.AppointmentScheduleReadService(null);
+    app.MapGet("/internal/demo/v1/centers/{centerRef}/appointment-schedule",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.AppointmentScheduleHttp.ReadAsync);
+    app.MapPost("/internal/demo/v1/appointment-requests/{requestRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.WriteAsync);
+    app.MapGet("/internal/demo/v1/appointment-requests/{requestRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.ReadAsync);
+    app.MapGet("/internal/demo/v1/centers/{centerRef}/appointment-requests",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.ListForCenterAsync);
+    app.MapGet("/internal/demo/v1/members/{memberRef}/appointment-requests",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticAppointmentHttp.ListForMemberAsync);
+    app.MapGet("/appointment-requests-qa", () =>
+        Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+            "index.html"), "text/html; charset=utf-8"));
+}
+if (prescriptionCopyQaEnabled)
+{
+    app.MapPost("/internal/demo/v1/members/{memberRef}/prescriptions/{prescriptionRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticPrescriptionCopyHttp.WriteAsync);
+    app.MapGet("/internal/demo/v1/members/{memberRef}/prescriptions/{prescriptionRef}",
+        (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.SyntheticPrescriptionCopyHttp.ReadAsync);
+}
+
 app.MapGet("/internal/demo/v1/care-coordination-worklist",
     (Func<HttpContext, Task<IResult>>)Taranom.CenterWorkflow.Demo.CareWorklistHttp.ListAsync);
 app.MapGet("/internal/demo/v1/care-coordination/{caseRef}/history",
@@ -295,6 +357,10 @@ app.MapGet("/member-demo/late-evidence", () =>
 app.MapGet("/member-demo/coordination", () =>
     Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
         "member-demo", "index.html"), "text/html; charset=utf-8"));
+if (appointmentQaEnabled)
+    app.MapGet("/member-demo/appointment-requests-qa", () =>
+        Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
+            "member-demo", "index.html"), "text/html; charset=utf-8"));
 if (Environment.GetEnvironmentVariable("TARANOM_COST_JOURNAL_DEMO") == "CI_EPHEMERAL_ONLY")
     app.MapGet("/member-demo/costs", () =>
         Results.File(Path.Combine(app.Environment.WebRootPath ?? "wwwroot",
@@ -305,6 +371,8 @@ app.UseStaticFiles();
 // Explicit root default file and explicit member entrypoint remain available.
 app.MapFallback(() => Results.NotFound());
 app.Run();
+if (appointmentWriter is not null) await appointmentWriter.DisposeAsync();
+if (appointmentReader is not null) await appointmentReader.DisposeAsync();
 if (aiAuditWriter is not null) await aiAuditWriter.DisposeAsync();
 if (aiAuditReader is not null) await aiAuditReader.DisposeAsync();
 if (orgQaDatabase is not null) await orgQaDatabase.DisposeAsync();

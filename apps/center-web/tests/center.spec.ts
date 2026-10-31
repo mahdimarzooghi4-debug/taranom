@@ -2,10 +2,20 @@ import { test, expect } from '@playwright/test';
 
 const routes = [
   '/center', '/center/departments', '/center/doctors',
-  '/center/qualifications', '/center/audit',
+  '/center/appointments', '/center/qualifications', '/center/audit',
 ] as const;
 
-test('CENTER-01: all five routes belong to one disconnected center panel', async ({ page }) => {
+
+test('CENTER-APPOINTMENT-01: center schedule route exposes no fictitious availability or booking', async ({ page }) => {
+  await page.goto('/center/appointments');
+  await expect(page.getByRole('heading', { level: 1, name: 'نوبت‌های مرکز' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'برنامه و درخواست‌های نوبت' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'بخش متصل نیست' })).toContainText('هیچ ظرفیت یا نوبتی ساخته نمی‌شود');
+  await expect(page.locator('table tbody tr, [data-record="appointment"], [data-record="slot"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /ثبت نوبت|تأیید نوبت|افزودن ظرفیت/ })).toHaveCount(0);
+});
+
+test('CENTER-01: all six routes belong to one disconnected center panel', async ({ page }) => {
   for (const route of routes) {
     await page.goto(route);
     await expect(page.getByRole('main')).toBeVisible();

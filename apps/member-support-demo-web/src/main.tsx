@@ -6,6 +6,7 @@ import { PayerEvidenceWorkbench } from './payer-evidence-workbench';
 import { ProofingCorrectionDemo } from './proofing-correction-demo';
 import { LateEvidenceWorkItemDemo } from './late-evidence-work-item-demo';
 import { CareCoordinationDemo } from './care-coordination-demo';
+import { AppointmentRequestDemo } from './appointment-request-demo';
 import './style.css';
 
 function MemberSupportSurface() {
@@ -25,6 +26,8 @@ function MemberSupportSurface() {
       <p><a href="/member-demo/proofing">چرخه آزمایشی اصلاح هویت و احراز مجدد، بدون داده واقعی</a></p>
       <p><a href="/member-demo/late-evidence">گردش آزمایشی مدرک دوره گذشته و یادداشت بررسی مستقل</a></p>
       <p><a href="/member-demo/coordination">ثبت و پیگیری هماهنگی غیرتشخیصی عضو — محیط آزمایشی</a></p>
+      {import.meta.env.VITE_TARANOM_APPOINTMENT_REQUEST_QA === '1' &&
+        <p><a href="/member-demo/appointment-requests-qa">درخواست نوبت آزمایشی — فقط شناسه‌های ساختگی</a></p>}
       <MemberSupportDemo />
       <footer>TRN-TECH-076 | فقط localhost و test: | بدون دسترسی به پرونده بالینی یا مالی</footer>
     </main>
@@ -47,4 +50,8 @@ createRoot(el).render(<StrictMode>{window.location.pathname === '/member-demo/co
   : window.location.pathname === '/member-demo/coordination'
   ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی عضو</a>
       <CareCoordinationDemo /></main>
+  : window.location.pathname === '/member-demo/appointment-requests-qa' &&
+      import.meta.env.VITE_TARANOM_APPOINTMENT_REQUEST_QA === '1'
+  ? <main dir="rtl"><a href="/member-demo/">بازگشت به محیط آزمایشی عضو</a>
+      <AppointmentRequestDemo /></main>
   : <MemberSupportSurface />}</StrictMode>);
