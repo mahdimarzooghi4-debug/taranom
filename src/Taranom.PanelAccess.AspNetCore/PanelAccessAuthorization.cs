@@ -68,6 +68,12 @@ internal sealed class DisconnectedPanelAccessEvidenceSource : IPanelAccessEviden
         ValueTask.FromResult<PanelAccessEvidence?>(null);
 }
 
+// Deliberately has no handler: endpoints without a registered capability policy
+// can never satisfy this default requirement.
+internal sealed class UnboundPanelEndpointRequirement : IAuthorizationRequirement
+{
+}
+
 internal sealed class PanelAccessRequirement(
     PanelCapability capability) : IAuthorizationRequirement
 {
@@ -125,6 +131,13 @@ internal static class PanelAccessServiceCollectionExtensions
 
         services.AddAuthorization(options =>
         {
+            var denyUnboundEndpoint = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .AddRequirements(new UnboundPanelEndpointRequirement())
+                .Build();
+            options.DefaultPolicy = denyUnboundEndpoint;
+            options.FallbackPolicy = denyUnboundEndpoint;
+
             foreach (var definition in PanelAccessPolicyNames.All)
                 AddPolicy(options, definition.Name, definition.Capability);
         });
