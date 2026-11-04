@@ -11,7 +11,8 @@ internal enum PanelCapability
     CenterAppointmentsManage = 3,
     CenterRevenueRead = 4,
     TaranomFundRead = 5,
-    SupportedCaseFinanceRead = 6
+    SupportedCaseFinanceRead = 6,
+    MemberAppointmentsManage = 7
 }
 
 // Values must come from server-side resource resolution. RequestScopeHint is
@@ -135,6 +136,7 @@ internal static class PanelAccessPolicy
             PanelCapability.CenterRevenueRead => "CenterRevenueRead",
             PanelCapability.TaranomFundRead => "TaranomFundRead",
             PanelCapability.SupportedCaseFinanceRead => "SupportedCaseFinanceRead",
+            PanelCapability.MemberAppointmentsManage => "MemberAppointmentsManage",
             _ => null
         };
 
@@ -150,6 +152,7 @@ internal static class PanelAccessPolicy
             "CenterRevenueRead" => PanelCapability.CenterRevenueRead,
             "TaranomFundRead" => PanelCapability.TaranomFundRead,
             "SupportedCaseFinanceRead" => PanelCapability.SupportedCaseFinanceRead,
+            "MemberAppointmentsManage" => PanelCapability.MemberAppointmentsManage,
             _ => default
         };
         return GetCapabilityToken(capability) is not null &&

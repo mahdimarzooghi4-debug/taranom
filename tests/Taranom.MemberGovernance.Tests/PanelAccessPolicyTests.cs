@@ -143,6 +143,7 @@ public sealed class PanelAccessPolicyTests
     [InlineData(4, "CenterRevenueRead")]
     [InlineData(5, "TaranomFundRead")]
     [InlineData(6, "SupportedCaseFinanceRead")]
+    [InlineData(7, "MemberAppointmentsManage")]
     public void CapabilityClaimTokensRemainStable(int value, string expected)
     {
         Assert.Equal(expected,
