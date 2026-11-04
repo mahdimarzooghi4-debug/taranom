@@ -32,6 +32,21 @@ app.MapGet("/health/ready", async (NpgsqlDataSource db, CancellationToken cancel
 }).AllowAnonymous();
 
 var center = app.MapGroup("/api/v1/centers/{centerRef}");
+center.MapGet("/appointment-slots", async (
+    string centerRef,
+    PostgresAppointmentScheduleStore store,
+    CancellationToken cancellationToken) =>
+{
+    var snapshot = await store.ReadAsync(centerRef, cancellationToken);
+    return Results.Ok(new
+    {
+        centerRef,
+        revision = snapshot?.Revision ?? 0,
+        slots = snapshot?.Slots.Values.OrderBy(item => item.StartsAt).ToArray()
+            ?? Array.Empty<AppointmentSlot>()
+    });
+}).RequirePanelCapability(PanelCapability.CenterAppointmentsManage);
+
 center.MapGet("/appointments", async (
     string centerRef,
     PostgresAppointmentScheduleStore store,

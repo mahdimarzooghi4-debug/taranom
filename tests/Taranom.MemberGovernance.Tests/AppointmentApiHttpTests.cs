@@ -58,6 +58,13 @@ public sealed class AppointmentApiHttpTests
             }, cancellationToken);
         Assert.Equal(HttpStatusCode.OK, define.StatusCode);
 
+        var centerSlots = await centerClient.GetAsync(
+            $"/api/v1/centers/{centerRef}/appointment-slots", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, centerSlots.StatusCode);
+        using var slotsJson = await centerSlots.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        Assert.Contains(slotsJson!.RootElement.GetProperty("slots").EnumerateArray(),
+            item => item.GetProperty("slotRef").GetString() == "slot-http-1");
+
         var appointments = await centerClient.GetAsync(
             $"/api/v1/centers/{centerRef}/appointments", cancellationToken);
         Assert.Equal(HttpStatusCode.OK, appointments.StatusCode);
