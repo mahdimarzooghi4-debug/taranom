@@ -225,7 +225,9 @@ public sealed class PanelAccessAuthorizationHandlerTests
             (PanelAccessPolicyNames.TaranomFundRead,
                 PanelCapability.TaranomFundRead),
             (PanelAccessPolicyNames.SupportedCaseFinanceRead,
-                PanelCapability.SupportedCaseFinanceRead)
+                PanelCapability.SupportedCaseFinanceRead),
+            (PanelAccessPolicyNames.MemberAppointmentsManage,
+                PanelCapability.MemberAppointmentsManage)
         };
         Assert.Equal(expected, PanelAccessPolicyNames.All
             .Select(item => (item.Name, item.Capability)));
