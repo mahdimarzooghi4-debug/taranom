@@ -187,20 +187,33 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
     }
 }
 
-internal sealed class AppointmentApiFactory(string connectionString)
-    : WebApplicationFactory<Program>
+internal sealed class AppointmentApiFactory : WebApplicationFactory<Program>
 {
+    private const string Issuer = "https://appointments.test.invalid/realms/taranom";
+    private readonly string _connectionString;
+
+    internal AppointmentApiFactory(string connectionString)
+    {
+        _connectionString = connectionString;
+        // Minimal hosting captures environment configuration before the
+        // WebApplicationFactory web-host callbacks run. Provide test-only
+        // settings before the API's top-level Program creates its builder.
+        Environment.SetEnvironmentVariable("ConnectionStrings__Taranom", connectionString);
+        Environment.SetEnvironmentVariable("Taranom__Authentication__Oidc__Authority", Issuer);
+        Environment.SetEnvironmentVariable("Taranom__Authentication__Oidc__TrustedIssuer", Issuer);
+        Environment.SetEnvironmentVariable("Taranom__Authentication__Oidc__Audience",
+            "taranom-appointments-api-test");
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseSetting("ConnectionStrings:Taranom", connectionString);
+        builder.UseSetting("ConnectionStrings:Taranom", _connectionString);
         builder.ConfigureAppConfiguration((_, configuration) =>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:Taranom"] = connectionString,
-                ["Taranom:Authentication:Oidc:Authority"] =
-                    "https://appointments.test.invalid/realms/taranom",
-                ["Taranom:Authentication:Oidc:TrustedIssuer"] =
-                    "https://appointments.test.invalid/realms/taranom",
+                ["ConnectionStrings:Taranom"] = _connectionString,
+                ["Taranom:Authentication:Oidc:Authority"] = Issuer,
+                ["Taranom:Authentication:Oidc:TrustedIssuer"] = Issuer,
                 ["Taranom:Authentication:Oidc:Audience"] = "taranom-appointments-api-test"
             }));
 
