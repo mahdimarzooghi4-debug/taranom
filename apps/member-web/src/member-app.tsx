@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import {ReleaseSourcePanel} from './release-source-panel';
 import {SyntheticCostWorkbench} from './synthetic-cost-workbench';
+import {PatientPortalScreen} from './patient-portal-screens';
 
 type PageKey =
   | 'overview' | 'membership' | 'credit' | 'consents' | 'care'
-  | 'records' | 'costs' | 'billing' | 'support' | 'prevention' | 'appointments' | 'prescriptions';
+  | 'records' | 'costs' | 'billing' | 'support' | 'prevention' | 'appointments' | 'prescriptions'
+  | 'family' | 'referrals' | 'account';
 
 type MemberPage = {
   key: PageKey;
@@ -17,7 +19,7 @@ type MemberPage = {
 };
 
 export const memberPages: readonly MemberPage[] = [
-  { key: 'overview', path: '/member', label: 'نمای کلی', subtitle: 'فضای شخصی عضو', owner: 'هویت و عضویت',
+  { key: 'overview', path: '/member', label: 'خانه', subtitle: 'خدمات درمانی و سلامت', owner: 'هویت و عضویت',
     detail: 'برای مشاهده اطلاعات شخصی، ابتدا باید اتصال امن و احراز هویت واقعی برقرار شود.', symbol: '◈' },
   { key: 'membership', path: '/member/membership', label: 'عضویت من', subtitle: 'وضعیت و سوابق عضویت', owner: 'سامانه عضویت',
     detail: 'وضعیت عضویت و دوره انتظار فقط از سرویس معتبر عضویت قابل دریافت است.', symbol: '◇' },
@@ -41,7 +43,25 @@ export const memberPages: readonly MemberPage[] = [
     detail: 'صورتحساب معتبر تنها از صادرکننده قانونی و سرویس متصل دریافت می‌شود.', symbol: '▧' },
   { key: 'support', path: '/member/support', label: 'پشتیبانی و شکایات', subtitle: 'پیگیری درخواست‌ها', owner: 'کیفیت و شکایات',
     detail: 'پیگیری واقعی درخواست و اختلاف بیمه‌ای نیازمند اتصال به مرجع مسئول است.', symbol: '☷' },
+  { key: 'family', path: '/member/family', label: 'اعضای خانواده', subtitle: 'مدیریت اعضای همراه', owner: 'حساب و عضویت',
+    detail: 'اطلاعات اعضای خانواده فقط در حساب نمونهٔ نمایشی دیده می‌شود.', symbol: '♧' },
+  { key: 'referrals', path: '/member/referrals', label: 'ارجاع‌های من', subtitle: 'پیگیری ارجاع‌های درمانی', owner: 'هماهنگی درمان',
+    detail: 'ارجاع‌های این صفحه نمونه‌اند و از پروندهٔ واقعی دریافت نشده‌اند.', symbol: '↗' },
+  { key: 'account', path: '/member/account', label: 'حساب کاربری', subtitle: 'مشخصات حساب و وضعیت عضویت', owner: 'هویت و عضویت',
+    detail: 'مشخصات این صفحه نمونه‌اند؛ هیچ حساب واقعی احراز نشده است.', symbol: '◉' },
 ] as const;
+
+const portalNavigation = [
+  { group: 'خدمات درمانی', keys: ['overview', 'appointments', 'records', 'credit'] as const },
+  { group: 'حساب و همراهان', keys: ['family', 'referrals', 'account'] as const },
+];
+
+const portalPageByKey = Object.fromEntries(memberPages.map((item) => [item.key, item])) as Record<PageKey, MemberPage>;
+
+const sampleAppointments = [
+  { date: '۲۹ مهر', title: 'ویزیت جدید ثبت شد', provider: 'دکتر سارا رضایی', status: 'نوبت' },
+  { date: '۲۵ مهر', title: 'نوبت درمانی انجام شد', provider: 'مرکز درمان مهر ترنم', status: 'نوبت' },
+];
 
 // No money, quote, insurer response or credit balance is present in this
 // disconnected page. All five positions deliberately remain unknown.
@@ -378,12 +398,6 @@ const creditLifecycle = [
     rule: 'تنها پس از احراز استحقاق و بازبینی مستندات توسط مرجع واقعی، انتساب احتمالی به همان کیف پول بررسی می‌شود.' },
 ] as const;
 
-const descriptions = [
-  { label: 'هویت و دسترسی', value: 'اتصال برقرار نیست', help: 'احراز هویت واقعی هنوز پیاده‌سازی نشده است.' },
-  { label: 'اطلاعات درمانی', value: 'در دسترس نیست', help: 'بدون دسترسی مجاز هیچ پرونده‌ای نمایش داده نمی‌شود.' },
-  { label: 'خدمات و اعتبار', value: 'در دسترس نیست', help: 'هیچ موجودی، بیمه یا ارائه‌دهنده‌ای شبیه‌سازی نشده است.' },
-] as const;
-
 function currentPage(): MemberPage | undefined {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   return memberPages.find((p) => p.path === path);
@@ -455,18 +469,14 @@ export function MemberApp() {
     setMobileOpen(false);
   }
 
+  const isPortalPage = page ? ['overview', 'appointments', 'records', 'prescriptions', 'credit', 'family', 'referrals', 'account'].includes(page.key) : false;
+
   return (
     <div className="app">
       <a className="skip-link" href="#main-content">پرش به محتوای اصلی</a>
       <aside className="side-panel" aria-label="ناحیه ناوبری عضو">
-        <div className="identity">
-          <div className="logo-emblem" aria-hidden="true">ت</div>
-          <div><strong>ترنم</strong><span>فضای عضو</span></div>
-        </div>
-        <div className="side-heading">
-          <span className="side-small">پنل عضو</span>
-          <span className="side-tag">نسخه پایه</span>
-        </div>
+        <div className="side-brand"><strong>پنل بیمار</strong><span>خدمات درمانی و سلامت</span></div>
+        <span className="side-tag">حساب نمونه</span>
         <button ref={menuButtonRef} className="menu-toggle" type="button"
           aria-expanded={mobileOpen} aria-controls="member-nav"
           onClick={() => setMobileOpen((v) => !v)}>
@@ -474,30 +484,42 @@ export function MemberApp() {
           <span aria-hidden="true">{mobileOpen ? '×' : '☰'}</span>
         </button>
         <nav id="member-nav" className={'member-nav' + (mobileOpen ? ' expanded' : '')}
-          aria-label="بخش‌های وب‌اپ عضو">
-          {memberPages.map((item) => (
-            <a key={item.key} href={item.path} onClick={(event) => go(event, item.path)}
-              className={'nav-link' + (page?.key === item.key ? ' selected' : '')}
-              aria-current={page?.key === item.key ? 'page' : undefined}>
-              <span className="nav-symbol" aria-hidden="true">{item.symbol}</span>
-              <span>{item.label}</span>
-              <span className="nav-chevron" aria-hidden="true">‹</span>
-            </a>
+          aria-label="بخش‌های پنل بیمار">
+          {portalNavigation.map((group) => (
+            <div className="nav-group" key={group.group}>
+              <span className="nav-group-title">{group.group}</span>
+              {group.keys.map((key) => {
+                const item = portalPageByKey[key];
+                const label = key === 'overview' ? 'خانه' : key === 'appointments' ? 'نوبت‌های من' : key === 'records' ? 'نسخه‌ها و پرونده' : key === 'credit' ? 'حمایت درمانی' : item.label;
+                return <a key={item.key} href={item.path} onClick={(event) => go(event, item.path)}
+                  className={'nav-link' + (page?.key === item.key || (key === 'records' && page?.key === 'prescriptions') ? ' selected' : '')}
+                  aria-current={page?.key === item.key || (key === 'records' && page?.key === 'prescriptions') ? 'page' : undefined}>
+                  <span className="nav-symbol" aria-hidden="true">{item.symbol}</span>
+                  <span>{label}</span>
+                </a>;
+              })}
+            </div>
           ))}
         </nav>
-        <div className="side-footer">
-          <span className="footer-icon" aria-hidden="true">⌁</span>
-          <div><strong>حریم خصوصی در اولویت</strong><span>دسترسی واقعی عضو هنوز فعال نیست.</span></div>
+        <div className="side-help"><strong>راهنمای ترنم</strong><p>برای راهنمایی در استفاده از خدمات، با پشتیبانی همراه شوید.</p></div>
+        <div className="side-profile">
+          <span className="profile-avatar" aria-hidden="true">ن</span>
+          <span><strong>نیلوفر رضایی</strong><small>شناسهٔ عضو · نمونه</small></span>
         </div>
       </aside>
-      <div className="workspace">
+      <div className={'workspace' + (isPortalPage ? ' portal-workspace' : '')}>
         <header className="topbar">
-          <div className="topbar-context"><span aria-hidden="true">⌂</span> <span>ترنم</span>
-            <span className="crumb-slash" aria-hidden="true">/</span>
-            <span>{page?.label ?? 'مسیر نامعتبر'}</span>
-          </div>
-          <div className="topbar-status" aria-label="وضعیت محیط: اتصال واقعی برقرار نیست">
-            <span className="status-dot" aria-hidden="true"></span> بدون اتصال واقعی
+          <a className="topbar-brand" href="/member" onClick={(event) => go(event, '/member')} aria-label="ترنم، خانهٔ پنل بیمار">
+            <img src="/assets/taranom-logo.png" alt="ترنم، اکوسیستم سلامت" width="140" height="63" />
+          </a>
+          <div className="topbar-controls">
+            <div className="topbar-user"><span>نیلوفر رضایی</span><span className="topbar-avatar" aria-hidden="true">ن</span></div>
+            <span className="city-chip">تهران</span>
+            <button className="notification-button" type="button" aria-label="اعلان‌ها، دادهٔ نمونه">
+              <img src="/assets/header-bell-dome.svg" width="14" height="14" alt="" />
+              <img className="bell-clapper" src="/assets/header-bell-clapper.svg" width="18" height="9" alt="" />
+              <img className="notification-dot" src="/assets/header-notification-dot.svg" width="8" height="8" alt="" />
+            </button>
           </div>
         </header>
         <main id="main-content" tabIndex={-1}>
@@ -510,37 +532,74 @@ export function MemberApp() {
             </section>
           ) : (
             <>
-              <div className="preview-bar" role="note">
+              {!isPortalPage ? <div className="preview-bar" role="note">
                 <span className="preview-label">پیش‌نمایش ساختاری</span>
-                <span>بدون حساب واقعی، بدون داده درمانی و بدون اتصال مالی</span>
-              </div>
-              <ReleaseSourcePanel audience="MEMBER"/>
-              <section className="hero" aria-labelledby="page-title">
+                <span>حساب نمونه · همهٔ اطلاعات نمایشی و غیرواقعی هستند</span>
+              </div> : null}
+              {!isPortalPage ? <ReleaseSourcePanel audience="MEMBER"/> : null}
+              {!isPortalPage ? <section className="hero" aria-labelledby="page-title">
                 <div className="hero-content">
                   <span className="hero-kicker">وب‌اپ عضو ترنم <span aria-hidden="true">/</span> رابط اولیه</span>
-                  <h1 id="page-title" tabIndex={-1}>{page.key === 'overview' ? 'فضایی آرام برای پیگیری سلامت' : page.label}</h1>
-                  <p>{page.key === 'overview'
-                    ? 'اینجا در آینده مسیرهای عضویت و خدمات سلامت عضو در یک فضای یکپارچه قرار می‌گیرند؛ در حال حاضر هیچ اطلاعات شخصی نمایش داده نمی‌شود.'
-                    : page.subtitle + ' — فقط پس از اتصال به سرویس معتبر و احراز هویت قابل استفاده خواهد بود.'}</p>
+                  <h1 id="page-title" tabIndex={-1}>{page.label}</h1>
+                  <p>{page.subtitle + ' — فقط پس از اتصال به سرویس معتبر و احراز هویت قابل استفاده خواهد بود.'}</p>
                   <span className="hero-chip">اتصال عضو هنوز برقرار نیست</span>
                 </div>
                 <div className="hero-orbit" aria-hidden="true"><span>ت</span></div>
-              </section>
-              <div className="section-header">
+              </section> : null}
+              {!isPortalPage ? <div className="section-header">
                 <div><p className="eyebrow">وضعیت دسترسی</p><h2>اطلاعات این بخش</h2></div>
                 <span className="readonly-pill">صرفاً نمایشی</span>
-              </div>
+              </div> : null}
               {page.key === 'overview' ? (
-                <div className="status-grid" aria-label="بخش‌های بدون اتصال">
-                  {descriptions.map((item) => (
-                    <section key={item.label} className="status-card">
-                      <span className="status-card-icon" aria-hidden="true">◇</span>
-                      <p className="status-card-label">{item.label}</p>
-                      <h3>{item.value}</h3>
-                      <p>{item.help}</p>
+                <section className="portal-dashboard" aria-labelledby="page-title">
+                  <div className="portal-welcome">
+                    <div className="welcome-copy">
+                      <span className="welcome-badge">راهنمای هوشمند ترنم</span>
+                      <h1 id="page-title" tabIndex={-1}>سلام، نیلوفر</h1>
+                      <p>برای قدم بعدی درمان، مسیر را پیدا کنید.</p>
+                      <small>دستیار ترنم به شما برای آشنایی با مسیر مراجعه کمک می‌کند؛ انتخاب نهایی پزشک با شماست.</small>
+                      <a className="welcome-action" href="/member/appointments" onClick={(event) => go(event, '/member/appointments')}>شروع راهنمایی</a>
+                    </div>
+                    <span className="welcome-plus" aria-hidden="true">+</span>
+                  </div>
+                  <div className="dashboard-section-title"><h2>خلاصه وضعیت</h2><span>حساب نمونه</span></div>
+                  <div className="dashboard-summary" aria-label="خلاصه نمونهٔ وضعیت عضو">
+                    <article className="summary-card summary-family"><small>اعضای خانواده</small><strong>۳ عضو</strong><span>حساب‌های همراه در نمونه</span></article>
+                    <article className="summary-card summary-credit"><small>اعتبار حمایتی</small><strong>۲٬۵۰۰٬۰۰۰ تومان</strong><span>عدد نمایشی، بدون ارزش مالی</span></article>
+                    <article className="summary-card summary-prescription"><small>نسخه‌های فعال</small><strong>۲ نسخه</strong><span>اطلاعات دارویی نمونه</span></article>
+                    <article className="summary-card summary-appointment"><small>نوبت پیش رو</small><strong>۲۴ آبان، ساعت ۱۱:۰۰</strong><span>درمانگاه مهر ترنم · تهران</span></article>
+                  </div>
+                  <div className="dashboard-main-grid">
+                    <section className="dashboard-panel quick-panel" aria-labelledby="quick-access-title">
+                      <h2 id="quick-access-title">دسترسی سریع</h2>
+                      <div className="quick-links">
+                        {[
+                          ['نوبت‌های من', '/member/appointments', 'ن'],
+                          ['سوابق درمان', '/member/records', 'س'],
+                          ['اعضای خانواده', '/member/family', 'ع'],
+                          ['حمایت درمانی', '/member/credit', '+'],
+                        ].map(([label, href, icon]) => (
+                          <a key={href} href={href} onClick={(event) => go(event, href)}><span className="quick-icon" aria-hidden="true">{icon}</span><strong>{label}</strong></a>
+                        ))}
+                      </div>
                     </section>
-                  ))}
-                </div>
+                    <section className="dashboard-panel upcoming-panel" aria-labelledby="upcoming-title">
+                      <h2 id="upcoming-title">نوبت پیش رو</h2>
+                      <div className="upcoming-card">
+                        <div><span className="sample-status">تأیید شده · نمونه</span><strong>دکتر سارا رضایی</strong><small>متخصص داخلی</small><p>۲۴ آبان ۱۴۰۵ · ساعت ۱۱:۰۰<br />درمانگاه مهر ترنم · تهران</p></div>
+                        <a href="/member/appointments" onClick={(event) => go(event, '/member/appointments')}>مشاهده جزئیات</a>
+                      </div>
+                    </section>
+                  </div>
+                  <section className="dashboard-panel activity-panel" aria-labelledby="activity-title">
+                    <h2 id="activity-title">آخرین پیگیری‌ها</h2>
+                    <div className="activity-list">
+                      {sampleAppointments.map((activity) => <div className="activity-row" key={activity.date + activity.title}>
+                        <span>{activity.date}</span><strong>{activity.title}</strong><small>{activity.provider}</small><em>{activity.status}</em>
+                      </div>)}
+                    </div>
+                  </section>
+                </section>
               ) : null}
               {page.key === 'membership' ? (
                 <section aria-labelledby="payer-boundary-title">
@@ -627,7 +686,7 @@ export function MemberApp() {
                   </section>
                 </section>
               ) : null}
-              {page.key === 'credit' ? (
+              {page.key === 'credit' && !isPortalPage ? (
                 <section aria-labelledby="individual-wallet-title">
                   <div className="section-header">
                     <div>
@@ -703,7 +762,7 @@ export function MemberApp() {
                   </section>
                 </section>
               ) : null}
-              {page.key === 'records' ? (
+              {page.key === 'records' && !isPortalPage ? (
                 <section aria-labelledby="records-sharing-title">
                   <div className="section-header">
                     <div>
@@ -973,7 +1032,7 @@ export function MemberApp() {
                   </p>
                 </section>
               ) : null}
-              {page.key === 'appointments' ? (
+              {page.key === 'appointments' && !isPortalPage ? (
                 <section aria-labelledby="member-appointments-title">
                   <div className="section-header">
                     <div>
@@ -993,7 +1052,7 @@ export function MemberApp() {
                   <button type="button" disabled>درخواست نوبت — پس از اتصال سرویس معتبر</button>
                 </section>
               ) : null}
-              {page.key === 'prescriptions' ? (
+              {page.key === 'prescriptions' && !isPortalPage ? (
                 <section aria-labelledby="member-prescriptions-title">
                   <div className="section-header">
                     <div>
@@ -1229,6 +1288,9 @@ export function MemberApp() {
                     در فوریت پزشکی، کمک پزشکی و تماس با خدمات فوریت را به ثبت شکایت یا بررسی بیمه موکول نکنید.
                   </p>
                 </section>
+              ) : null}
+              {isPortalPage && page.key !== 'overview' ? (
+                <PatientPortalScreen pageKey={page.key as 'appointments' | 'records' | 'prescriptions' | 'credit' | 'family' | 'referrals' | 'account'} go={go} />
               ) : null}
               <InterruptionNotice detail={page.detail} />
               <div className="source-strip" aria-label="مالک داده">
