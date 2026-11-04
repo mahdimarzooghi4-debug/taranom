@@ -20,6 +20,83 @@ namespace Taranom.MemberGovernance.Tests;
 public sealed class AppointmentApiHttpTests
 {
     [Fact]
+    public async Task CenterManagerCanGrantAndRevokeOnlyCenterStaffCapabilities()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(cancellationToken);
+        var centerRef = "center-admin-" + Guid.NewGuid().ToString("N");
+        var otherCenterRef = "center-admin-other-" + Guid.NewGuid().ToString("N");
+        var managerSubject = "center-admin-subject-" + Guid.NewGuid().ToString("N");
+        var staffSubject = "center-staff-subject-" + Guid.NewGuid().ToString("N");
+        await setup.GrantAsync(managerSubject, "CenterAccessGrantsManage", centerRef, cancellationToken);
+
+        using var manager = setup.AuthenticatedClient(
+            managerSubject, centerRef, "CenterAccessGrantsManage");
+        var accessGrants = $"/api/v1/centers/{centerRef}/access-grants";
+        using var appointmentOnly = setup.AuthenticatedClient(
+            staffSubject, centerRef, "CenterAppointmentsManage");
+        var managerOnlyRoute = await appointmentOnly.GetAsync(accessGrants, cancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, managerOnlyRoute.StatusCode);
+
+        var requestId = Guid.NewGuid();
+        var grantPayload = new
+        {
+            requestId,
+            targetSubject = staffSubject,
+            capability = "CenterAppointmentsManage",
+            reason = "Assigned center appointment desk duties"
+        };
+        var granted = await manager.PostAsJsonAsync(accessGrants, grantPayload, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
+        using var grantJson = await granted.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        Assert.Equal("Applied", grantJson!.RootElement.GetProperty("outcome").GetString());
+        Assert.True(grantJson.RootElement.GetProperty("authorizationRefreshRequired").GetBoolean());
+
+        var listed = await manager.GetAsync(accessGrants, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        using var listJson = await listed.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        Assert.Contains(listJson!.RootElement.GetProperty("grants").EnumerateArray(),
+            item => item.GetProperty("targetSubject").GetString() == staffSubject &&
+                item.GetProperty("capability").GetString() == "CenterAppointmentsManage");
+
+        var replayed = await manager.PostAsJsonAsync(accessGrants, grantPayload, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, replayed.StatusCode);
+        using var replayJson = await replayed.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        Assert.Equal("Replayed", replayJson!.RootElement.GetProperty("outcome").GetString());
+
+        var conflictingReplay = await manager.PostAsJsonAsync(accessGrants,
+            new { requestId, targetSubject = "different-staff", capability = "CenterAppointmentsManage",
+                reason = grantPayload.reason }, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, conflictingReplay.StatusCode);
+
+        using var staff = setup.AuthenticatedClient(
+            staffSubject, centerRef, "CenterAppointmentsManage");
+        var authorized = await staff.GetAsync(
+            $"/api/v1/centers/{centerRef}/appointments", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, authorized.StatusCode);
+
+        var crossCenter = await manager.PostAsJsonAsync(
+            $"/api/v1/centers/{otherCenterRef}/access-grants", grantPayload, cancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, crossCenter.StatusCode);
+
+        var memberCapability = await manager.PostAsJsonAsync(accessGrants,
+            new { requestId = Guid.NewGuid(), targetSubject = staffSubject,
+                capability = "MemberAppointmentsManage", reason = "Not a center capability" },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, memberCapability.StatusCode);
+
+        var revoked = await manager.PostAsJsonAsync(accessGrants + "/revoke",
+            new { requestId = Guid.NewGuid(), targetSubject = staffSubject,
+                capability = "CenterAppointmentsManage", reason = "Staff access ended" },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        var deniedAfterRevocation = await staff.GetAsync(
+            $"/api/v1/centers/{centerRef}/appointments", cancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, deniedAfterRevocation.StatusCode);
+        Assert.Equal(2, await setup.CountGrantAuditEventsAsync(centerRef, cancellationToken));
+    }
+
+    [Fact]
     public async Task AuthenticatedIdentitySeesOnlyItsCurrentAppointmentScopes()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -39,7 +116,16 @@ public sealed class AppointmentApiHttpTests
             grantState: "revoked");
         await setup.GrantAsync(otherSubject, "CenterAppointmentsManage", "center-scope-other", cancellationToken);
 
-        using var client = setup.AuthenticatedIdentityClient(subject);
+        using var withoutGrantClaims = setup.AuthenticatedIdentityClient(subject);
+        var noClaimResponse = await withoutGrantClaims.GetAsync(
+            "/api/v1/me/appointment-scopes", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, noClaimResponse.StatusCode);
+        using var noClaimPayload = await noClaimResponse.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        Assert.Empty(noClaimPayload!.RootElement.GetProperty("appointmentScopes").EnumerateArray());
+
+        using var client = setup.AuthenticatedIdentityClient(subject,
+            ("center-scope-a", "CenterAppointmentsManage"),
+            ("member-scope-a", "MemberAppointmentsManage"));
         var response = await client.GetAsync("/api/v1/me/appointment-scopes", cancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
@@ -198,10 +284,17 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
         return client;
     }
 
-    internal HttpClient AuthenticatedIdentityClient(string subject)
+    internal HttpClient AuthenticatedIdentityClient(
+        string subject,
+        params (string Scope, string Capability)[] grants)
     {
         var client = Factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Taranom-Test-Subject", subject);
+        foreach (var grant in grants)
+        {
+            var grantClaim = $"v1|{grant.Scope.Length}|{grant.Scope}|{grant.Capability}";
+            client.DefaultRequestHeaders.Add("X-Taranom-Test-Grant", grantClaim);
+        }
         return client;
     }
 
@@ -229,6 +322,19 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
         command.Parameters.AddWithValue("grant_state", grantState);
         command.Parameters.AddWithValue("current", currentEvidence);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    internal async Task<long> CountGrantAuditEventsAsync(
+        string centerRef,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            SELECT count(*) FROM taranom_panel_access_grant_audit
+            WHERE scope_ref = @center_ref
+            """, connection);
+        command.Parameters.AddWithValue("center_ref", centerRef);
+        return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 
     public async ValueTask DisposeAsync()
@@ -309,6 +415,10 @@ internal sealed class AppointmentTestAuthenticationHandler(
             var grant = $"v1|{scope.Length}|{scope}|{capability}";
             claims.Add(new Claim(PanelAccessPolicy.GrantClaimType, grant, ClaimValueTypes.String, Issuer));
         }
+        foreach (var grant in Request.Headers["X-Taranom-Test-Grant"])
+            if (!string.IsNullOrWhiteSpace(grant))
+                claims.Add(new Claim(PanelAccessPolicy.GrantClaimType, grant,
+                    ClaimValueTypes.String, Issuer));
         var identity = new ClaimsIdentity(claims, SchemeName);
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));

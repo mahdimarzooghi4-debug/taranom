@@ -25,7 +25,8 @@ internal sealed class CentralPanelAccessEvidenceSource(NpgsqlDataSource dataSour
 
         string? scopeHint = null;
         string? scopeRef;
-        if (capability == PanelCapability.CenterAppointmentsManage)
+        if (capability is PanelCapability.CenterAppointmentsManage or
+            PanelCapability.CenterAccessGrantsManage)
         {
             scopeHint = httpContext.Request.RouteValues["centerRef"]?.ToString();
             scopeRef = scopeHint;
@@ -45,7 +46,7 @@ internal sealed class CentralPanelAccessEvidenceSource(NpgsqlDataSource dataSour
         }
 
         const string sql = """
-            SELECT scope_ref, session_current, subject_mapping_current,
+            SELECT scope_ref, subject_mapping_current,
                    permission_version_current, grant_not_revoked, audit_ready
             FROM taranom_panel_access_grant
             WHERE issuer = @issuer AND subject = @subject
@@ -66,8 +67,9 @@ internal sealed class CentralPanelAccessEvidenceSource(NpgsqlDataSource dataSour
 
         var resolvedScope = reader.GetString(0);
         var freshness = new PanelAccessFreshness(
-            ReadEvidence(reader, 1), ReadEvidence(reader, 2), ReadEvidence(reader, 3),
-            ReadEvidence(reader, 4), ReadEvidence(reader, 5));
+            PanelEvidenceState.Confirmed,
+            ReadEvidence(reader, 1), ReadEvidence(reader, 2),
+            ReadEvidence(reader, 3), ReadEvidence(reader, 4));
         if (await reader.ReadAsync(httpContext.RequestAborted))
             return null;
 
@@ -99,7 +101,7 @@ internal sealed class AppointmentMemberScopeResolver(NpgsqlDataSource dataSource
               AND capability = 'MemberAppointmentsManage'
               AND scope_ref = @member_ref
               AND grant_state = 'active'
-              AND session_current AND subject_mapping_current
+              AND subject_mapping_current
               AND permission_version_current AND grant_not_revoked AND audit_ready
             ORDER BY scope_ref
             LIMIT 2

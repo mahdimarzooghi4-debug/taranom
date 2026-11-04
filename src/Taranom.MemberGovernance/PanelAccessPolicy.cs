@@ -12,7 +12,8 @@ internal enum PanelCapability
     CenterRevenueRead = 4,
     TaranomFundRead = 5,
     SupportedCaseFinanceRead = 6,
-    MemberAppointmentsManage = 7
+    MemberAppointmentsManage = 7,
+    CenterAccessGrantsManage = 8
 }
 
 // Values must come from server-side resource resolution. RequestScopeHint is
@@ -51,8 +52,8 @@ internal static class PanelAccessPolicy
     // configured authentication handler and a scope context produced by the
     // server's resource resolver. Constructing either from request parameters
     // does not establish identity, ownership, or authority.
-    // Sprint 247 configures no handler, resolver, issuer, grant store, audit
-    // source, endpoint, or production gate.
+    // Access is authorized from a current signed capability and server-side
+    // grant, identity mapping, freshness, and audit evidence.
     internal static PanelAccessDecision Evaluate(
         ClaimsPrincipal? principal,
         string? trustedIssuer,
@@ -137,6 +138,7 @@ internal static class PanelAccessPolicy
             PanelCapability.TaranomFundRead => "TaranomFundRead",
             PanelCapability.SupportedCaseFinanceRead => "SupportedCaseFinanceRead",
             PanelCapability.MemberAppointmentsManage => "MemberAppointmentsManage",
+            PanelCapability.CenterAccessGrantsManage => "CenterAccessGrantsManage",
             _ => null
         };
 
@@ -153,6 +155,7 @@ internal static class PanelAccessPolicy
             "TaranomFundRead" => PanelCapability.TaranomFundRead,
             "SupportedCaseFinanceRead" => PanelCapability.SupportedCaseFinanceRead,
             "MemberAppointmentsManage" => PanelCapability.MemberAppointmentsManage,
+            "CenterAccessGrantsManage" => PanelCapability.CenterAccessGrantsManage,
             _ => default
         };
         return GetCapabilityToken(capability) is not null &&

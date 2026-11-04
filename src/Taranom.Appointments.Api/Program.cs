@@ -16,6 +16,7 @@ var dataSource = NpgsqlDataSource.Create(connectionString);
 builder.Services.AddSingleton(dataSource);
 builder.Services.AddSingleton<PostgresAppointmentScheduleStore>();
 builder.Services.AddSingleton<AppointmentMemberScopeResolver>();
+builder.Services.AddSingleton<CenterAccessGrantService>();
 builder.Services.AddSingleton<AppointmentDatabaseBootstrap>();
 builder.Services.AddSingleton<IPanelAccessEvidenceSource, CentralPanelAccessEvidenceSource>();
 builder.Services.AddTaranomOidcPanelApiSecurity(builder.Configuration);
@@ -43,7 +44,7 @@ app.MapGet("/api/v1/me/appointment-scopes", async (
         WHERE issuer = @issuer AND subject = @subject
           AND capability IN ('CenterAppointmentsManage', 'MemberAppointmentsManage')
           AND grant_state = 'active'
-          AND session_current AND subject_mapping_current
+          AND subject_mapping_current
           AND permission_version_current AND grant_not_revoked AND audit_ready
         ORDER BY capability, scope_ref
         """;
@@ -54,7 +55,25 @@ app.MapGet("/api/v1/me/appointment-scopes", async (
     command.Parameters.AddWithValue("subject", subject);
     await using var reader = await command.ExecuteReaderAsync(cancellationToken);
     while (await reader.ReadAsync(cancellationToken))
-        scopes.Add(new AppointmentAccessScope(reader.GetString(0), reader.GetString(1)));
+    {
+        var capabilityToken = reader.GetString(0);
+        var scopeRef = reader.GetString(1);
+        var capability = capabilityToken switch
+        {
+            "CenterAppointmentsManage" => PanelCapability.CenterAppointmentsManage,
+            "MemberAppointmentsManage" => PanelCapability.MemberAppointmentsManage,
+            _ => (PanelCapability?)null
+        };
+        if (capability is null) continue;
+        var completeEvidence = new PanelAccessFreshness(
+            PanelEvidenceState.Confirmed, PanelEvidenceState.Confirmed,
+            PanelEvidenceState.Confirmed, PanelEvidenceState.Confirmed,
+            PanelEvidenceState.Confirmed);
+        var access = PanelAccessPolicy.Evaluate(context.User, issuer, completeEvidence,
+            new PanelScopeContext(scopeRef, null, scopeRef), capability.Value);
+        if (access.Allowed)
+            scopes.Add(new AppointmentAccessScope(capabilityToken, scopeRef));
+    }
 
     context.Response.Headers["Cache-Control"] = "no-store";
     return Results.Ok(new { appointmentScopes = scopes });
@@ -69,6 +88,51 @@ app.MapGet("/health/ready", async (NpgsqlDataSource db, CancellationToken cancel
 }).AllowAnonymous();
 
 var center = app.MapGroup("/api/v1/centers/{centerRef}");
+center.MapGet("/access-grants", async (
+    string centerRef,
+    HttpContext context,
+    CenterAccessGrantService grants,
+    CancellationToken cancellationToken) =>
+{
+    var issuer = context.User.FindFirst("iss")?.Value;
+    if (string.IsNullOrWhiteSpace(issuer)) return Results.Forbid();
+    context.Response.Headers["Cache-Control"] = "no-store";
+    var items = await grants.ListAsync(issuer, centerRef, cancellationToken);
+    return Results.Ok(new { centerRef, grants = items });
+}).RequirePanelCapability(PanelCapability.CenterAccessGrantsManage);
+
+center.MapPost("/access-grants", async (
+    string centerRef,
+    CenterAccessGrantMutation request,
+    HttpContext context,
+    CenterAccessGrantService grants,
+    CancellationToken cancellationToken) =>
+{
+    var issuer = context.User.FindFirst("iss")?.Value;
+    var subject = context.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(subject))
+        return Results.Forbid();
+    var outcome = await grants.ApplyAsync(issuer, subject, centerRef, request,
+        revoke: false, cancellationToken);
+    return CenterGrantResponse(outcome, centerRef, request);
+}).RequirePanelCapability(PanelCapability.CenterAccessGrantsManage);
+
+center.MapPost("/access-grants/revoke", async (
+    string centerRef,
+    CenterAccessGrantMutation request,
+    HttpContext context,
+    CenterAccessGrantService grants,
+    CancellationToken cancellationToken) =>
+{
+    var issuer = context.User.FindFirst("iss")?.Value;
+    var subject = context.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(subject))
+        return Results.Forbid();
+    var outcome = await grants.ApplyAsync(issuer, subject, centerRef, request,
+        revoke: true, cancellationToken);
+    return CenterGrantResponse(outcome, centerRef, request);
+}).RequirePanelCapability(PanelCapability.CenterAccessGrantsManage);
+
 center.MapGet("/appointment-slots", async (
     string centerRef,
     PostgresAppointmentScheduleStore store,
@@ -207,6 +271,25 @@ static IResult AppointmentResponse(
     _ => Results.BadRequest(new { code = outcome.ToString() })
 };
 
+static IResult CenterGrantResponse(
+    CenterAccessGrantOutcome outcome,
+    string centerRef,
+    CenterAccessGrantMutation request) => outcome switch
+{
+    CenterAccessGrantOutcome.Applied or CenterAccessGrantOutcome.Replayed =>
+        Results.Ok(new
+        {
+            outcome = outcome.ToString(),
+            centerRef,
+            targetSubject = request.TargetSubject,
+            capability = request.Capability,
+            authorizationRefreshRequired = true
+        }),
+    CenterAccessGrantOutcome.NotFound => Results.NotFound(),
+    CenterAccessGrantOutcome.Conflict => Results.Conflict(new { code = "IDEMPOTENCY_KEY_CONFLICT" }),
+    _ => Results.BadRequest(new { code = "INVALID_CENTER_ACCESS_GRANT" })
+};
+
 public sealed record DefineAppointmentSlotRequest(
     Guid RequestId, long ExpectedRevision, string SlotRef, string DoctorRef,
     DateTimeOffset StartsAt, DateTimeOffset EndsAt);
@@ -240,6 +323,20 @@ public sealed class AppointmentDatabaseBootstrap(
             );
             CREATE INDEX IF NOT EXISTS ix_taranom_panel_access_grant_lookup
                 ON taranom_panel_access_grant (issuer, subject, capability, grant_state);
+            CREATE TABLE IF NOT EXISTS taranom_panel_access_grant_audit (
+                event_id uuid PRIMARY KEY,
+                request_id uuid NOT NULL,
+                actor_issuer text NOT NULL,
+                actor_subject text NOT NULL,
+                target_issuer text NOT NULL,
+                target_subject text NOT NULL,
+                capability text NOT NULL,
+                scope_ref text NOT NULL,
+                action text NOT NULL CHECK (action IN ('granted', 'revoked')),
+                reason text NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE (actor_issuer, actor_subject, request_id)
+            );
             """, connection);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

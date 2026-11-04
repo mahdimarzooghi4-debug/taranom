@@ -22,6 +22,7 @@ internal static class PanelAccessPolicyNames
     internal const string TaranomFundRead = "panel.taranom.fund.read";
     internal const string SupportedCaseFinanceRead = "panel.supported-case.finance.read";
     internal const string MemberAppointmentsManage = "panel.member.appointments.manage";
+    internal const string CenterAccessGrantsManage = "panel.center.access-grants.manage";
 
     internal static IReadOnlyList<PanelAccessPolicyDefinition> All { get; } =
         Array.AsReadOnly(new[]
@@ -39,7 +40,9 @@ internal static class PanelAccessPolicyNames
             new PanelAccessPolicyDefinition(
                 SupportedCaseFinanceRead, PanelCapability.SupportedCaseFinanceRead),
             new PanelAccessPolicyDefinition(
-                MemberAppointmentsManage, PanelCapability.MemberAppointmentsManage)
+                MemberAppointmentsManage, PanelCapability.MemberAppointmentsManage),
+            new PanelAccessPolicyDefinition(
+                CenterAccessGrantsManage, PanelCapability.CenterAccessGrantsManage)
         });
 }
 
