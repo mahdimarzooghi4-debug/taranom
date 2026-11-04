@@ -192,6 +192,7 @@ internal sealed class AppointmentApiFactory(string connectionString)
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseSetting("ConnectionStrings:Taranom", connectionString);
         builder.ConfigureAppConfiguration((_, configuration) =>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
