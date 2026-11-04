@@ -95,6 +95,30 @@ public sealed class AppointmentScheduleSnapshot
             ImmutableDictionary<Guid, AppointmentCommandReceipt>.Empty);
     }
 
+    public static AppointmentScheduleSnapshot Restore(
+        string centerRef,
+        long revision,
+        IEnumerable<AppointmentSlot> slots,
+        IEnumerable<AppointmentBooking> bookings,
+        IEnumerable<AppointmentCommandReceipt> receipts)
+    {
+        ArgumentNullException.ThrowIfNull(slots);
+        ArgumentNullException.ThrowIfNull(bookings);
+        ArgumentNullException.ThrowIfNull(receipts);
+        if (!ValidRef(centerRef) || revision < 0)
+            throw new ArgumentException("Invalid appointment schedule snapshot.");
+
+        var slotMap = slots.ToImmutableDictionary(item => item.SlotRef, StringComparer.Ordinal);
+        var bookingMap = bookings.ToImmutableDictionary(item => item.BookingRef);
+        var receiptMap = receipts.ToImmutableDictionary(item => item.RequestId);
+        if (slotMap.Values.Any(item => item.CenterRef != centerRef || item.Revision > revision) ||
+            bookingMap.Values.Any(item => item.CenterRef != centerRef || item.Revision > revision) ||
+            receiptMap.Values.Any(item => item.ResultRevision > revision))
+            throw new ArgumentException("Appointment schedule snapshot does not match its center or revision.");
+
+        return new AppointmentScheduleSnapshot(centerRef, revision, slotMap, bookingMap, receiptMap);
+    }
+
     public AppointmentScheduleChange DefineSlot(
         Guid requestId,
         long expectedRevision,

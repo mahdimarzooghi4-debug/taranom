@@ -64,4 +64,27 @@ public sealed class AppointmentSchedulingTests
         Assert.Equal(AppointmentCommandOutcome.ConflictingReplay, conflicting.Outcome);
         Assert.Equal("member-a", conflicting.Snapshot.Bookings[requestId].MemberRef);
     }
+
+    [Fact]
+    public void RestoredSnapshotKeepsCancelledBookingHistory()
+    {
+        var initial = AppointmentScheduleSnapshot.Create("center-a");
+        var defined = initial.DefineSlot(Guid.NewGuid(), 0, "center-a", "slot-a", "doctor-a",
+            DateTimeOffset.Parse("2026-12-01T09:00:00Z"),
+            DateTimeOffset.Parse("2026-12-01T09:30:00Z"));
+        var booked = defined.Snapshot.Book(Guid.NewGuid(), 1, "member-a", "slot-a");
+        var cancelled = booked.Snapshot.Cancel(Guid.NewGuid(), 2, "member-a", "slot-a");
+
+        var restored = AppointmentScheduleSnapshot.Restore(
+            cancelled.Snapshot.CenterRef,
+            cancelled.Snapshot.Revision,
+            cancelled.Snapshot.Slots.Values,
+            cancelled.Snapshot.Bookings.Values,
+            cancelled.Snapshot.Receipts.Values);
+
+        Assert.Equal(3, restored.Revision);
+        Assert.Equal(AppointmentSlotState.Open, restored.Slots["slot-a"].State);
+        Assert.Equal(AppointmentBookingState.CancelledByMember,
+            restored.Bookings[booked.Booking!.BookingRef].State);
+    }
 }

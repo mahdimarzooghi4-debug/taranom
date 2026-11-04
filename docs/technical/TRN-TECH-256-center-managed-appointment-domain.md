@@ -7,7 +7,7 @@
 - Appointment cancellation ends that booking. The canceled booking remains in the history while its time slot may be offered again.
 - Insurance shares, payment, clinical records, notification delivery and medical decisions are outside this contract.
 
-## Implemented domain invariants
+## Implemented domain and persistence invariants
 
 - Each schedule is bound to one center reference. Slot creation rejects a different acting center.
 - A doctor cannot receive overlapping active slots at the same center.
@@ -15,7 +15,8 @@
 - Only the member who booked a slot can cancel it.
 - Cancellation preserves the appointment as `CancelledByMember` and reopens the slot for a later independent booking.
 - Snapshots and command receipts are immutable values. They contain references and appointment times only, not names, contact details, symptoms, diagnosis, insurance or payment data.
+- The PostgreSQL store locks one center's row per command, applies a revision-checked immutable snapshot, and commits only successful state changes. Concurrent commands for one center serialize; independent centers use independent rows.
 
 ## Current boundary
 
-This is the in-process domain for the first API slice. It is not yet durable storage or an HTTP API and is not connected to either web panel. PostgreSQL transaction enforcement, member-to-subject mapping, current central grants, center-scoped read models, Keycloak configuration, browser session/BFF and UI clients remain the next implementation work. Protected access must stay denied until those server-owned sources are present. No synthetic or demo endpoint is used as production data.
+This slice includes the in-process domain and a PostgreSQL store, but not an HTTP API or PostgreSQL integration tests. It is not connected to either web panel. Member-to-subject mapping, current central grants/revocation, center-scoped read APIs, Keycloak host configuration, browser session/BFF and UI clients remain next. Protected access must stay denied until those server-owned sources are present. No synthetic or demo endpoint is used as production data.
