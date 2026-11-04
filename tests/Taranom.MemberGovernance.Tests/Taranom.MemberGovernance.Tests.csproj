@@ -10,6 +10,7 @@
     <ProjectReference Include="../../src/Taranom.Appointments.Api/Taranom.Appointments.Api.csproj" />
     <ProjectReference Include="../../src/Taranom.MemberGovernance/Taranom.MemberGovernance.csproj" />
     <ProjectReference Include="../../src/Taranom.PanelAccess.AspNetCore/Taranom.PanelAccess.AspNetCore.csproj" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
     <PackageReference Include="xunit.v3" Version="4.0.1" />
   </ItemGroup>
 </Project>

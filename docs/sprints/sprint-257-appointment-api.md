@@ -14,7 +14,8 @@ Expose the center-managed appointment domain through an OIDC-protected .NET API 
 
 ## Remaining
 
-- PostgreSQL integration tests of new API routes and concurrency.
+- HTTP-level tests of the new API routes, token validation, central grants, and status codes.
+- Browser BFF/session and member/center API clients.
 - Central administrator grant/revocation workflow with auditable lifecycle.
 - Keycloak realm and claim mapper configuration, verified identity onboarding, browser BFF/session, and member/center frontend clients.
 - No merge, Stage, formal QA, release or Production deployment.
