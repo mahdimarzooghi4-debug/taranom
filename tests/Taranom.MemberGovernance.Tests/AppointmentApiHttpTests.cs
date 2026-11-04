@@ -207,12 +207,12 @@ internal sealed class AppointmentApiFactory(string connectionString)
         {
             services.AddAuthentication(options =>
             {
-                options.DefaultScheme = AppointmentTestAuthenticationHandler.Scheme;
-                options.DefaultAuthenticateScheme = AppointmentTestAuthenticationHandler.Scheme;
-                options.DefaultChallengeScheme = AppointmentTestAuthenticationHandler.Scheme;
-                options.DefaultForbidScheme = AppointmentTestAuthenticationHandler.Scheme;
+                options.DefaultScheme = AppointmentTestAuthenticationHandler.SchemeName;
+                options.DefaultAuthenticateScheme = AppointmentTestAuthenticationHandler.SchemeName;
+                options.DefaultChallengeScheme = AppointmentTestAuthenticationHandler.SchemeName;
+                options.DefaultForbidScheme = AppointmentTestAuthenticationHandler.SchemeName;
             }).AddScheme<AuthenticationSchemeOptions, AppointmentTestAuthenticationHandler>(
-                AppointmentTestAuthenticationHandler.Scheme, _ => { });
+                AppointmentTestAuthenticationHandler.SchemeName, _ => { });
         });
     }
 }
@@ -223,7 +223,7 @@ internal sealed class AppointmentTestAuthenticationHandler(
     UrlEncoder encoder)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
-    internal const string Scheme = "AppointmentTest";
+    internal const string SchemeName = "AppointmentTest";
     private const string Issuer = "https://appointments.test.invalid/realms/taranom";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -242,8 +242,8 @@ internal sealed class AppointmentTestAuthenticationHandler(
             new Claim("sub", subject),
             new Claim(PanelAccessPolicy.GrantClaimType, grant, ClaimValueTypes.String, Issuer)
         };
-        var identity = new ClaimsIdentity(claims, Scheme);
-        var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme);
+        var identity = new ClaimsIdentity(claims, SchemeName);
+        var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }
 }
