@@ -5,6 +5,8 @@ using Taranom.MemberGovernance;
 using Taranom.PanelAccess.AspNetCore;
 using Taranom.Appointments.Api;
 
+const string IdentityAppointmentScopesPolicy = "taranom.identity.appointment-scopes";
+
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Taranom");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -17,11 +19,46 @@ builder.Services.AddSingleton<AppointmentMemberScopeResolver>();
 builder.Services.AddSingleton<AppointmentDatabaseBootstrap>();
 builder.Services.AddSingleton<IPanelAccessEvidenceSource, CentralPanelAccessEvidenceSource>();
 builder.Services.AddTaranomOidcPanelApiSecurity(builder.Configuration);
+builder.Services.AddAuthorization(options => options.AddPolicy(
+    IdentityAppointmentScopesPolicy, policy => policy.RequireAuthenticatedUser()));
 
 var app = builder.Build();
 await app.Services.GetRequiredService<AppointmentDatabaseBootstrap>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
 app.UseTaranomPanelAuthorization();
+
+app.MapGet("/api/v1/me/appointment-scopes", async (
+    HttpContext context,
+    NpgsqlDataSource db,
+    CancellationToken cancellationToken) =>
+{
+    var issuer = context.User.FindFirst("iss")?.Value;
+    var subject = context.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(subject))
+        return Results.Forbid();
+
+    const string sql = """
+        SELECT capability, scope_ref
+        FROM taranom_panel_access_grant
+        WHERE issuer = @issuer AND subject = @subject
+          AND capability IN ('CenterAppointmentsManage', 'MemberAppointmentsManage')
+          AND grant_state = 'active'
+          AND session_current AND subject_mapping_current
+          AND permission_version_current AND grant_not_revoked AND audit_ready
+        ORDER BY capability, scope_ref
+        """;
+    var scopes = new List<AppointmentAccessScope>();
+    await using var connection = await db.OpenConnectionAsync(cancellationToken);
+    await using var command = new NpgsqlCommand(sql, connection);
+    command.Parameters.AddWithValue("issuer", issuer);
+    command.Parameters.AddWithValue("subject", subject);
+    await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+    while (await reader.ReadAsync(cancellationToken))
+        scopes.Add(new AppointmentAccessScope(reader.GetString(0), reader.GetString(1)));
+
+    context.Response.Headers["Cache-Control"] = "no-store";
+    return Results.Ok(new { appointmentScopes = scopes });
+}).RequireAuthorization(IdentityAppointmentScopesPolicy);
 
 app.MapGet("/health/ready", async (NpgsqlDataSource db, CancellationToken cancellationToken) =>
 {
@@ -176,6 +213,7 @@ public sealed record DefineAppointmentSlotRequest(
 
 public sealed record BookAppointmentRequest(Guid RequestId, long ExpectedRevision, string SlotRef);
 public sealed record CancelAppointmentRequest(Guid RequestId, long ExpectedRevision);
+public sealed record AppointmentAccessScope(string Capability, string ScopeRef);
 
 public sealed class AppointmentDatabaseBootstrap(
     NpgsqlDataSource dataSource,

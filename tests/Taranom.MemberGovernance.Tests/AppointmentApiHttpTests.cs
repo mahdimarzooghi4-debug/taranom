@@ -20,6 +20,41 @@ namespace Taranom.MemberGovernance.Tests;
 public sealed class AppointmentApiHttpTests
 {
     [Fact]
+    public async Task AuthenticatedIdentitySeesOnlyItsCurrentAppointmentScopes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(cancellationToken);
+        using var anonymousClient = setup.Factory.CreateClient();
+        var anonymous = await anonymousClient.GetAsync(
+            "/api/v1/me/appointment-scopes", cancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        var subject = "scope-subject-" + Guid.NewGuid().ToString("N");
+        var otherSubject = "scope-other-" + Guid.NewGuid().ToString("N");
+        await setup.GrantAsync(subject, "CenterAppointmentsManage", "center-scope-a", cancellationToken);
+        await setup.GrantAsync(subject, "MemberAppointmentsManage", "member-scope-a", cancellationToken);
+        await setup.GrantAsync(subject, "CenterAppointmentsManage", "center-scope-stale", cancellationToken,
+            currentEvidence: false);
+        await setup.GrantAsync(subject, "CenterAppointmentsManage", "center-scope-revoked", cancellationToken,
+            grantState: "revoked");
+        await setup.GrantAsync(otherSubject, "CenterAppointmentsManage", "center-scope-other", cancellationToken);
+
+        using var client = setup.AuthenticatedIdentityClient(subject);
+        var response = await client.GetAsync("/api/v1/me/appointment-scopes", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        using var payload = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        var scopes = payload!.RootElement.GetProperty("appointmentScopes").EnumerateArray()
+            .Select(item => $"{item.GetProperty("capability").GetString()}|{item.GetProperty("scopeRef").GetString()}")
+            .ToArray();
+        Assert.Equal(new[]
+        {
+            "CenterAppointmentsManage|center-scope-a",
+            "MemberAppointmentsManage|member-scope-a"
+        }, scopes);
+    }
+
+    [Fact]
     public async Task AppointmentRoutesRequireAuthenticationAndExactCenterCapability()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -163,12 +198,20 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
         return client;
     }
 
+    internal HttpClient AuthenticatedIdentityClient(string subject)
+    {
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Taranom-Test-Subject", subject);
+        return client;
+    }
+
     internal async Task GrantAsync(
         string subject,
         string capability,
         string scopeRef,
         CancellationToken cancellationToken,
-        bool currentEvidence = true)
+        bool currentEvidence = true,
+        string grantState = "active")
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
@@ -176,13 +219,14 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
                 (issuer, subject, capability, scope_ref, grant_state,
                  session_current, subject_mapping_current, permission_version_current,
                  grant_not_revoked, audit_ready)
-            VALUES (@issuer, @subject, @capability, @scope, 'active',
+            VALUES (@issuer, @subject, @capability, @scope, @grant_state,
                     @current, @current, @current, @current, @current)
             """, connection);
         command.Parameters.AddWithValue("issuer", Issuer);
         command.Parameters.AddWithValue("subject", subject);
         command.Parameters.AddWithValue("capability", capability);
         command.Parameters.AddWithValue("scope", scopeRef);
+        command.Parameters.AddWithValue("grant_state", grantState);
         command.Parameters.AddWithValue("current", currentEvidence);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -252,17 +296,19 @@ internal sealed class AppointmentTestAuthenticationHandler(
         var subject = Request.Headers["X-Taranom-Test-Subject"].ToString();
         var scope = Request.Headers["X-Taranom-Test-Scope"].ToString();
         var capability = Request.Headers["X-Taranom-Test-Capability"].ToString();
-        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(scope) ||
-            string.IsNullOrWhiteSpace(capability))
+        if (string.IsNullOrWhiteSpace(subject))
             return Task.FromResult(AuthenticateResult.NoResult());
 
-        var grant = $"v1|{scope.Length}|{scope}|{capability}";
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim("iss", Issuer),
-            new Claim("sub", subject),
-            new Claim(PanelAccessPolicy.GrantClaimType, grant, ClaimValueTypes.String, Issuer)
+            new Claim("sub", subject)
         };
+        if (!string.IsNullOrWhiteSpace(scope) && !string.IsNullOrWhiteSpace(capability))
+        {
+            var grant = $"v1|{scope.Length}|{scope}|{capability}";
+            claims.Add(new Claim(PanelAccessPolicy.GrantClaimType, grant, ClaimValueTypes.String, Issuer));
+        }
         var identity = new ClaimsIdentity(claims, SchemeName);
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));
