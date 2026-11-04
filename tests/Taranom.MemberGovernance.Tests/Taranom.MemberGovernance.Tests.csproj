@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../src/Taranom.AppointmentScheduling/Taranom.AppointmentScheduling.csproj" />
     <ProjectReference Include="../../src/Taranom.MemberGovernance/Taranom.MemberGovernance.csproj" />
     <ProjectReference Include="../../src/Taranom.PanelAccess.AspNetCore/Taranom.PanelAccess.AspNetCore.csproj" />
     <PackageReference Include="xunit.v3" Version="4.0.1" />
