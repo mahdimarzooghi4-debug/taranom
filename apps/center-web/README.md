@@ -4,6 +4,8 @@
 
 Five routes within **one center panel**: `/center`, `/center/departments`, `/center/doctors`, `/center/qualifications`, `/center/audit`.
 
+The separately routed `/center-portal` preview now follows the medical-center pages in the Taranom Figma file (20 screens). It uses explicitly synthetic center, doctor, appointment, prescription, insurer, financial and schedule values. It is frontend-only: no actions persist, insurance is never calculated by Taranom, and the hospital-system connection is not active. The original `/center` protected shell remains unchanged.
+
 - This shell uses React + TypeScript + Vite, Persian RTL, keyboard/accessible browser routing, responsive sidebar and a non-mutating workflow-information dialog.
 - The UI **never** authenticates a center, fetches actual doctors/departments, shows patient data, grants licenses or writes real/placeholder doctors. Action controls open information-only locked dialogs; their submit buttons are disabled. No browser local/session storage, fake active-doctor profiles, REST URLs, external CDN/fonts, or live authorization fallback is present.
 - Empty/unavailable lists **must not** mean a real center has zero doctors or departments.
