@@ -11,7 +11,7 @@ namespace Taranom.MemberGovernance.Tests;
 public sealed class TaranomOidcPanelApiSecurityTests
 {
     [Fact]
-    public void ValidHttpsConfigurationRegistersStrictBearerValidationAndDenyByDefault()
+    public async Task ValidHttpsConfigurationRegistersStrictBearerValidationAndDenyByDefault()
     {
         using var provider = CreateProvider(
             "https://login.example.test/realms/taranom",
@@ -36,8 +36,8 @@ public sealed class TaranomOidcPanelApiSecurityTests
         Assert.True(bearer.TokenValidationParameters.ValidateLifetime);
         Assert.True(bearer.TokenValidationParameters.RequireSignedTokens);
         Assert.True(bearer.TokenValidationParameters.ValidateIssuerSigningKey);
-        var defaultPolicy = authorization.GetDefaultPolicyAsync().GetAwaiter().GetResult();
-        var fallbackPolicy = authorization.GetFallbackPolicyAsync().GetAwaiter().GetResult();
+        var defaultPolicy = await authorization.GetDefaultPolicyAsync();
+        var fallbackPolicy = await authorization.GetFallbackPolicyAsync();
         Assert.NotNull(defaultPolicy);
         Assert.NotNull(fallbackPolicy);
         Assert.Contains(defaultPolicy.Requirements,
