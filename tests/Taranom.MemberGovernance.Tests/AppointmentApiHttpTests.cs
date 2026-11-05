@@ -242,6 +242,28 @@ public sealed class AppointmentApiHttpTests
         using var replayJson = await replayedBooking.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
         Assert.Equal("Replayed", replayJson!.RootElement.GetProperty("outcome").GetString());
 
+        using var memberAppointmentsResponse = await memberClient.GetAsync(
+            "/api/v1/me/appointments", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, memberAppointmentsResponse.StatusCode);
+        Assert.Equal("no-store", memberAppointmentsResponse.Headers.CacheControl?.ToString());
+        using var memberAppointmentsJson = await memberAppointmentsResponse.Content
+            .ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        var ownAppointments = memberAppointmentsJson!.RootElement
+            .GetProperty("appointments").EnumerateArray().ToArray();
+        var ownAppointment = Assert.Single(ownAppointments);
+        Assert.Equal(centerRef, ownAppointment.GetProperty("centerRef").GetString());
+        Assert.Equal(memberRef, ownAppointment.GetProperty("memberRef").GetString());
+        Assert.Equal(bookingRef, ownAppointment.GetProperty("bookingRef").GetGuid());
+        Assert.Equal("Booked", ownAppointment.GetProperty("state").GetString());
+
+        using var otherMemberAppointmentsResponse = await secondClient.GetAsync(
+            "/api/v1/me/appointments", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, otherMemberAppointmentsResponse.StatusCode);
+        using var otherMemberAppointmentsJson = await otherMemberAppointmentsResponse.Content
+            .ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        Assert.Empty(otherMemberAppointmentsJson!.RootElement
+            .GetProperty("appointments").EnumerateArray());
+
         var cancelPath = path + $"/appointments/{bookingRef:D}/cancel";
         var otherMemberCannotRead = await secondClient.GetAsync(
             path + "/appointments", cancellationToken);
@@ -251,6 +273,13 @@ public sealed class AppointmentApiHttpTests
         var cancelled = await memberClient.PostAsJsonAsync(cancelPath,
             new { requestId = cancellationRequestId, expectedRevision = 2 }, cancellationToken);
         Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode);
+        using var cancelledAppointmentsResponse = await memberClient.GetAsync(
+            "/api/v1/me/appointments", cancellationToken);
+        using var cancelledAppointmentsJson = await cancelledAppointmentsResponse.Content
+            .ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        var cancelledAppointment = Assert.Single(cancelledAppointmentsJson!.RootElement
+            .GetProperty("appointments").EnumerateArray());
+        Assert.Equal("CancelledByMember", cancelledAppointment.GetProperty("state").GetString());
 
         var changedMemberHint = await memberClient.GetAsync(
             $"/api/v1/member/members/{memberRef}-other/centers/{centerRef}/appointments",
