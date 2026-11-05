@@ -10,6 +10,8 @@ public sealed record AppointmentPersistenceChange(
     AppointmentSlot? Slot,
     AppointmentBooking? Booking);
 
+public sealed record AppointmentAuditActor(string Issuer, string Subject);
+
 /// <summary>
 /// PostgreSQL persistence for center-managed appointment schedules. The store
 /// serializes each center's immutable state under a row lock and relies on the
@@ -29,6 +31,22 @@ public sealed class PostgresAppointmentScheduleStore(NpgsqlDataSource dataSource
                 snapshot jsonb NOT NULL,
                 updated_at timestamptz NOT NULL DEFAULT now()
             );
+            CREATE TABLE IF NOT EXISTS taranom_appointment_audit_event (
+                event_id uuid PRIMARY KEY,
+                request_id uuid NOT NULL,
+                center_ref text NOT NULL,
+                actor_issuer text NOT NULL,
+                actor_subject text NOT NULL,
+                action text NOT NULL CHECK (action IN ('define-slot', 'book', 'cancel')),
+                target_ref text NOT NULL,
+                appointment_ref uuid NULL,
+                command_fingerprint char(64) NOT NULL,
+                schedule_revision bigint NOT NULL CHECK (schedule_revision > 0),
+                occurred_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE (center_ref, request_id)
+            );
+            CREATE INDEX IF NOT EXISTS ix_taranom_appointment_audit_center_time
+                ON taranom_appointment_audit_event (center_ref, occurred_at DESC);
             """, connection);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -52,10 +70,16 @@ public sealed class PostgresAppointmentScheduleStore(NpgsqlDataSource dataSource
 
     public async Task<AppointmentPersistenceChange> ApplyAsync(
         string centerRef,
+        AppointmentAuditActor actor,
         Func<AppointmentScheduleSnapshot, AppointmentScheduleChange> apply,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(actor);
         ArgumentNullException.ThrowIfNull(apply);
+        if (string.IsNullOrWhiteSpace(actor.Issuer) || string.IsNullOrWhiteSpace(actor.Subject) ||
+            actor.Issuer.Length > 512 || actor.Subject.Length > 256 ||
+            actor.Issuer.Any(char.IsControl) || actor.Subject.Any(char.IsControl))
+            throw new ArgumentException("A valid authenticated appointment audit actor is required.", nameof(actor));
         var empty = AppointmentScheduleSnapshot.Create(centerRef);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -107,8 +131,52 @@ public sealed class PostgresAppointmentScheduleStore(NpgsqlDataSource dataSource
                 throw new InvalidOperationException("APPOINTMENT_SCHEDULE_REVISION_CONFLICT");
         }
 
+        if (change.Outcome == AppointmentCommandOutcome.Applied)
+        {
+            var addedReceipts = change.Snapshot.Receipts.Values
+                .Where(receipt => !current.Receipts.ContainsKey(receipt.RequestId))
+                .ToArray();
+            if (addedReceipts.Length != 1 || string.IsNullOrWhiteSpace(addedReceipts[0].CommandFingerprint))
+                throw new InvalidOperationException("APPOINTMENT_AUDIT_RECEIPT_MISSING");
+            await AppendAuditEventAsync(connection, transaction, centerRef, actor,
+                addedReceipts[0], change.Snapshot.Revision, cancellationToken);
+        }
+
         await transaction.CommitAsync(cancellationToken);
         return new(change.Outcome, change.Snapshot, change.Slot, change.Booking);
+    }
+
+    private static async Task AppendAuditEventAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string centerRef,
+        AppointmentAuditActor actor,
+        AppointmentCommandReceipt receipt,
+        long revision,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO taranom_appointment_audit_event
+                (event_id, request_id, center_ref, actor_issuer, actor_subject,
+                 action, target_ref, appointment_ref, command_fingerprint, schedule_revision)
+            VALUES
+                (@event_id, @request_id, @center_ref, @actor_issuer, @actor_subject,
+                 @action, @target_ref, @appointment_ref, @command_fingerprint, @revision)
+            """, connection, transaction);
+        command.Parameters.AddWithValue("event_id", Guid.NewGuid());
+        command.Parameters.AddWithValue("request_id", receipt.RequestId);
+        command.Parameters.AddWithValue("center_ref", centerRef);
+        command.Parameters.AddWithValue("actor_issuer", actor.Issuer);
+        command.Parameters.AddWithValue("actor_subject", actor.Subject);
+        command.Parameters.AddWithValue("action", receipt.Action);
+        command.Parameters.AddWithValue("target_ref", receipt.TargetRef);
+        command.Parameters.Add("appointment_ref", NpgsqlTypes.NpgsqlDbType.Uuid).Value =
+            receipt.AppointmentRef.HasValue
+                ? (object)receipt.AppointmentRef.Value
+                : DBNull.Value;
+        command.Parameters.AddWithValue("command_fingerprint", receipt.CommandFingerprint!);
+        command.Parameters.AddWithValue("revision", revision);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static string Serialize(AppointmentScheduleSnapshot snapshot) =>

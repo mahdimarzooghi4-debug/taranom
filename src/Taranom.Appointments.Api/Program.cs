@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Npgsql;
 using Taranom.AppointmentScheduling;
 using Taranom.AppointmentScheduling.Postgres;
@@ -166,10 +167,13 @@ center.MapGet("/appointments", async (
 center.MapPost("/appointment-slots", async (
     string centerRef,
     DefineAppointmentSlotRequest request,
+    HttpContext context,
     PostgresAppointmentScheduleStore store,
     CancellationToken cancellationToken) =>
 {
-    var change = await store.ApplyAsync(centerRef,
+    var actor = ResolveAppointmentAuditActor(context.User);
+    if (actor is null) return Results.Forbid();
+    var change = await store.ApplyAsync(centerRef, actor,
         snapshot => snapshot.DefineSlot(request.RequestId, request.ExpectedRevision,
             centerRef, request.SlotRef, request.DoctorRef, request.StartsAt, request.EndsAt),
         cancellationToken);
@@ -220,8 +224,9 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments", async (
     CancellationToken cancellationToken) =>
 {
     var resolvedMemberRef = await scopes.ResolveAsync(context.User, memberRef, cancellationToken);
-    if (resolvedMemberRef is null) return Results.Forbid();
-    var change = await store.ApplyAsync(centerRef,
+    var actor = ResolveAppointmentAuditActor(context.User);
+    if (resolvedMemberRef is null || actor is null) return Results.Forbid();
+    var change = await store.ApplyAsync(centerRef, actor,
         snapshot => snapshot.Book(request.RequestId, request.ExpectedRevision,
             resolvedMemberRef, request.SlotRef), cancellationToken);
     return AppointmentResponse(change.Outcome, change);
@@ -238,12 +243,13 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments/{bookingRe
     CancellationToken cancellationToken) =>
 {
     var resolvedMemberRef = await scopes.ResolveAsync(context.User, memberRef, cancellationToken);
-    if (resolvedMemberRef is null) return Results.Forbid();
+    var actor = ResolveAppointmentAuditActor(context.User);
+    if (resolvedMemberRef is null || actor is null) return Results.Forbid();
     var current = await store.ReadAsync(centerRef, cancellationToken);
     if (current is null || !current.Bookings.TryGetValue(bookingRef, out var booking) ||
         !string.Equals(booking.MemberRef, resolvedMemberRef, StringComparison.Ordinal))
         return Results.NotFound();
-    var change = await store.ApplyAsync(centerRef, snapshot =>
+    var change = await store.ApplyAsync(centerRef, actor, snapshot =>
     {
         if (!snapshot.Bookings.TryGetValue(bookingRef, out var currentBooking) ||
             currentBooking.State != AppointmentBookingState.Booked)
@@ -256,6 +262,24 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments/{bookingRe
 }).RequirePanelCapability(PanelCapability.MemberAppointmentsManage);
 
 app.Run();
+
+static AppointmentAuditActor? ResolveAppointmentAuditActor(ClaimsPrincipal principal)
+{
+    var identity = principal.Identities.FirstOrDefault(item =>
+        item.IsAuthenticated &&
+        !string.IsNullOrWhiteSpace(item.FindFirst("iss")?.Value) &&
+        !string.IsNullOrWhiteSpace(item.FindFirst("sub")?.Value));
+    if (identity is null) return null;
+
+    var issuer = identity.FindFirst("iss")?.Value;
+    var subject = identity.FindFirst("sub")?.Value;
+    if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(subject) ||
+        issuer.Length > 512 || subject.Length > 256 ||
+        issuer.Any(char.IsControl) || subject.Any(char.IsControl))
+        return null;
+
+    return new AppointmentAuditActor(issuer, subject);
+}
 
 static IResult AppointmentResponse(
     AppointmentCommandOutcome outcome,

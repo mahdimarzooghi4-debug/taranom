@@ -213,11 +213,12 @@ public sealed class AppointmentApiHttpTests
             secondSubject, otherMemberRef, "MemberAppointmentsManage");
 
         var startsAt = DateTimeOffset.UtcNow.AddDays(6);
+        var defineRequestId = Guid.NewGuid();
         var define = await centerClient.PostAsJsonAsync(
             $"/api/v1/centers/{centerRef}/appointment-slots",
             new
             {
-                requestId = Guid.NewGuid(), expectedRevision = 0,
+                requestId = defineRequestId, expectedRevision = 0,
                 slotRef = "member-slot-1", doctorRef = "doctor-opaque-2",
                 startsAt, endsAt = startsAt.AddMinutes(30)
             }, cancellationToken);
@@ -226,27 +227,46 @@ public sealed class AppointmentApiHttpTests
         var path = $"/api/v1/member/members/{memberRef}/centers/{centerRef}";
         var slots = await memberClient.GetAsync(path + "/appointment-slots", cancellationToken);
         Assert.Equal(HttpStatusCode.OK, slots.StatusCode);
+        var bookingRequestId = Guid.NewGuid();
+        var bookPayload = new { requestId = bookingRequestId, expectedRevision = 1, slotRef = "member-slot-1" };
         var book = await memberClient.PostAsJsonAsync(path + "/appointments",
-            new { requestId = Guid.NewGuid(), expectedRevision = 1, slotRef = "member-slot-1" },
-            cancellationToken);
+            bookPayload, cancellationToken);
         Assert.Equal(HttpStatusCode.OK, book.StatusCode);
         using var bookingJson = await book.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
         var bookingRef = bookingJson!.RootElement.GetProperty("appointment")
             .GetProperty("bookingRef").GetGuid();
+
+        var replayedBooking = await memberClient.PostAsJsonAsync(
+            path + "/appointments", bookPayload, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, replayedBooking.StatusCode);
+        using var replayJson = await replayedBooking.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
+        Assert.Equal("Replayed", replayJson!.RootElement.GetProperty("outcome").GetString());
 
         var cancelPath = path + $"/appointments/{bookingRef:D}/cancel";
         var otherMemberCannotRead = await secondClient.GetAsync(
             path + "/appointments", cancellationToken);
         Assert.Equal(HttpStatusCode.Forbidden, otherMemberCannotRead.StatusCode);
 
+        var cancellationRequestId = Guid.NewGuid();
         var cancelled = await memberClient.PostAsJsonAsync(cancelPath,
-            new { requestId = Guid.NewGuid(), expectedRevision = 2 }, cancellationToken);
+            new { requestId = cancellationRequestId, expectedRevision = 2 }, cancellationToken);
         Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode);
 
         var changedMemberHint = await memberClient.GetAsync(
             $"/api/v1/member/members/{memberRef}-other/centers/{centerRef}/appointments",
             cancellationToken);
         Assert.Equal(HttpStatusCode.Forbidden, changedMemberHint.StatusCode);
+
+        var audit = await setup.ReadAppointmentAuditEventsAsync(centerRef, cancellationToken);
+        Assert.Equal(new[] { "define-slot", "book", "cancel" },
+            audit.Select(item => item.Action));
+        Assert.Equal(new[] { centerSubject, memberSubject, memberSubject },
+            audit.Select(item => item.ActorSubject));
+        Assert.All(audit, item => Assert.Equal(
+            "https://appointments.test.invalid/realms/taranom", item.ActorIssuer));
+        Assert.Equal(new[] { 1L, 2L, 3L }, audit.Select(item => item.ScheduleRevision));
+        Assert.Equal(new[] { defineRequestId, bookingRequestId, cancellationRequestId },
+            audit.Select(item => item.RequestId));
     }
 }
 
@@ -321,6 +341,28 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
             """, connection);
         command.Parameters.AddWithValue("center_ref", centerRef);
         return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
+    internal async Task<(Guid RequestId, string Action, string ActorIssuer,
+        string ActorSubject, long ScheduleRevision)[]> ReadAppointmentAuditEventsAsync(
+        string centerRef,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            SELECT request_id, action, actor_issuer, actor_subject, schedule_revision
+            FROM taranom_appointment_audit_event
+            WHERE center_ref = @center_ref
+            ORDER BY schedule_revision
+            """, connection);
+        command.Parameters.AddWithValue("center_ref", centerRef);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var events = new List<(Guid, string, string, string, long)>();
+        while (await reader.ReadAsync(cancellationToken))
+            events.Add((reader.GetGuid(0), reader.GetString(1), reader.GetString(2),
+                reader.GetString(3), reader.GetInt64(4)));
+        return events.Select(item => (item.Item1, item.Item2, item.Item3,
+            item.Item4, item.Item5)).ToArray();
     }
 
     public async ValueTask DisposeAsync()

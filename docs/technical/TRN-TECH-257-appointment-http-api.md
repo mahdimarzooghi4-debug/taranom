@@ -18,3 +18,9 @@ Each business route requires an authenticated OIDC identity and an active centra
 ## Boundaries
 
 The API host and database schema are code foundations. Initial center-manager grants still require an approved bootstrap path. A verified staff directory and invitation/onboarding flow, browser BFF/session, connected frontends, and live OIDC issuer verification remain outstanding. The grant table starts empty and false-by-default evidence prevents accidental access. No sample records are inserted. Insurance, payment, prescriptions, clinical records, and medical decisions are outside these routes.
+
+## Change audit
+
+Every applied slot definition, booking, and member cancellation appends an audit event in the same PostgreSQL transaction as the schedule snapshot update. The event records the authenticated OIDC issuer and subject, center, request ID, action, opaque slot and appointment references, command fingerprint, resulting schedule revision, and database timestamp. If the audit insert fails, the schedule mutation rolls back. Exact replays, conflicting replays, and denied commands do not create duplicate success events.
+
+This is an application-level insert-only path; database role grants and independent audit custody remain operational controls for a deployed environment. Read operations are not recorded by this change.
