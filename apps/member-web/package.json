@@ -12,7 +12,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "check": "npm run typecheck && npm run build"
+    "check": "npm run typecheck && npm run build",
+    "test:appointments": "node --experimental-strip-types --test unit-tests/appointment-client.test.mjs"
   },
   "dependencies": {
     "react": "19.2.0",
