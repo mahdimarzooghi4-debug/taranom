@@ -16,6 +16,6 @@ Implement the owner-confirmed rule that each medical center's authorized manager
 ## Limits and remaining
 
 - The central registry remains empty by default. Initial `CenterAccessGrantsManage` assignments still require an approved bootstrap process.
-- The target's OIDC token must carry the exact signed capability/scope claim before protected API access succeeds. This slice records central grants but does not configure or synchronize Keycloak claims.
+- OIDC authenticates identity; dynamic permissions are resolved from the central grant registry on each request. New grants and revocations take effect immediately without token refresh.
 - Staff are addressed by opaque OIDC subject; a verified staff directory and invitation/onboarding UI are not included.
 - Draft/Open only. No merge, Stage, formal QA, release or Production deployment.

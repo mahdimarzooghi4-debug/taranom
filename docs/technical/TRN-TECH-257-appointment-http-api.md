@@ -2,17 +2,19 @@
 
 ## Routes
 
-- `GET /api/v1/centers/{centerRef}/appointments` — center-scoped read.
+- `GET /api/v1/centers/{centerRef}/appointments` — center-scoped appointment read.
 - `POST /api/v1/centers/{centerRef}/appointment-slots` — center defines a doctor slot.
 - `GET /api/v1/member/members/{memberRef}/centers/{centerRef}/appointment-slots` — member-scoped read of open slots.
 - `GET /api/v1/member/members/{memberRef}/centers/{centerRef}/appointments` — member's appointments at a center.
 - `POST /api/v1/member/members/{memberRef}/centers/{centerRef}/appointments` — member books an open slot.
 - `POST /api/v1/member/members/{memberRef}/centers/{centerRef}/appointments/{bookingRef}/cancel` — only the member who owns the booking may cancel.
 
-All business routes require an OIDC token and an exact signed panel-grant claim. A PostgreSQL central grant row must also match issuer, subject, capability, and server-resolved member/center scope; all five current-evidence flags must be confirmed. Missing rows and stale, revoked, mismatched or unbound access deny by default. The URL's `memberRef` is only a scope hint and must match a central grant. The API never trusts a client-provided role or derives a member from the request body.
+Each business route requires an authenticated OIDC identity and an active central grant for the exact issuer, subject, capability, and scope. Dynamic capabilities are not copied into the OIDC token. The API reads the grant registry for each request, so a manager's grant or revocation is effective on the next request without a token refresh. The member or center in the path is only a scope hint and must exactly match the resolved grant and resource owner. Stale evidence, revoked or missing grants, mismatched scope, and unbound routes deny by default.
 
-`/health/ready` is anonymous and returns only a readiness status after a database `SELECT 1`. No identity, member or appointment records are included.
+`GET /api/v1/me/appointment-scopes` returns the caller's active appointment scopes from the same registry. It requires authenticated identity, returns no names or clinical data, and is marked `Cache-Control: no-store`.
+
+`/health/ready` is anonymous and returns only a readiness status after a database `SELECT 1`.
 
 ## Boundaries
 
-The API host and database schema are code-only foundations. There is no central-grant administration endpoint, actual Keycloak realm/mapper configuration, BFF/session, deployed service, verified member onboarding, or Figma UI client yet. The grant table has false-by-default evidence flags and starts empty; the API therefore grants no panel access until the approved central administration path and actual issuer claims are configured and independently checked. No sample records are inserted. Insurance, payment, prescriptions, clinical records and medical decisions are outside these routes.
+The API host and database schema are code foundations. Initial center-manager grants still require an approved bootstrap path. A verified staff directory and invitation/onboarding flow, browser BFF/session, connected frontends, and live OIDC issuer verification remain outstanding. The grant table starts empty and false-by-default evidence prevents accidental access. No sample records are inserted. Insurance, payment, prescriptions, clinical records, and medical decisions are outside these routes.

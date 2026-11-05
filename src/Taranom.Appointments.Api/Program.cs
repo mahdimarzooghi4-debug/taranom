@@ -283,7 +283,7 @@ static IResult CenterGrantResponse(
             centerRef,
             targetSubject = request.TargetSubject,
             capability = request.Capability,
-            authorizationRefreshRequired = true
+            authorizationRefreshRequired = false
         }),
     CenterAccessGrantOutcome.NotFound => Results.NotFound(),
     CenterAccessGrantOutcome.Conflict => Results.Conflict(new { code = "IDEMPOTENCY_KEY_CONFLICT" }),

@@ -50,7 +50,7 @@ public sealed class AppointmentApiHttpTests
         Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
         using var grantJson = await granted.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
         Assert.Equal("Applied", grantJson!.RootElement.GetProperty("outcome").GetString());
-        Assert.True(grantJson.RootElement.GetProperty("authorizationRefreshRequired").GetBoolean());
+        Assert.False(grantJson.RootElement.GetProperty("authorizationRefreshRequired").GetBoolean());
 
         var listed = await manager.GetAsync(accessGrants, cancellationToken);
         Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
@@ -116,16 +116,9 @@ public sealed class AppointmentApiHttpTests
             grantState: "revoked");
         await setup.GrantAsync(otherSubject, "CenterAppointmentsManage", "center-scope-other", cancellationToken);
 
-        using var withoutGrantClaims = setup.AuthenticatedIdentityClient(subject);
-        var noClaimResponse = await withoutGrantClaims.GetAsync(
-            "/api/v1/me/appointment-scopes", cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, noClaimResponse.StatusCode);
-        using var noClaimPayload = await noClaimResponse.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
-        Assert.Empty(noClaimPayload!.RootElement.GetProperty("appointmentScopes").EnumerateArray());
-
-        using var client = setup.AuthenticatedIdentityClient(subject,
-            ("center-scope-a", "CenterAppointmentsManage"),
-            ("member-scope-a", "MemberAppointmentsManage"));
+        // OIDC proves identity; the current server-side grant registry is the
+        // only source of capabilities and scopes.
+        using var client = setup.AuthenticatedIdentityClient(subject);
         var response = await client.GetAsync("/api/v1/me/appointment-scopes", cancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
@@ -277,24 +270,17 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
 
     internal HttpClient AuthenticatedClient(string subject, string scope, string capability)
     {
-        var client = Factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Taranom-Test-Subject", subject);
-        client.DefaultRequestHeaders.Add("X-Taranom-Test-Scope", scope);
-        client.DefaultRequestHeaders.Add("X-Taranom-Test-Capability", capability);
-        return client;
+        // Scope and capability are deliberately not sent as token claims. They
+        // must be resolved from the current server-side grant registry.
+        _ = scope;
+        _ = capability;
+        return AuthenticatedIdentityClient(subject);
     }
 
-    internal HttpClient AuthenticatedIdentityClient(
-        string subject,
-        params (string Scope, string Capability)[] grants)
+    internal HttpClient AuthenticatedIdentityClient(string subject)
     {
         var client = Factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Taranom-Test-Subject", subject);
-        foreach (var grant in grants)
-        {
-            var grantClaim = $"v1|{grant.Scope.Length}|{grant.Scope}|{grant.Capability}";
-            client.DefaultRequestHeaders.Add("X-Taranom-Test-Grant", grantClaim);
-        }
         return client;
     }
 
@@ -400,8 +386,6 @@ internal sealed class AppointmentTestAuthenticationHandler(
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var subject = Request.Headers["X-Taranom-Test-Subject"].ToString();
-        var scope = Request.Headers["X-Taranom-Test-Scope"].ToString();
-        var capability = Request.Headers["X-Taranom-Test-Capability"].ToString();
         if (string.IsNullOrWhiteSpace(subject))
             return Task.FromResult(AuthenticateResult.NoResult());
 
@@ -410,15 +394,6 @@ internal sealed class AppointmentTestAuthenticationHandler(
             new Claim("iss", Issuer),
             new Claim("sub", subject)
         };
-        if (!string.IsNullOrWhiteSpace(scope) && !string.IsNullOrWhiteSpace(capability))
-        {
-            var grant = $"v1|{scope.Length}|{scope}|{capability}";
-            claims.Add(new Claim(PanelAccessPolicy.GrantClaimType, grant, ClaimValueTypes.String, Issuer));
-        }
-        foreach (var grant in Request.Headers["X-Taranom-Test-Grant"])
-            if (!string.IsNullOrWhiteSpace(grant))
-                claims.Add(new Claim(PanelAccessPolicy.GrantClaimType, grant,
-                    ClaimValueTypes.String, Issuer));
         var identity = new ClaimsIdentity(claims, SchemeName);
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));
