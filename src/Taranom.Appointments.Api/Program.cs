@@ -96,7 +96,11 @@ app.MapGet("/api/v1/me/appointments", async (
                booking.value ->> 'memberRef',
                booking.value ->> 'slotRef',
                (booking.value ->> 'startsAt')::timestamptz,
-               booking.value ->> 'state'
+               CASE booking.value ->> 'state'
+                   WHEN '1' THEN 'Booked'
+                   WHEN '2' THEN 'CancelledByMember'
+                   ELSE booking.value ->> 'state'
+               END
         FROM taranom_appointment_schedule AS schedule
         CROSS JOIN LATERAL jsonb_array_elements(
             CASE jsonb_typeof(schedule.snapshot -> 'bookings')
