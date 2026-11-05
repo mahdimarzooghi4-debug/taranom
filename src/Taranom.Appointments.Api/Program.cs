@@ -98,8 +98,16 @@ app.MapGet("/api/v1/me/appointments", async (
                (booking.value ->> 'startsAt')::timestamptz,
                booking.value ->> 'state'
         FROM taranom_appointment_schedule AS schedule
-        CROSS JOIN LATERAL jsonb_each(
-            COALESCE(schedule.snapshot -> 'bookings', '{}'::jsonb)) AS booking(key, value)
+        CROSS JOIN LATERAL jsonb_array_elements(
+            CASE jsonb_typeof(schedule.snapshot -> 'bookings')
+                WHEN 'array' THEN schedule.snapshot -> 'bookings'
+                WHEN 'object' THEN COALESCE((
+                    SELECT jsonb_agg(item.value)
+                    FROM jsonb_each(schedule.snapshot -> 'bookings') AS item(key, value)
+                ), '[]'::jsonb)
+                ELSE '[]'::jsonb
+            END
+        ) AS booking(value)
         WHERE EXISTS (
             SELECT 1
             FROM taranom_panel_access_grant AS grant_row
