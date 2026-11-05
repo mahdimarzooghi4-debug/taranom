@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authentication;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -25,20 +27,21 @@ public sealed class TaranomOidcBearerMiddlewareTests
     [Fact]
     public async Task ValidSignedTokenPassesTheConfiguredBearerMiddleware()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var trustedKey = RSA.Create();
         trustedKey.KeySize = 2048;
-        using var server = CreateServer(trustedKey);
-        using var client = server.CreateClient();
+        using var host = StartHost(trustedKey);
+        using var client = host.GetTestClient();
 
-        using var anonymous = await client.GetAsync("/identity");
+        using var anonymous = await client.GetAsync("/identity", cancellationToken);
         Assert.Equal(StatusCodes.Status401Unauthorized, (int)anonymous.StatusCode);
 
         var token = CreateToken(trustedKey, Issuer, Audience, DateTime.UtcNow.AddMinutes(5));
         using var request = new HttpRequestMessage(HttpMethod.Get, "/identity");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        using var accepted = await client.SendAsync(request);
+        using var accepted = await client.SendAsync(request, cancellationToken);
         Assert.Equal(StatusCodes.Status200OK, (int)accepted.StatusCode);
-        var payload = await accepted.Content.ReadFromJsonAsync<IdentityPayload>();
+        var payload = await accepted.Content.ReadFromJsonAsync<IdentityPayload>(cancellationToken);
         Assert.Equal(Issuer, payload?.Issuer);
         Assert.Equal("member-opaque-1", payload?.Subject);
     }
@@ -51,12 +54,13 @@ public sealed class TaranomOidcBearerMiddlewareTests
     [InlineData("unsigned")]
     public async Task InvalidTokenIsRejectedByTheConfiguredBearerMiddleware(string failure)
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var trustedKey = RSA.Create();
         trustedKey.KeySize = 2048;
         using var otherKey = RSA.Create();
         otherKey.KeySize = 2048;
-        using var server = CreateServer(trustedKey);
-        using var client = server.CreateClient();
+        using var host = StartHost(trustedKey);
+        using var client = host.GetTestClient();
 
         var issuer = failure == "wrong-issuer" ? "https://attacker.test.invalid/realm" : Issuer;
         var audience = failure == "wrong-audience" ? "other-api" : Audience;
@@ -67,11 +71,11 @@ public sealed class TaranomOidcBearerMiddlewareTests
         using var request = new HttpRequestMessage(HttpMethod.Get, "/identity");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-        using var response = await client.SendAsync(request);
+        using var response = await client.SendAsync(request, cancellationToken);
         Assert.Equal(StatusCodes.Status401Unauthorized, (int)response.StatusCode);
     }
 
-    private static TestServer CreateServer(RSA trustedRsa)
+    private static IHost StartHost(RSA trustedRsa)
     {
         var oidc = new OpenIdConnectConfiguration { Issuer = Issuer };
         oidc.SigningKeys.Add(new RsaSecurityKey(trustedRsa));
@@ -84,35 +88,40 @@ public sealed class TaranomOidcBearerMiddlewareTests
             })
             .Build();
 
-        return new TestServer(new WebHostBuilder()
-            .ConfigureServices(services =>
+        return new HostBuilder()
+            .ConfigureWebHost(webHost =>
             {
-                services.AddLogging();
-                services.AddTaranomOidcPanelApiSecurity(configuration);
-                services.PostConfigure<JwtBearerOptions>(
-                    JwtBearerDefaults.AuthenticationScheme,
-                    options => options.ConfigurationManager =
-                        new StaticConfigurationManager<OpenIdConnectConfiguration>(oidc));
-            })
-            .Configure(app =>
-            {
-                app.UseAuthentication();
-                app.Run(async context =>
+                webHost.UseTestServer();
+                webHost.ConfigureServices(services =>
                 {
-                    var result = await context.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
-                    if (!result.Succeeded || result.Principal is null)
-                    {
-                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                        return;
-                    }
-
-                    context.Response.StatusCode = StatusCodes.Status200OK;
-                    var identity = result.Principal.Identities.Single();
-                    await context.Response.WriteAsJsonAsync(new IdentityPayload(
-                        identity.FindFirst("iss")?.Value,
-                        identity.FindFirst("sub")?.Value));
+                    services.AddLogging();
+                    services.AddTaranomOidcPanelApiSecurity(configuration);
+                    services.PostConfigure<JwtBearerOptions>(
+                        JwtBearerDefaults.AuthenticationScheme,
+                        options => options.ConfigurationManager =
+                            new StaticConfigurationManager<OpenIdConnectConfiguration>(oidc));
                 });
-            }));
+                webHost.Configure(app =>
+                {
+                    app.UseAuthentication();
+                    app.Run(async context =>
+                    {
+                        var result = await context.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
+                        if (!result.Succeeded || result.Principal is null)
+                        {
+                            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                            return;
+                        }
+
+                        context.Response.StatusCode = StatusCodes.Status200OK;
+                        var identity = result.Principal.Identities.Single();
+                        await context.Response.WriteAsJsonAsync(new IdentityPayload(
+                            identity.FindFirst("iss")?.Value,
+                            identity.FindFirst("sub")?.Value));
+                    });
+                });
+            })
+            .Start();
     }
 
     private static string CreateToken(
