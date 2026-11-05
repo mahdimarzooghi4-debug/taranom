@@ -18,3 +18,8 @@ This source is strictly internal Code/Code Review and not Stage, formal QA, Rele
 ## Sprint 25 — disconnected browser egress defense
 
 The Center Web built preview uses the same restrictive HTML meta CSP and no-referrer/noindex metadata as Member Web. Three built-browser tests exercise policy presence, blocked local `/api/` + off-site `fetch`, and blocked inline script insertion. Existing disabled/nonmutating center actions and the server DENY-ONLY protected-data gate stay unchanged. Meta CSP is defense in depth for an **offline disconnected preview**, not center-management authorization, professional licensing, a legal medical data right or real hosting/anti-clickjacking policy. Future Production hosting would need approved HTTP headers and independent identity/consent/rights controls; HMR may be restricted.
+
+
+#### Real appointment API slice (Draft)
+
+The Figma center portal routes for dashboard, appointments, reception and schedules use the same-origin appointment API adapter. They require a host-provided authenticated session bridge at `window.taranomSession.getAccessToken()` and a same-origin reverse proxy for `/api/v1`. Tokens are requested in memory and are never written to browser storage. No browser OIDC login or production API host is configured by this preview. Center data is shown only when the API grants `CenterAppointmentsManage`; schedule changes carry the current revision and an idempotent request ID. The provider directory, credentials, hospital information-system connection, insurer API, financial pages and remaining panel workflows are not connected.
