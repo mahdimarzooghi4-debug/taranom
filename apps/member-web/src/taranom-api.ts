@@ -4,12 +4,16 @@ export type MemberAppointment = {
  state: 'Booked' | 'CancelledByMember';
 };
 declare global { interface Window { taranomSession?: { getAccessToken:()=>Promise<string>|string } } }
+export class AppointmentApiError extends Error {
+ readonly status:number;
+ constructor(status:number,message:string){super(message);this.status=status}
+}
 async function api<T>(path:string,init:RequestInit={}):Promise<T>{
  const token=await window.taranomSession?.getAccessToken();
  init.signal?.throwIfAborted();
  if(!token)throw new Error('برای دیدن نوبت‌ها، ابتدا باید نشست ورود معتبر برقرار شود.');
  const response=await fetch(path,{...init,redirect:'error',credentials:'omit',cache:'no-store',headers:{'Accept':'application/json','Authorization':'Bearer '+token,...(init.body?{'Content-Type':'application/json'}:{}),...init.headers}});
- if(!response.ok)throw new Error(response.status===401?'نشست ورود معتبر نیست یا منقضی شده است.':response.status===403?'دسترسی نوبت این حساب فعال نیست.':response.status===409?'وضعیت نوبت تغییر کرده؛ فهرست را تازه کنید.':'دریافت پاسخ سرویس نوبت‌دهی ناموفق بود.');
+ if(!response.ok)throw new AppointmentApiError(response.status,response.status===401?'نشست ورود معتبر نیست یا منقضی شده است.':response.status===403?'دسترسی نوبت این حساب فعال نیست.':response.status===409?'وضعیت نوبت تغییر کرده؛ فهرست را تازه کنید.':'دریافت پاسخ سرویس نوبت‌دهی ناموفق بود.');
  return await response.json() as T;
 }
 export async function getMyAppointments(signal?:AbortSignal){
@@ -22,3 +26,23 @@ export async function getMyAppointments(signal?:AbortSignal){
  return response;
 }
 export const cancelMyAppointment=(item:MemberAppointment,requestId:string=crypto.randomUUID())=>api('/api/v1/member/members/'+encodeURIComponent(item.memberRef)+'/centers/'+encodeURIComponent(item.centerRef)+'/appointments/'+encodeURIComponent(item.bookingRef)+'/cancel',{method:'POST',body:JSON.stringify({requestId,expectedRevision:item.scheduleRevision})});
+
+export type OpenSlot={slotRef:string;centerRef:string;doctorRef:string;startsAt:string;endsAt:string;state:1|'Open'};
+export type MemberSchedule={centerRef:string;revision:number;slots:OpenSlot[]};
+export async function getMemberScopes(signal?:AbortSignal):Promise<string[]>{
+ const result=await api<{appointmentScopes:{capability:string;scopeRef:string}[]}>('/api/v1/me/appointment-scopes',{signal});
+ if(!result||!Array.isArray(result.appointmentScopes)||!result.appointmentScopes.every(s=>s&&typeof s.capability==='string'&&typeof s.scopeRef==='string'&&s.scopeRef.length>0))throw new Error('پاسخ دسترسی حساب معتبر نیست.');
+ return [...new Set(result.appointmentScopes.filter(s=>s.capability==='MemberAppointmentsManage').map(s=>s.scopeRef))];
+}
+const memberPath=(memberRef:string,centerRef:string)=>'/api/v1/member/members/'+encodeURIComponent(memberRef)+'/centers/'+encodeURIComponent(centerRef);
+export async function getMemberSchedule(memberRef:string,centerRef:string,signal?:AbortSignal):Promise<MemberSchedule>{
+ const result=await api<MemberSchedule>(memberPath(memberRef,centerRef)+'/appointment-slots',{signal});
+ if(!result||result.centerRef!==centerRef||!Number.isSafeInteger(result.revision)||result.revision<0||!Array.isArray(result.slots)||!result.slots.every(s=>s&&s.centerRef===centerRef&&typeof s.slotRef==='string'&&s.slotRef.length>0&&typeof s.doctorRef==='string'&&typeof s.startsAt==='string'&&typeof s.endsAt==='string'&&Number.isFinite(Date.parse(s.startsAt))&&Date.parse(s.endsAt)>Date.parse(s.startsAt)&&(s.state===1||s.state==='Open')))throw new Error('پاسخ برنامه نوبت‌دهی معتبر نیست.');
+ return result;
+}
+export type BookingCommand={requestId:string;expectedRevision:number;slotRef:string};
+export async function bookMemberAppointment(memberRef:string,centerRef:string,command:BookingCommand){
+ const result=await api<{outcome:string;revision:number;appointment:{bookingRef:string;memberRef:string;centerRef:string;slotRef:string}}>(memberPath(memberRef,centerRef)+'/appointments',{method:'POST',body:JSON.stringify(command)});
+ if(!result||!['Applied','Replayed'].includes(result.outcome)||!Number.isSafeInteger(result.revision)||result.revision<0||!result.appointment||typeof result.appointment.bookingRef!=='string'||!result.appointment.bookingRef||result.appointment.memberRef!==memberRef||result.appointment.centerRef!==centerRef||result.appointment.slotRef!==command.slotRef)throw new Error('نتیجه ثبت نوبت قابل تأیید نیست.');
+ return result.appointment;
+}

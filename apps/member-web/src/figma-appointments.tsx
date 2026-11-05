@@ -84,7 +84,7 @@ export function FigmaAppointments(){
       <p className="appointment-muted">نام پزشک و نشانی مرکز هنوز از مرجع ارائه‌دهندگان دریافت نمی‌شود.</p></article>
     <article className="appointment-card"><small>روز و ساعت</small><time dateTime={selected.startsAt}>{formatDate(selected.startsAt)}</time><hr/><p>مرجع بیمار: <bdi>{selected.memberRef}</bdi></p></article>
     <section className="appointment-record"><h2>نسخه و سوابق این مراجعه</h2><p>نسخهٔ این مراجعه پس از ثبت در پروندهٔ ترنم بیمار نگهداری می‌شود.</p></section>
-    {cancelAction(selected)}<a className="appointment-primary" href={base+'/appointments'}>بازگشت به نوبت‌های من</a>
+    <a className="appointment-primary" href={base+'/slots?'+new URLSearchParams({center:selected.centerRef})}>نوبت مجدد در همین مرکز</a>{cancelAction(selected)}<a className="appointment-primary" href={base+'/appointments'}>بازگشت به نوبت‌های من</a>
    </>:<p className="appointment-state" role="status">نوبت موردنظر در حساب شما پیدا نشد.</p>
    :filter==='requests'?<section className="appointment-state"><h2>درخواست‌های در جریان</h2><p>سرویس درخواست‌های در انتظار پاسخ مرکز هنوز متصل نشده است.</p></section>
    :visible.length?visible.map(item=><article className="appointment-card" key={item.centerRef+item.bookingRef}>

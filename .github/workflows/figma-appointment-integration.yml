@@ -23,5 +23,5 @@ jobs:
       - run: npm run check --prefix apps/member-web
       - run: npm run check --prefix apps/center-web
       - run: npx --prefix apps/member-web playwright install --with-deps chromium
-      - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts
+      - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts figma-booking-flow.spec.ts
       - run: npm run test:e2e --prefix apps/center-web -- figma-appointment-api.spec.ts
