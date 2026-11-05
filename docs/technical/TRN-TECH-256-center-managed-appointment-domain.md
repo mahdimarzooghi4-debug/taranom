@@ -14,9 +14,10 @@
 - A slot accepts only one active booking. Stale revisions and conflicting idempotency-key reuse are rejected.
 - Only the member who booked a slot can cancel it.
 - Cancellation preserves the appointment as `CancelledByMember` and reopens the slot for a later independent booking.
-- Snapshots and command receipts are immutable values. They contain references and appointment times only, not names, contact details, symptoms, diagnosis, insurance or payment data.
+- Snapshots and command receipts are immutable values. They contain opaque references and appointment times only, not names, contact details, symptoms, diagnosis, insurance or payment data.
+- Every successful command stores a SHA-256 fingerprint of its canonical command fields. Repeating the same request ID with the same actor, action and payload replays the original result. Reusing it with different payload or revision returns `ConflictingReplay`. Legacy receipts without a fingerprint fail closed as conflicting replays.
 - The PostgreSQL store locks one center's row per command, applies a revision-checked immutable snapshot, and commits only successful state changes. Concurrent commands for one center serialize; independent centers use independent rows.
 
 ## Current boundary
 
-This slice includes the in-process domain and a PostgreSQL store, but not an HTTP API or PostgreSQL integration tests. It is not connected to either web panel. Member-to-subject mapping, current central grants/revocation, center-scoped read APIs, Keycloak host configuration, browser session/BFF and UI clients remain next. Protected access must stay denied until those server-owned sources are present. No synthetic or demo endpoint is used as production data.
+The domain and PostgreSQL API support manual slot administration and member booking/cancellation. The hospital-system adapter contract, verified provider directory, panel integrations, and live OIDC remain separate work. This domain does not include provider profile data or clinical decisions.

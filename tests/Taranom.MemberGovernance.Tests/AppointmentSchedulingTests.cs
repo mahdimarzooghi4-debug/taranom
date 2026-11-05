@@ -60,9 +60,46 @@ public sealed class AppointmentSchedulingTests
         Assert.Equal(AppointmentCommandOutcome.Replayed, replayed.Outcome);
         Assert.Equal(2, replayed.Snapshot.Revision);
 
-        var conflicting = replayed.Snapshot.Book(requestId, 2, "member-b", "slot-a");
+        var changedRevision = replayed.Snapshot.Book(requestId, 2, "member-a", "slot-a");
+        Assert.Equal(AppointmentCommandOutcome.ConflictingReplay, changedRevision.Outcome);
+
+        var conflicting = replayed.Snapshot.Book(requestId, 1, "member-b", "slot-a");
         Assert.Equal(AppointmentCommandOutcome.ConflictingReplay, conflicting.Outcome);
         Assert.Equal("member-a", conflicting.Snapshot.Bookings[requestId].MemberRef);
+    }
+
+    [Fact]
+    public void SlotDefinitionReplayRequiresTheExactOriginalCommand()
+    {
+        var initial = AppointmentScheduleSnapshot.Create("center-a");
+        var requestId = Guid.NewGuid();
+        var startsAt = DateTimeOffset.Parse("2026-12-01T09:00:00Z");
+        var first = initial.DefineSlot(requestId, 0, "center-a", "slot-a", "doctor-a",
+            startsAt, startsAt.AddMinutes(30));
+
+        var exactReplay = first.Snapshot.DefineSlot(
+            requestId, 0, "center-a", "slot-a", "doctor-a",
+            startsAt, startsAt.AddMinutes(30));
+        Assert.Equal(AppointmentCommandOutcome.Replayed, exactReplay.Outcome);
+
+        var restored = AppointmentScheduleSnapshot.Restore(
+            first.Snapshot.CenterRef, first.Snapshot.Revision,
+            first.Snapshot.Slots.Values, first.Snapshot.Bookings.Values,
+            first.Snapshot.Receipts.Values);
+        var replayAfterRestore = restored.DefineSlot(
+            requestId, 0, "center-a", "slot-a", "doctor-a",
+            startsAt, startsAt.AddMinutes(30));
+        Assert.Equal(AppointmentCommandOutcome.Replayed, replayAfterRestore.Outcome);
+
+        var changedTime = first.Snapshot.DefineSlot(
+            requestId, 0, "center-a", "slot-a", "doctor-a",
+            startsAt.AddHours(1), startsAt.AddHours(1).AddMinutes(30));
+        Assert.Equal(AppointmentCommandOutcome.ConflictingReplay, changedTime.Outcome);
+
+        var changedDoctor = first.Snapshot.DefineSlot(
+            requestId, 0, "center-a", "slot-a", "doctor-b",
+            startsAt, startsAt.AddMinutes(30));
+        Assert.Equal(AppointmentCommandOutcome.ConflictingReplay, changedDoctor.Outcome);
     }
 
     [Fact]

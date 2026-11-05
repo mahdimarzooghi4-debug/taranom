@@ -1,4 +1,7 @@
 using System.Collections.Immutable;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Taranom.AppointmentScheduling;
 
@@ -56,7 +59,8 @@ public sealed record AppointmentCommandReceipt(
     string Action,
     AppointmentCommandOutcome Outcome,
     long ResultRevision,
-    Guid? AppointmentRef);
+    Guid? AppointmentRef,
+    string? CommandFingerprint = null);
 
 public sealed class AppointmentScheduleSnapshot
 {
@@ -133,7 +137,13 @@ public sealed class AppointmentScheduleSnapshot
             startsAt == default || endsAt <= startsAt)
             return Denied(AppointmentCommandOutcome.Invalid);
 
-        if (TryReplay(requestId, actingCenterRef, slotRef, "define-slot", out var replay))
+        var fingerprint = Fingerprint(
+            actingCenterRef, slotRef, doctorRef,
+            expectedRevision.ToString(CultureInfo.InvariantCulture),
+            startsAt.ToString("O", CultureInfo.InvariantCulture),
+            endsAt.ToString("O", CultureInfo.InvariantCulture));
+        if (TryReplay(requestId, actingCenterRef, slotRef, "define-slot",
+                fingerprint, out var replay))
             return replay;
         if (!string.Equals(actingCenterRef, CenterRef, StringComparison.Ordinal))
             return Denied(AppointmentCommandOutcome.ScopeDenied);
@@ -151,7 +161,7 @@ public sealed class AppointmentScheduleSnapshot
             AppointmentSlotState.Open, null, nextRevision);
         var next = Copy(nextRevision, _slots.Add(slotRef, slot), _bookings,
             AddReceipt(requestId, actingCenterRef, slotRef, "define-slot",
-                AppointmentCommandOutcome.Applied, nextRevision));
+                AppointmentCommandOutcome.Applied, nextRevision, fingerprint));
         return new(AppointmentCommandOutcome.Applied, next, slot, null);
     }
 
@@ -165,7 +175,11 @@ public sealed class AppointmentScheduleSnapshot
             !ValidRef(memberRef) || !ValidRef(slotRef))
             return Denied(AppointmentCommandOutcome.Invalid);
 
-        if (TryReplay(requestId, memberRef, slotRef, "book", out var replay))
+        var fingerprint = Fingerprint(
+            CenterRef, memberRef, slotRef,
+            expectedRevision.ToString(CultureInfo.InvariantCulture));
+        if (TryReplay(requestId, memberRef, slotRef, "book",
+                fingerprint, out var replay))
             return replay;
         if (!_slots.TryGetValue(slotRef, out var slot))
             return Denied(AppointmentCommandOutcome.NotFound);
@@ -189,7 +203,7 @@ public sealed class AppointmentScheduleSnapshot
         var next = Copy(nextRevision, _slots.SetItem(slotRef, booked),
             _bookings.Add(requestId, booking),
             AddReceipt(requestId, memberRef, slotRef, "book",
-                AppointmentCommandOutcome.Applied, nextRevision, requestId));
+                AppointmentCommandOutcome.Applied, nextRevision, fingerprint, requestId));
         return new(AppointmentCommandOutcome.Applied, next, booked, booking);
     }
 
@@ -203,7 +217,11 @@ public sealed class AppointmentScheduleSnapshot
             !ValidRef(memberRef) || !ValidRef(slotRef))
             return Denied(AppointmentCommandOutcome.Invalid);
 
-        if (TryReplay(requestId, memberRef, slotRef, "cancel", out var replay))
+        var fingerprint = Fingerprint(
+            CenterRef, memberRef, slotRef,
+            expectedRevision.ToString(CultureInfo.InvariantCulture));
+        if (TryReplay(requestId, memberRef, slotRef, "cancel",
+                fingerprint, out var replay))
             return replay;
         if (!_slots.TryGetValue(slotRef, out var slot))
             return Denied(AppointmentCommandOutcome.NotFound);
@@ -234,7 +252,7 @@ public sealed class AppointmentScheduleSnapshot
         var next = Copy(nextRevision, _slots.SetItem(slotRef, reopened),
             _bookings.SetItem(bookingRef, cancelled),
             AddReceipt(requestId, memberRef, slotRef, "cancel",
-                AppointmentCommandOutcome.Applied, nextRevision, bookingRef));
+                AppointmentCommandOutcome.Applied, nextRevision, fingerprint, bookingRef));
         return new(AppointmentCommandOutcome.Applied, next, reopened, cancelled);
     }
 
@@ -255,15 +273,18 @@ public sealed class AppointmentScheduleSnapshot
         string action,
         AppointmentCommandOutcome outcome,
         long revision,
+        string commandFingerprint,
         Guid? appointmentRef = null) =>
         _receipts.Add(requestId,
-            new(requestId, actorRef, targetRef, action, outcome, revision, appointmentRef));
+            new(requestId, actorRef, targetRef, action, outcome, revision,
+                appointmentRef, commandFingerprint));
 
     private bool TryReplay(
         Guid requestId,
         string actorRef,
         string targetRef,
         string action,
+        string commandFingerprint,
         out AppointmentScheduleChange change)
     {
         if (!_receipts.TryGetValue(requestId, out var prior))
@@ -274,7 +295,9 @@ public sealed class AppointmentScheduleSnapshot
 
         var exact = string.Equals(prior.ActorRef, actorRef, StringComparison.Ordinal) &&
             string.Equals(prior.TargetRef, targetRef, StringComparison.Ordinal) &&
-            string.Equals(prior.Action, action, StringComparison.Ordinal);
+            string.Equals(prior.Action, action, StringComparison.Ordinal) &&
+            prior.CommandFingerprint is not null &&
+            string.Equals(prior.CommandFingerprint, commandFingerprint, StringComparison.Ordinal);
         var bookingRef = prior.AppointmentRef;
         change = exact
             ? new(AppointmentCommandOutcome.Replayed, this,
@@ -284,6 +307,15 @@ public sealed class AppointmentScheduleSnapshot
                     : null)
             : Denied(AppointmentCommandOutcome.ConflictingReplay);
         return true;
+    }
+
+    private static string Fingerprint(params string[] values)
+    {
+        var canonical = new StringBuilder();
+        foreach (var value in values)
+            canonical.Append(value.Length.ToString(CultureInfo.InvariantCulture))
+                .Append(':').Append(value);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString())));
     }
 
     private static bool ValidRef(string? value) =>

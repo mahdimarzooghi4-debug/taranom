@@ -2,18 +2,17 @@
 
 ## Goal
 
-Start the real appointment backend from the owner-confirmed workflow: centers configure available time slots, members book or cancel their own appointments, and the center can read its own appointments.
+Start the appointment backend from the owner-confirmed workflow: centers configure slots, members book or cancel their own appointments, and centers read their own appointment schedules.
 
-## Delivery in this slice
+## Delivered in this sprint
 
-- Add an immutable .NET domain for center-owned schedule slots and appointment booking/cancellation.
-- Add a PostgreSQL store that serializes per-center writes under a row lock and commits only domain-approved revisions.
-- Preserve canceled appointments as history while making the slot available for a separate future booking.
-- Enforce center scope, member ownership, no overlapping slots per doctor, optimistic revision checks, and idempotency.
-- Add xUnit regression cases to the repository's existing .NET contract test project.
+- Added an immutable .NET domain for center-owned schedule slots and booking/cancellation.
+- Added a PostgreSQL store that serializes per-center writes under row locks and commits only approved domain revisions.
+- Preserved canceled appointments as history while reopening their slots for independent future bookings.
+- Enforced center scope, member ownership, no overlapping slots per doctor, optimistic revision checks, and request idempotency.
 
-## Verification and remaining work
+## Follow-on delivery
 
-- This workspace does not have the .NET SDK; the exact-head GitHub regression must compile and execute the added tests.
-- This slice is not an HTTP API and does not claim that any screen is connected. PostgreSQL integration testing, OIDC-backed member mapping and central grant/revocation source, center read API, BFF/session and both panel clients remain required.
-- Draft/Open only. No merge, Stage, formal QA, release or Production access.
+Later appointment sprints added PostgreSQL integration tests, OIDC-backed central grants and revocation, authenticated scope discovery, center schedule reads, and the appointment HTTP API. Sprint 264 tightens idempotency to bind the complete command payload and revision.
+
+No merge, Stage, formal QA, release, or Production access is implied by this historical sprint record.

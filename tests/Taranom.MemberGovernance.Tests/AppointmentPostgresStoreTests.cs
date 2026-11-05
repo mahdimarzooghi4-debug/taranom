@@ -42,6 +42,15 @@ public sealed class AppointmentPostgresStoreTests
         Assert.Equal(AppointmentSlotState.Booked, reopened.Slots["morning-1"].State);
         Assert.Equal("member-opaque-1", reopened.Bookings[bookingRef].MemberRef);
 
+        var exactReplay = await reopenedStore.ApplyAsync(centerRef, snapshot => snapshot.Book(
+            requestId, 1, "member-opaque-1", "morning-1"), cancellationToken);
+        Assert.Equal(AppointmentCommandOutcome.Replayed, exactReplay.Outcome);
+
+        var changedRevisionReplay = await reopenedStore.ApplyAsync(centerRef, snapshot => snapshot.Book(
+            requestId, 2, "member-opaque-1", "morning-1"), cancellationToken);
+        Assert.Equal(AppointmentCommandOutcome.ConflictingReplay, changedRevisionReplay.Outcome);
+        Assert.Equal(2, changedRevisionReplay.Snapshot.Revision);
+
         var deniedCancellation = await reopenedStore.ApplyAsync(centerRef, snapshot =>
             snapshot.Cancel(Guid.NewGuid(), snapshot.Revision, "another-member", "morning-1"), cancellationToken);
         Assert.Equal(AppointmentCommandOutcome.NotOwner, deniedCancellation.Outcome);
