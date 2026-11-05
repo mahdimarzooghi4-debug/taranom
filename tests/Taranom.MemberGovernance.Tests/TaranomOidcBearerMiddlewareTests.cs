@@ -134,11 +134,13 @@ public sealed class TaranomOidcBearerMiddlewareTests
         var credentials = signed
             ? new SigningCredentials(new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256)
             : null;
+        var now = DateTime.UtcNow;
+        var notBefore = expires < now ? expires.AddMinutes(-10) : now.AddMinutes(-1);
         var token = new JwtSecurityToken(
             issuer: issuer,
             audience: audience,
             claims: [new Claim("sub", "member-opaque-1")],
-            notBefore: DateTime.UtcNow.AddMinutes(-1),
+            notBefore: notBefore,
             expires: expires,
             signingCredentials: credentials);
         return new JwtSecurityTokenHandler().WriteToken(token);
