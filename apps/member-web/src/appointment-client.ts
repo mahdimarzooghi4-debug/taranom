@@ -1,5 +1,5 @@
 export type Appointment = {
-  centerRef: string; revision: number; bookingRef: string;
+  centerRef: string; scheduleRevision: number; bookingRef: string;
   memberRef: string; slotRef: string; startsAt: string;
   state: 'Booked' | 'CancelledByMember';
 };
@@ -34,7 +34,7 @@ function isAppointment(value: unknown): value is Appointment {
   const item = value as Record<string, unknown>;
   return ['centerRef', 'bookingRef', 'memberRef', 'slotRef'].every(
     key => typeof item[key] === 'string' && item[key].length > 0,
-  ) && Number.isSafeInteger(item.revision) && Number(item.revision) >= 0 &&
+  ) && Number.isSafeInteger(item.scheduleRevision) && Number(item.scheduleRevision) >= 0 &&
     typeof item.startsAt === 'string' && Number.isFinite(Date.parse(item.startsAt)) &&
     (item.state === 'Booked' || item.state === 'CancelledByMember');
 }

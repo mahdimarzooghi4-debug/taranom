@@ -7,7 +7,11 @@
 - `npm run build`
 - `npx playwright install chromium` then `npm run build` and `npm run test:e2e`
 
-The app intentionally renders every member section in an explicitly unavailable state. Navigation paths are browser routes **only** and do not imply existing .NET read endpoints. It never sends private network API requests or persists sensitive state in browser storage. Pages and tests cover WEB-01, WEB-04…12 under this **shell-only** authorization. WEB-02/03 backend isolation requires later real backend identity/tenant contracts and must not be claimed satisfied by a disconnected shell.
+The `/member` app intentionally renders each member section in an explicitly unavailable state. Navigation paths are browser routes **only** and do not imply existing .NET read endpoints. It never sends private network API requests or persists sensitive state in browser storage. Pages and tests cover WEB-01, WEB-04…12 under this **shell-only** authorization. WEB-02/03 backend isolation requires later real backend identity/tenant contracts and must not be claimed satisfied by a disconnected shell.
+
+The separate `/patient-portal` route is a Figma-matched, frontend-only presentation of the seven Patient Web Portal screens. Its named people, appointments, prescriptions, balances, and statuses are synthetic design examples. Actions are disabled; no real member record, insurance response, appointment, payment, or clinical authority is represented. This route is not connected to a backend and is not a replacement for the protected `/member` shell.
+
+The separate `/patient-app` route is a mobile-first Figma preview covering the patient app's home, appointments and booking flow, provider profiles, records and prescriptions, support credit and insurer coverage views, smart guidance, referrals, consent, support, and membership/group journeys. It uses synthetic values and does not save or send data. Membership amounts remain illustrative because the age-based fee schedule is not approved. This preview also does not replace the protected `/member` shell.
 
 Exact direct and transitive npm dependencies are committed in `package-lock.json` (generated and validated from successful GitHub CI). CI uses `npm ci --ignore-scripts`; changes to dependency versions require an updated reviewed lockfile. No Stage/QA Gate, Production, or member launch.
 
@@ -20,3 +24,8 @@ Code Review update: Playwright runs the actual Vite production bundle using `vit
 ## Sprint 25 — disconnected browser egress defense
 
 The built static member preview now includes HTML **meta Content-Security-Policy**: only self-hosted scripts/styles and local/data images; no `fetch`/XHR/WebSocket (`connect-src 'none'`), third-party assets, inline script, workers, frames, objects or form actions. It also requests `no-referrer` and `noindex,nofollow,noarchive`. Three real Chromium regressions check document policy, attempted same-origin private and remote fetch denial before actual requests, and blocking an injected inline script. This is intentionally for the built Vite preview; development HMR may be blocked. Meta CSP is NOT a deployment HTTP header, `frame-ancestors` cannot be enforced from meta CSP, and no real IdP, lawful member access or Production hosting exists.
+
+
+#### Real appointment API slice (Draft)
+
+The `/patient-app/appointments` and `/patient-app/request-tracking` routes now read the authenticated member's appointments from `GET /api/v1/me/appointments`. A patient can cancel their own booked appointment; cancellation remains in their history and is visible to the center. The UI requires a host-provided in-memory `window.taranomSession.getAccessToken()` bridge and a same-origin reverse proxy for `/api/v1`; it does not persist tokens. No browser OIDC login is configured here. Provider search, city/specialty discovery, new booking, prescriptions, records, payments, insurance and other patient routes remain disconnected previews.

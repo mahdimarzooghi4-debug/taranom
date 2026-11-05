@@ -1,0 +1,27 @@
+name: Figma Appointment Integration
+on:
+  pull_request:
+    paths:
+      - 'apps/member-web/**'
+      - 'apps/center-web/**'
+      - '.github/workflows/figma-appointment-integration.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: npm ci --prefix apps/member-web --no-audit --no-fund
+      - run: npm ci --prefix apps/center-web --no-audit --no-fund
+      - run: npm run test:appointments --prefix apps/member-web
+      - run: npm run check --prefix apps/member-web
+      - run: npm run check --prefix apps/center-web
+      - run: npx --prefix apps/member-web playwright install --with-deps chromium
+      - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts
+      - run: npm run test:e2e --prefix apps/center-web -- figma-appointment-api.spec.ts
