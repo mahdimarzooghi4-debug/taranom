@@ -10,6 +10,7 @@ export class TaranomApiError extends Error{
 async function api<T>(path:string, init:RequestInit={}):Promise<T>{
   const token=await window.taranomSession?.getAccessToken();
   if(!token) throw new Error('نشست ورود معتبر در این محیط در دسترس نیست.');
+  init.signal?.throwIfAborted();
   const response=await fetch(path,{...init,redirect:'error',credentials:'omit',cache:'no-store',headers:{'Accept':'application/json','Authorization':'Bearer '+token,...(init.body?{'Content-Type':'application/json'}:{}),...init.headers}});
   if(!response.ok) throw new TaranomApiError(response.status,response.status===401?'نشست ورود معتبر نیست یا منقضی شده است.':response.status===403?'برای این مرکز دسترسی فعال ندارید.':response.status===409?'اطلاعات برنامه تغییر کرده؛ دوباره بارگذاری کنید.':'سرویس نوبت‌دهی پاسخ '+response.status+' داد.');
   return await response.json() as T;
@@ -65,5 +66,53 @@ export async function saveDoctorDirectoryDraft(centerRef:string,doctorRef:string
  if(!result||!['Applied','Replayed'].includes(result.outcome)||result.verificationState!=='UNVERIFIED_DRAFT'||
   !Number.isSafeInteger(result.revision)||result.revision!==command.expectedRevision+1)
   throw new Error('رسید ثبت پزشک اعلامی معتبر نیست.');
+ return result;
+}
+
+export type ManagerClaimState='PENDING_REVIEW'|'REVIEWED_PENDING_VERIFICATION'|'DECLINED';
+export type MyManagerClaim={
+ requestId:string;centerRef:string;applicantIssuer:string;applicantSubject:string;
+ reason:string;submittedAt:string;state:ManagerClaimState;reviewReason:string|null;
+ reviewedAt:string|null;managerAssigned:false;
+};
+export type MyManagerClaimPage={requests:MyManagerClaim[];nextAfter:string|null;associationGateRequired:true};
+const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const centerPattern=/^center-[0-9a-f]{32}$/;
+const validManagerClaim=(r:MyManagerClaim)=>r&&uuidPattern.test(r.requestId)&&
+ centerPattern.test(r.centerRef)&&typeof r.applicantIssuer==='string'&&
+ typeof r.applicantSubject==='string'&&typeof r.reason==='string'&&
+ Number.isFinite(Date.parse(r.submittedAt))&&
+ ['PENDING_REVIEW','REVIEWED_PENDING_VERIFICATION','DECLINED'].includes(r.state)&&
+ (r.reviewReason===null||typeof r.reviewReason==='string')&&
+ (r.reviewedAt===null||typeof r.reviewedAt==='string'&&Number.isFinite(Date.parse(r.reviewedAt)))&&
+ r.managerAssigned===false;
+export async function getMyManagerClaims(after?:string,signal?:AbortSignal):Promise<MyManagerClaimPage>{
+ const result=await api<MyManagerClaimPage>('/api/v1/me/center-manager-requests'+
+  (after?'?after='+encodeURIComponent(after):''),{signal});
+ if(!result||result.associationGateRequired!==true||
+  !Array.isArray(result.requests)||result.requests.length>25||
+  !result.requests.every(validManagerClaim)||
+  !(result.nextAfter===null||typeof result.nextAfter==='string'&&uuidPattern.test(result.nextAfter)))
+  throw new Error('فهرست درخواست‌های مدیریت مرکز معتبر نیست.');
+ return result;
+}
+export async function submitManagerClaim(command:{requestId:string;centerRef:string;reason:string}){
+ const result=await api<{outcome:string;requestId:string;centerRef:string;state:string;managerAssigned:boolean}>(
+  '/api/v1/me/center-manager-requests',{method:'POST',body:JSON.stringify(command)});
+ if(!result||!['Applied','Replayed'].includes(result.outcome)||
+  result.requestId!==command.requestId||result.centerRef!==command.centerRef||
+  result.state!=='PENDING_REVIEW'||result.managerAssigned!==false)
+  throw new Error('رسید درخواست مدیریت مرکز معتبر نیست.');
+ return result;
+}
+export async function recoverManagerClaim(command:{requestId:string;centerRef:string}){
+ const result=await api<{outcome:string;requestId:string;centerRef:string;state:ManagerClaimState;
+  managerAssigned:false;associationGateRequired:true}>(
+  '/api/v1/me/center-manager-requests/'+encodeURIComponent(command.requestId));
+ if(!result||result.outcome!=='Observed'||result.requestId!==command.requestId||
+   result.centerRef!==command.centerRef||result.managerAssigned!==false||
+   result.associationGateRequired!==true||
+   !['PENDING_REVIEW','REVIEWED_PENDING_VERIFICATION','DECLINED'].includes(result.state))
+  throw new Error('رسید مشاهده‌شده درخواست مدیریت مرکز معتبر نیست.');
  return result;
 }
