@@ -86,3 +86,21 @@ center-manager delegated staff path and cross-center isolation.
   request generation, preventing a delayed page from a prior center or prior
   reload from contaminating the current roster. Successful save feedback
   survives the post-write refresh.
+
+## Canonical Admin registry integration (TRN-TECH-278)
+
+TRN-BIZ-055 establishes a distinct canonical center identity, separate from
+this draft store. The Admin path `/admin/centers` calls
+`GET/POST /api/v1/operations/centers`; the backend independently checks
+the current, exact server-held `AdminCenterRegistryManage` capability and
+the fixed `taranom-center-registry` scope. It never accepts a caller-selected
+centerRef or a center-created registry record.
+
+The Admin enters only name and city, already existing in the Figma directory
+design, with no legal ID/qualification claim. The server issues an opaque
+centerRef and writes its creation receipt atomically. A receipt lookup by
+original actor+UUID can resolve an uncertain network ACK without a second
+POST. Creation explicitly returns `ADMIN_DEFINED_UNVERIFIED` and all
+license, publication and manager-assignment flags false. There is no automatic
+Admin grant bootstrap or public directory feed. External authoritative
+manager-subject onboarding is not part of this increment.
