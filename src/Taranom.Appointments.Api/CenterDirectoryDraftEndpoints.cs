@@ -26,12 +26,14 @@ internal static class CenterDirectoryDraftEndpoints
             var identity = Identity(context);
             if (identity is null) return Results.Forbid();
             const string sql = """
-                SELECT capability, scope_ref FROM taranom_panel_access_grant
+                SELECT capability, scope_ref FROM taranom_panel_access_grant AS grant_row
                 WHERE issuer=@issuer AND subject=@subject
                   AND capability IN ('CenterAccessGrantsManage','CenterRosterManage')
                   AND grant_state='active'
                   AND subject_mapping_current AND permission_version_current
                   AND grant_not_revoked AND audit_ready
+                  AND EXISTS (SELECT 1 FROM taranom_canonical_center c
+                              WHERE c.center_ref=grant_row.scope_ref)
                 ORDER BY capability,scope_ref
                 """;
             await using var connection = await db.OpenConnectionAsync(ct);
@@ -143,6 +145,15 @@ internal static class CenterDirectoryDraftEndpoints
         // Revocation/permission update takes a row lock. The FOR SHARE lock
         // protects this write until commit and prevents stale grants from
         // crossing the mutation boundary after the endpoint policy check.
+        await using (var canonical = new NpgsqlCommand("""
+            SELECT 1 FROM taranom_canonical_center WHERE center_ref=@center FOR SHARE
+            """, connection, transaction))
+        {
+            canonical.Parameters.AddWithValue("center", centerRef);
+            if (await canonical.ExecuteScalarAsync(ct) is null)
+                return Results.NotFound(new {code="CENTER_NOT_ADMIN_DEFINED"});
+        }
+
         await using (var grant = new NpgsqlCommand("""
             SELECT 1 FROM taranom_panel_access_grant
             WHERE issuer=@issuer AND subject=@subject AND scope_ref=@center

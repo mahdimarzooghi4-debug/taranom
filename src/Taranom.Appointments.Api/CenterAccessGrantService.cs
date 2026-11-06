@@ -80,6 +80,19 @@ internal sealed class CenterAccessGrantService(NpgsqlDataSource dataSource)
             await lockCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // A center-level grant must never be issued against an arbitrary
+        // opaque string. Require the Admin-defined center row and hold it
+        // through this transaction before replay or any grant mutation.
+        await using (var canonical = new NpgsqlCommand("""
+            SELECT 1 FROM taranom_canonical_center
+            WHERE center_ref=@center FOR SHARE
+            """, connection, transaction))
+        {
+            canonical.Parameters.AddWithValue("center", centerRef);
+            if (await canonical.ExecuteScalarAsync(cancellationToken) is null)
+                return CenterAccessGrantOutcome.NotFound;
+        }
+
         string[]? existingEvent = null;
         await using (var replayCommand = new NpgsqlCommand("""
             SELECT target_issuer, target_subject, capability, scope_ref, action, reason

@@ -406,6 +406,24 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
         string grantState = "active")
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        // TEST-ONLY fixture setup: these synthetic seeded centers are not
+        // runtime API creations and never establish medical qualification.
+        // This keeps earlier appointment contract tests exercising their
+        // original behavior while production API guards require canonical IDs.
+        if (capability.StartsWith("Center", StringComparison.Ordinal) &&
+            scopeRef.StartsWith("center", StringComparison.Ordinal))
+        {
+            await using var seed = new NpgsqlCommand("""
+                INSERT INTO taranom_canonical_center
+                  (center_ref,display_name,city,defined_by_issuer,defined_by_subject)
+                VALUES (@center,'Synthetic test center','Synthetic test city',
+                        @issuer,'synthetic-fixture-only')
+                ON CONFLICT (center_ref) DO NOTHING
+                """, connection);
+            seed.Parameters.AddWithValue("center", scopeRef);
+            seed.Parameters.AddWithValue("issuer", Issuer);
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
         await using var command = new NpgsqlCommand("""
             INSERT INTO taranom_panel_access_grant
                 (issuer, subject, capability, scope_ref, grant_state,

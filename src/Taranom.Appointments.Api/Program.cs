@@ -47,6 +47,9 @@ app.MapGet("/api/v1/me/appointment-scopes", async (
           AND grant_state = 'active'
           AND subject_mapping_current
           AND permission_version_current AND grant_not_revoked AND audit_ready
+          AND (capability = 'MemberAppointmentsManage' OR EXISTS (
+              SELECT 1 FROM taranom_canonical_center canonical
+              WHERE canonical.center_ref=scope_ref))
         ORDER BY capability, scope_ref
         """;
     var scopes = new List<AppointmentAccessScope>();
@@ -256,8 +259,11 @@ member.MapGet("/members/{memberRef}/centers/{centerRef}/appointment-slots", asyn
     string memberRef,
     string centerRef,
     PostgresAppointmentScheduleStore store,
+    NpgsqlDataSource db,
     CancellationToken cancellationToken) =>
 {
+    if (!await CanonicalCenterGuard.ExistsAsync(db, centerRef, cancellationToken))
+        return Results.NotFound(new {code="CENTER_NOT_ADMIN_DEFINED"});
     var snapshot = await store.ReadAsync(centerRef, cancellationToken);
     return Results.Ok(new
     {
@@ -274,10 +280,13 @@ member.MapGet("/members/{memberRef}/centers/{centerRef}/appointments", async (
     HttpContext context,
     PostgresAppointmentScheduleStore store,
     AppointmentMemberScopeResolver scopes,
+    NpgsqlDataSource db,
     CancellationToken cancellationToken) =>
 {
     var resolvedMemberRef = await scopes.ResolveAsync(context.User, memberRef, cancellationToken);
     if (resolvedMemberRef is null) return Results.Forbid();
+    if (!await CanonicalCenterGuard.ExistsAsync(db, centerRef, cancellationToken))
+        return Results.NotFound(new {code="CENTER_NOT_ADMIN_DEFINED"});
     var snapshot = await store.ReadAsync(centerRef, cancellationToken);
     var appointments = snapshot?.Bookings.Values
         .Where(item => string.Equals(item.MemberRef, resolvedMemberRef, StringComparison.Ordinal))
@@ -292,11 +301,14 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments", async (
     HttpContext context,
     PostgresAppointmentScheduleStore store,
     AppointmentMemberScopeResolver scopes,
+    NpgsqlDataSource db,
     CancellationToken cancellationToken) =>
 {
     var resolvedMemberRef = await scopes.ResolveAsync(context.User, memberRef, cancellationToken);
     var actor = ResolveAppointmentAuditActor(context.User);
     if (resolvedMemberRef is null || actor is null) return Results.Forbid();
+    if (!await CanonicalCenterGuard.ExistsAsync(db, centerRef, cancellationToken))
+        return Results.NotFound(new {code="CENTER_NOT_ADMIN_DEFINED"});
     var change = await store.ApplyAsync(centerRef, actor,
         snapshot => snapshot.Book(request.RequestId, request.ExpectedRevision,
             resolvedMemberRef, request.SlotRef), cancellationToken);
@@ -311,11 +323,14 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments/{bookingRe
     HttpContext context,
     PostgresAppointmentScheduleStore store,
     AppointmentMemberScopeResolver scopes,
+    NpgsqlDataSource db,
     CancellationToken cancellationToken) =>
 {
     var resolvedMemberRef = await scopes.ResolveAsync(context.User, memberRef, cancellationToken);
     var actor = ResolveAppointmentAuditActor(context.User);
     if (resolvedMemberRef is null || actor is null) return Results.Forbid();
+    if (!await CanonicalCenterGuard.ExistsAsync(db, centerRef, cancellationToken))
+        return Results.NotFound(new {code="CENTER_NOT_ADMIN_DEFINED"});
     var current = await store.ReadAsync(centerRef, cancellationToken);
     if (current is null || !current.Bookings.TryGetValue(bookingRef, out var booking) ||
         !string.Equals(booking.MemberRef, resolvedMemberRef, StringComparison.Ordinal))

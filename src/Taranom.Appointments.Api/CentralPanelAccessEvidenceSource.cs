@@ -62,6 +62,9 @@ internal sealed class CentralPanelAccessEvidenceSource(NpgsqlDataSource dataSour
             WHERE issuer = @issuer AND subject = @subject
               AND capability = @capability AND grant_state = 'active'
               AND (@scope_ref IS NULL OR scope_ref = @scope_ref)
+              AND (@require_canonical = false OR EXISTS (
+                  SELECT 1 FROM taranom_canonical_center AS canonical
+                  WHERE canonical.center_ref = scope_ref))
             ORDER BY scope_ref
             LIMIT 2
             """;
@@ -71,6 +74,9 @@ internal sealed class CentralPanelAccessEvidenceSource(NpgsqlDataSource dataSour
         command.Parameters.AddWithValue("subject", subject);
         command.Parameters.AddWithValue("capability", capabilityToken);
         command.Parameters.AddWithValue("scope_ref", (object?)scopeRef ?? DBNull.Value);
+        command.Parameters.AddWithValue("require_canonical",
+            capability is PanelCapability.CenterAppointmentsManage or
+            PanelCapability.CenterAccessGrantsManage or PanelCapability.CenterRosterManage);
         await using var reader = await command.ExecuteReaderAsync(httpContext.RequestAborted);
         if (!await reader.ReadAsync(httpContext.RequestAborted))
             return null;
