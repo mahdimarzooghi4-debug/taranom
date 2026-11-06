@@ -29,3 +29,15 @@ The built static member preview now includes HTML **meta Content-Security-Policy
 #### Real appointment API slice (Draft)
 
 The `/patient-app/appointments` and `/patient-app/request-tracking` routes now read the authenticated member's appointments from `GET /api/v1/me/appointments`. A patient can cancel their own booked appointment; cancellation remains in their history and is visible to the center. The UI requires a host-provided in-memory `window.taranomSession.getAccessToken()` bridge and a same-origin reverse proxy for `/api/v1`; it does not persist tokens. No browser OIDC login is configured here. Provider search, city/specialty discovery, new booking, prescriptions, records, payments, insurance and other patient routes remain disconnected previews.
+
+## Current browser-install preparation
+
+The integration branch includes `/patient-app/install`, linked from account, and
+`/manifest.webmanifest`. An installed browser app launches the connected account
+route. PNG icons are reproducible with `node scripts/render-app-icons.mjs` after
+installing the existing Playwright Chromium runtime. There is no service worker
+or offline account/API cache. Installation requires an appropriate HTTPS host
+and browser support; no Android APK or signed native release is produced.
+See `docs/technical/TRN-TECH-280-patient-browser-install.md` from the repository
+root for the exact scope and verification limits. Protected services still need
+the host's real bearer session and same-origin API routing.

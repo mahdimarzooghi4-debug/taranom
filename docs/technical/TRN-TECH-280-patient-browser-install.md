@@ -1,0 +1,13 @@
+# Patient browser installation preparation
+
+Adds a web app manifest, 192×192 and 512×512 local PNG application icons, standalone launch metadata and `/patient-app/install`. The existing complete logo is placed in a white square without cropping; `apps/member-web/scripts/render-app-icons.mjs` reproduces the icon slots using the repository's existing Playwright dependency. Set TARANOM_ICON_CHROMIUM only to override the build-time browser executable. No runtime dependency is added.
+
+Start URL is `/patient-app/account`, a connected route, rather than the synthetic home preview. Scope `/` covers routes belonging to this member frontend on its origin; deployment must serve this frontend on its intended member origin. Shortcuts target appointments and support. Manifest id remains stable independently of the launch URL. Only the member preview's HTTP CSP gains manifest-src self; the HTML CSP also allows the local manifest. Worker restrictions and private API behavior remain unchanged.
+
+Account links to installation. Browser-provided beforeinstallprompt is retained in memory and consumed once, only after a user click. Accepted userChoice is merely an installation request; completion is reported only on appinstalled. Dismissal, prompt failure, offline and independent-window states have explicit UI. Manual browser-menu guidance is available when no prompt is provided. Event listeners are removed on unmount. There is no automatic prompt or private API call on the install page.
+
+No service worker, offline response cache, token storage, API cache or push subscription is introduced. The installed app requires a network connection and the existing real host session for protected services. The host session integration and remaining product APIs are still pending. A manifest does not create an Android APK, signed release, native container or deployed installation URL.
+
+Chrome's documented install promotion requires HTTPS (localhost development is special), a qualifying manifest and user engagement; the browser owns offer timing. Reference: https://web.dev/articles/install-criteria (reviewed 2026-11-06). Real installation on an Android device must be checked after HTTPS deployment; synthetic event tests do not establish that result.
+
+Verification: TypeScript/build; local manifest and both PNG geometries under the actual HTML+HTTP CSP; Chrome DevTools manifest/installability diagnostics on localhost; user-initiated prompt, accepted-vs-completed separation, dismissal, offline disablement, absence of private calls/browser storage/cache registrations, and account-to-install routing at 390px. Existing connected account/profile/appointment/support regression suite remains enabled in CI.

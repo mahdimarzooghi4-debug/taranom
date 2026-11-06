@@ -33,5 +33,6 @@ export function PatientAccount(){
    <a href="/patient-app/support"><span>پشتیبانی</span><span aria-hidden="true">‹</span></a>
    <button className="account-signout" disabled title="خروج امن با اتصال نشست ورود فعال می‌شود."><span>خروج از حساب</span><small>نیازمند اتصال ورود</small></button>
   </div>
+  <a className="account-install-link" href="/patient-app/install">نصب اپ ترنم روی گوشی</a>
  </div></AppointmentPage>;
 }
