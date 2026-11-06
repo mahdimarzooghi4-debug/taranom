@@ -601,13 +601,13 @@ public sealed class AppointmentDatabaseBootstrap(
             CREATE OR REPLACE FUNCTION taranom_reject_center_directory_audit_mutation()
             RETURNS trigger
             LANGUAGE plpgsql
-            AS $
+            AS '
             BEGIN
-                RAISE EXCEPTION 'CENTER_DIRECTORY_AUDIT_APPEND_ONLY'
-                    USING ERRCODE = '55000';
+                RAISE EXCEPTION ''CENTER_DIRECTORY_AUDIT_APPEND_ONLY''
+                    USING ERRCODE = ''55000'';
                 RETURN NULL;
             END;
-            $;
+            ';
             DROP TRIGGER IF EXISTS trg_taranom_center_directory_audit_update_delete
                 ON taranom_center_directory_draft_audit;
             CREATE TRIGGER trg_taranom_center_directory_audit_update_delete

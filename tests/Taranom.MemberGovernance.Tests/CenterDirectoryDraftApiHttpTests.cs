@@ -93,8 +93,10 @@ public sealed class CenterDirectoryDraftApiHttpTests
         async Task AssertAuditMutationBlocked(string sql)
         {
             await using var mutation = new NpgsqlCommand(sql, conn);
-            mutation.Parameters.AddWithValue("center", center);
-            mutation.Parameters.AddWithValue("subject", subject);
+            if (sql.Contains("@center", StringComparison.Ordinal))
+                mutation.Parameters.AddWithValue("center", center);
+            if (sql.Contains("@subject", StringComparison.Ordinal))
+                mutation.Parameters.AddWithValue("subject", subject);
             var failure = await Assert.ThrowsAsync<PostgresException>(
                 async () => await mutation.ExecuteNonQueryAsync(ct));
             Assert.Equal("55000", failure.SqlState);
