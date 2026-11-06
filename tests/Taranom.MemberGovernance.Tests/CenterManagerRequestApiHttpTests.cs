@@ -247,7 +247,12 @@ public sealed class CenterManagerRequestApiHttpTests
                 await using var cmd=new NpgsqlCommand(sql,conn);
                 var ex=await Assert.ThrowsAsync<PostgresException>(
                     async()=>await cmd.ExecuteNonQueryAsync(ct));
-                Assert.Equal("55000",ex.SqlState);
+                // PostgreSQL blocks TRUNCATE of the request parent before
+                // its trigger because review rows reference it by FK.
+                // Both database rejections preserve the append-only history.
+                Assert.Equal(table=="taranom_center_manager_request" &&
+                    sql.StartsWith("TRUNCATE ",StringComparison.Ordinal)
+                    ? "0A000" : "55000",ex.SqlState);
             }
         }
         Assert.Equal(0L,await CountManagerGrantsAsync(center,applicant,ct));
