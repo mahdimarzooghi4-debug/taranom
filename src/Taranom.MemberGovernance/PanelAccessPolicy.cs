@@ -14,7 +14,8 @@ internal enum PanelCapability
     SupportedCaseFinanceRead = 6,
     MemberAppointmentsManage = 7,
     CenterAccessGrantsManage = 8,
-    SupportRequestsManage = 9
+    SupportRequestsManage = 9,
+    AdminCenterRegistryManage = 10
 }
 
 // Values must come from server-side resource and grant resolution. Request
@@ -124,6 +125,7 @@ internal static class PanelAccessPolicy
             PanelCapability.MemberAppointmentsManage => "MemberAppointmentsManage",
             PanelCapability.CenterAccessGrantsManage => "CenterAccessGrantsManage",
             PanelCapability.SupportRequestsManage => "SupportRequestsManage",
+            PanelCapability.AdminCenterRegistryManage => "AdminCenterRegistryManage",
             _ => null
         };
 

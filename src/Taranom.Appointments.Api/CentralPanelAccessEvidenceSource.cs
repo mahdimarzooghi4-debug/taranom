@@ -44,6 +44,12 @@ internal sealed class CentralPanelAccessEvidenceSource(NpgsqlDataSource dataSour
         {
             scopeRef = "taranom-support";
         }
+        else if (capability == PanelCapability.AdminCenterRegistryManage)
+        {
+            // Fixed server-owned singleton scope; never taken from request JSON,
+            // route, role claims or a customer-supplied center reference.
+            scopeRef = "taranom-center-registry";
+        }
         else
         {
             return null;

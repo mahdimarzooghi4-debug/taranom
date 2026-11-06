@@ -407,6 +407,7 @@ app.MapCenterDirectoryDraftEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
 app.MapSupportOperationsEndpoints();
+app.MapAdminCenterRegistryEndpoints();
 
 app.Run();
 
@@ -570,6 +571,23 @@ public sealed class AppointmentDatabaseBootstrap(
                 UNIQUE (actor_issuer, actor_subject, request_id)
             );
 
+            CREATE TABLE IF NOT EXISTS taranom_canonical_center (
+                center_ref text PRIMARY KEY,
+                display_name text NOT NULL,
+                city text NOT NULL,
+                defined_by_issuer text NOT NULL,
+                defined_by_subject text NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now()
+            );
+            CREATE TABLE IF NOT EXISTS taranom_canonical_center_creation_receipt (
+                issuer text NOT NULL,
+                subject text NOT NULL,
+                request_id uuid NOT NULL,
+                fingerprint char(64) NOT NULL,
+                center_ref text NOT NULL REFERENCES taranom_canonical_center(center_ref),
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (issuer,subject,request_id)
+            );
             CREATE TABLE IF NOT EXISTS taranom_center_directory_draft (
                 center_ref text PRIMARY KEY,
                 revision bigint NOT NULL CHECK (revision > 0),
@@ -608,6 +626,16 @@ public sealed class AppointmentDatabaseBootstrap(
                 RETURN NULL;
             END;
             ';
+            DROP TRIGGER IF EXISTS trg_taranom_canonical_center_receipt_mutation
+                ON taranom_canonical_center_creation_receipt;
+            CREATE TRIGGER trg_taranom_canonical_center_receipt_mutation
+                BEFORE UPDATE OR DELETE ON taranom_canonical_center_creation_receipt
+                FOR EACH ROW EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
+            DROP TRIGGER IF EXISTS trg_taranom_canonical_center_receipt_truncate
+                ON taranom_canonical_center_creation_receipt;
+            CREATE TRIGGER trg_taranom_canonical_center_receipt_truncate
+                BEFORE TRUNCATE ON taranom_canonical_center_creation_receipt
+                FOR EACH STATEMENT EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
             DROP TRIGGER IF EXISTS trg_taranom_center_directory_audit_update_delete
                 ON taranom_center_directory_draft_audit;
             CREATE TRIGGER trg_taranom_center_directory_audit_update_delete
