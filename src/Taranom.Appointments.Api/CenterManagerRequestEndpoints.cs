@@ -34,6 +34,8 @@ internal static class CenterManagerRequestEndpoints
             .RequirePanelCapability(PanelCapability.AdminCenterRegistryManage);
         app.MapPost("/api/v1/operations/center-manager-requests/{requestId:guid}/review",
             ReviewAsync).RequirePanelCapability(PanelCapability.AdminCenterRegistryManage);
+        app.MapGet("/api/v1/operations/center-manager-requests/{requestId:guid}/review-receipts/{commandId:guid}",
+            ReadReviewReceiptAsync).RequirePanelCapability(PanelCapability.AdminCenterRegistryManage);
     }
 
     private static bool ValidRef(string? value, int max) =>
@@ -250,6 +252,41 @@ internal static class CenterManagerRequestEndpoints
             requests = rows.Take(25).ToArray(),
             nextAfter = rows.Count > 25 ? ids[24] : null,
             associationGateRequired = true
+        });
+    }
+
+    // Exact, actor-bound readback of a review command after an uncertain
+    // network acknowledgement. Pagination or a matching human reason
+    // cannot be used as evidence that THIS actor's command was committed.
+    private static async Task<IResult> ReadReviewReceiptAsync(
+        Guid requestId, Guid commandId, HttpContext context,
+        NpgsqlDataSource db, CancellationToken ct)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var actor = Identity(context);
+        if (actor is null) return Results.Forbid();
+        if (requestId == Guid.Empty || commandId == Guid.Empty)
+            return Results.BadRequest(new { code = "INVALID_MANAGER_REVIEW_RECEIPT" });
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = new NpgsqlCommand("""
+            SELECT decision,reason,reviewed_at
+            FROM taranom_center_manager_request_review
+            WHERE request_id=@request AND command_id=@command
+              AND reviewer_issuer=@issuer AND reviewer_subject=@subject
+            """, conn);
+        cmd.Parameters.AddWithValue("request", requestId);
+        cmd.Parameters.AddWithValue("command", commandId);
+        cmd.Parameters.AddWithValue("issuer", actor.Value.Issuer);
+        cmd.Parameters.AddWithValue("subject", actor.Value.Subject);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return Results.NotFound(new { code = "MANAGER_REVIEW_RECEIPT_NOT_OBSERVED" });
+        return Results.Ok(new {
+            outcome = "Observed", requestId, commandId,
+            decision = reader.GetString(0),
+            reason = reader.GetString(1),
+            reviewedAt = reader.GetFieldValue<DateTimeOffset>(2),
+            managerAssigned = false
         });
     }
 

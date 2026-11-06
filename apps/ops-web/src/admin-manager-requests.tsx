@@ -108,18 +108,24 @@ export function AdminManagerRequests(){
   if(!original||busy.current)return;
   busy.current=true;setSaving(true);setError('');
   try{
-   const p=validate(await api(''));
-   const row=p.requests.find(r=>r.requestId===original.requestId);
-   if(!row)throw new Error('این درخواست در صفحه نخست مشاهده نشد؛ از گزارش حسابرسی برای بررسی استفاده کنید.');
-   if(row.state===original.command.decision&&row.reviewReason===original.command.reason){
-    pending.current=null;setUncertain(false);setSelected(null);
-    setNote('ثبت بررسی قبلی در پایگاه داده مشاهده شد؛ هیچ درخواستی تکرار نشد.');
-    reload();
-   }else{
-    setError('نتیجه بررسی قبلی قطعی نیست؛ بدون ارسال دوباره از مسیر حسابرسی پیگیری کنید.');
-   }
-  }catch(e){setError(e instanceof Error?e.message:'بازخوانی وضعیت ناموفق بود.')}
-  finally{busy.current=false;setSaving(false)}
+   const raw=await api('/'+encodeURIComponent(original.requestId)+
+    '/review-receipts/'+encodeURIComponent(original.command.commandId));
+   const receipt=raw as {outcome?:string;requestId?:string;commandId?:string;
+    decision?:string;reason?:string;managerAssigned?:boolean};
+   if(receipt.outcome!=='Observed'||receipt.requestId!==original.requestId||
+     receipt.commandId!==original.command.commandId||
+     receipt.decision!==original.command.decision||
+     receipt.reason!==original.command.reason||
+     receipt.managerAssigned!==false)
+    throw new Error('رسید بررسی ادمین با دستور ارسال‌شده مطابقت ندارد.');
+   pending.current=null;setUncertain(false);setSelected(null);
+   setNote('رسید همان بررسی و همان حساب ادمین تأیید شد؛ هیچ درخواستی تکرار نشد.');
+   reload();
+  }catch(e){
+   setError(e instanceof ManagerAdminError&&e.status===404?
+    'رسید همان دستور هنوز پیدا نشده است؛ هیچ درخواست جدیدی ارسال نکنید.':
+    e instanceof Error?e.message:'بازخوانی وضعیت ناموفق بود.');
+  }finally{busy.current=false;setSaving(false)}
  }
  const active=list?.requests.find(r=>r.requestId===selected&&r.state==='PENDING_REVIEW');
  return <section className="manager-admin" dir="rtl">

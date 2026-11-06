@@ -86,3 +86,33 @@ test('forged manager assigned status is rejected and mobile page does not overfl
  await expect(page.getByRole('button',{name:'بررسی درخواست'})).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+test('lost review response recovers exact reviewer command, not a matching list row',async({page})=>{
+ await adminSession(page);let posts=0,requestCommand='',reads=0;
+ await page.route(path,route=>{
+  const req=route.request(),url=new URL(req.url());
+  if(req.method()==='POST'){
+   posts++;requestCommand=req.postDataJSON().commandId;
+   return route.abort('failed');
+  }
+  if(url.pathname.includes('/review-receipts/')){
+   reads++;
+   expect(url.pathname).toContain('/'+id+'/review-receipts/'+requestCommand);
+   return route.fulfill({json:{outcome:'Observed',requestId:id,commandId:requestCommand,
+    decision:'REVIEWED_PENDING_VERIFICATION',reason:'Submitted review with no delivery acknowledgement',
+    managerAssigned:false}});
+  }
+  return route.fulfill({json:{requests:[request()],nextAfter:null,
+   associationGateRequired:true}});
+ });
+ await page.goto('/admin/center-manager-requests');
+ await page.getByRole('button',{name:'بررسی درخواست'}).click();
+ await page.getByLabel('علت ثبت‌شده توسط ادمین')
+  .fill('Submitted review with no delivery acknowledgement');
+ await page.getByRole('button',{name:'ثبت بررسی انسانی بدون صدور دسترسی'}).click();
+ await expect(page.getByRole('button',{name:'بررسی نتیجه قبلی بدون ارسال دوباره'})).toBeVisible();
+ await page.getByRole('button',{name:'بررسی نتیجه قبلی بدون ارسال دوباره'}).click();
+ await expect(page.getByRole('status').filter({hasText:'رسید همان بررسی'})).toBeVisible();
+ expect(posts).toBe(1);expect(reads).toBe(1);
+ expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+});

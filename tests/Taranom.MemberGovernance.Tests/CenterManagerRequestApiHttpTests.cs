@@ -137,6 +137,30 @@ public sealed class CenterManagerRequestApiHttpTests
         Assert.Equal(review.decision,json.RootElement.GetProperty("state").GetString());
         Assert.False(json.RootElement.GetProperty("managerAssigned").GetBoolean());
 
+        var receiptPath=AdminBase+"/"+id+"/review-receipts/"+commandId;
+        using var receipt=await admin.GetAsync(receiptPath,ct);
+        Assert.Equal(HttpStatusCode.OK,receipt.StatusCode);
+        Assert.Equal("no-store",receipt.Headers.CacheControl?.ToString());
+        using var recovered=await receipt.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Equal("Observed",recovered!.RootElement.GetProperty("outcome").GetString());
+        Assert.Equal(id,recovered.RootElement.GetProperty("requestId").GetGuid());
+        Assert.Equal(commandId,recovered.RootElement.GetProperty("commandId").GetGuid());
+        Assert.Equal(review.decision,recovered.RootElement.GetProperty("decision").GetString());
+        Assert.Equal(review.reason,recovered.RootElement.GetProperty("reason").GetString());
+        Assert.False(recovered.RootElement.GetProperty("managerAssigned").GetBoolean());
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await admin.GetAsync(AdminBase+"/"+id+"/review-receipts/"+Guid.NewGuid(),ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await outsider.GetAsync(receiptPath,ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await applicant.GetAsync(receiptPath,ct)).StatusCode);
+        var differentAdminSubject="other-review-admin-"+Guid.NewGuid().ToString("N");
+        await fx.GrantAsync(differentAdminSubject,"AdminCenterRegistryManage",
+            "taranom-center-registry",ct);
+        using var differentAdmin=fx.AuthenticatedIdentityClient(differentAdminSubject);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await differentAdmin.GetAsync(receiptPath,ct)).StatusCode);
+
         using var adminList=await admin.GetAsync(AdminBase,ct);
         Assert.Equal(HttpStatusCode.OK,adminList.StatusCode);
         var listed=await adminList.Content.ReadFromJsonAsync<JsonDocument>(ct);

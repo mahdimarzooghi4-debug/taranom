@@ -51,3 +51,14 @@ member identity and schedule ownership checks, tested against
 TEST-ONLY historical records seeded by the internal store. Future
 publication requires independent qualified provider evidence and a
 versioned approval contract, not a UI toggle or Admin center creation.
+
+## Exact Admin-review receipt after uncertain response
+
+`GET /api/v1/operations/center-manager-requests/{requestId}/review-receipts/{commandId}`
+requires a fresh `AdminCenterRegistryManage` grant and returns an immutable
+receipt only when **request UUID, review command UUID, reviewer OIDC issuer and
+subject all match**. A different Admin, unknown command, or applicant cannot
+claim the receipt. The browser now reconciles against this precise read-only
+route; it never relies on an ambiguous first page or matching reason text,
+and never re-POSTs an uncertain review. No grant or identity-verified state
+is materialized by the lookup.
