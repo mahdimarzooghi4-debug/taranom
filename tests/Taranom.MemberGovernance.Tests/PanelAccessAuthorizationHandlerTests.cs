@@ -231,7 +231,9 @@ public sealed class PanelAccessAuthorizationHandlerTests
             (PanelAccessPolicyNames.CenterAccessGrantsManage,
                 PanelCapability.CenterAccessGrantsManage),
             (PanelAccessPolicyNames.SupportRequestsManage,
-                PanelCapability.SupportRequestsManage)
+                PanelCapability.SupportRequestsManage),
+            (PanelAccessPolicyNames.AdminCenterRegistryManage,
+                PanelCapability.AdminCenterRegistryManage)
         };
         Assert.Equal(expected, PanelAccessPolicyNames.All
             .Select(item => (item.Name, item.Capability)));
