@@ -95,7 +95,7 @@ export function FigmaPortal({ kind }: { kind: PortalKind }) {
     document.getElementById('figma-portal-title')?.focus();
   }
   const groups = [...new Set(pages.map((item) => item.group))];
-  return <div className="figma-portal" dir="rtl">
+  return <div className={`figma-portal${page.key==='support'?' support-connected':''}`} dir="rtl">
     <aside className="figma-sidebar" aria-label={portalTitle}>
       <div className="figma-brand"><img src="/assets/taranom-logo.png" alt="ترنم · اکوسیستم سلامت" /></div>
       <div className="figma-organization"><span className="figma-organization-mark">{isAdmin ? 'ت' : 'م'}</span><span><small>{isAdmin ? 'محیط مدیریت' : 'نهاد فعال'}</small><strong>{organization}</strong></span><i aria-hidden="true">⌄</i></div>
