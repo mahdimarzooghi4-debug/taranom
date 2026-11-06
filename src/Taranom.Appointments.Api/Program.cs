@@ -358,64 +358,27 @@ app.MapGet("/api/v1/me/available-appointment-centers", async (
     if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(subject))
         return Results.Forbid();
 
-    // This is a capacity-backed center reference discovery, NOT a verified
-    // clinical provider directory. One statement binds authorization and data
-    // to the same PostgreSQL snapshot and returns no rows without a current grant.
+    // An Admin-created record or an open appointment slot is NOT an approved
+    // clinical-service publication. No publication authority/evidence exists
+    // yet, so never promote live capacity into patient-facing discovery.
     const string sql = """
-        WITH access AS (
-            SELECT EXISTS (
-                SELECT 1 FROM taranom_panel_access_grant AS grant_row
-                WHERE grant_row.issuer = @issuer AND grant_row.subject = @subject
-                  AND grant_row.capability = 'MemberAppointmentsManage'
-                  AND grant_row.grant_state = 'active'
-                  AND grant_row.session_current AND grant_row.subject_mapping_current
-                  AND grant_row.permission_version_current AND grant_row.grant_not_revoked
-                  AND grant_row.audit_ready
-            ) AS allowed
+        SELECT EXISTS (
+            SELECT 1 FROM taranom_panel_access_grant
+            WHERE issuer=@issuer AND subject=@subject
+              AND capability='MemberAppointmentsManage' AND grant_state='active'
+              AND session_current AND subject_mapping_current
+              AND permission_version_current AND grant_not_revoked AND audit_ready
         )
-        SELECT access.allowed, catalog.center_ref, catalog.revision,
-               catalog.open_slot_count, catalog.next_available_at
-        FROM access
-        LEFT JOIN LATERAL (
-            SELECT schedule.center_ref, schedule.revision,
-                   count(*)::integer AS open_slot_count,
-                   min((slot.value ->> 'startsAt')::timestamptz) AS next_available_at
-            FROM taranom_appointment_schedule AS schedule
-            CROSS JOIN LATERAL jsonb_array_elements(
-                CASE WHEN jsonb_typeof(schedule.snapshot -> 'slots') = 'array'
-                     THEN schedule.snapshot -> 'slots' ELSE '[]'::jsonb END
-            ) AS slot(value)
-            WHERE access.allowed AND slot.value ->> 'state' IN ('1', 'Open')
-              AND (slot.value ->> 'startsAt')::timestamptz > now()
-            GROUP BY schedule.center_ref, schedule.revision
-            ORDER BY next_available_at, schedule.center_ref
-            LIMIT 50
-        ) AS catalog ON true
-        ORDER BY catalog.next_available_at NULLS LAST, catalog.center_ref
         """;
-
-    var centers = new List<object>();
     await using var connection = await db.OpenConnectionAsync(cancellationToken);
     await using var command = new NpgsqlCommand(sql, connection);
     command.Parameters.AddWithValue("issuer", issuer);
     command.Parameters.AddWithValue("subject", subject);
-    await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-    if (!await reader.ReadAsync(cancellationToken) || !reader.GetBoolean(0))
+    if (await command.ExecuteScalarAsync(cancellationToken) is not true)
         return Results.Forbid();
-    do
-    {
-        if (reader.IsDBNull(1)) continue;
-        centers.Add(new
-        {
-            centerRef = reader.GetString(1),
-            revision = reader.GetInt64(2),
-            openSlotCount = reader.GetInt32(3),
-            nextAvailableAt = reader.GetFieldValue<DateTimeOffset>(4)
-        });
-    } while (await reader.ReadAsync(cancellationToken));
-
     context.Response.Headers["Cache-Control"] = "no-store";
-    return Results.Ok(new { centers });
+    return Results.Ok(new { centers = Array.Empty<object>(),
+        publicationGateRequired = true });
 }).RequireAuthorization(IdentityAppointmentScopesPolicy);
 
 app.MapCenterDirectoryDraftEndpoints(IdentityAppointmentScopesPolicy);

@@ -104,3 +104,21 @@ POST. Creation explicitly returns `ADMIN_DEFINED_UNVERIFIED` and all
 license, publication and manager-assignment flags false. There is no automatic
 Admin grant bootstrap or public directory feed. External authoritative
 manager-subject onboarding is not part of this increment.
+
+## Admin-center resource integrity / publication gate
+
+Center operational grants are rejected by the centralized authorization
+evidence source if `scope_ref` has no matching canonical Admin-defined
+center. The grant-mutation service rechecks that center in the same
+transaction with a row lock; private center drafts also recheck during
+mutation, and scoped center lists exclude noncanonical references.
+Member-specific appointment routes require canonical existence, while a
+member's own authorization remains independently required.
+
+**No public center publication workflow is authorized yet.** The former
+capacity-only member discovery endpoint is therefore fail-closed: a
+currently entitled member receives an empty `centers` collection with
+`publicationGateRequired=true`, even if an Admin-defined unverified center
+has private open slots. It must not automatically publish the center based
+on capacity, Admin creation or physician draft fields. The separate
+publication decision/evidence contract is still absent.

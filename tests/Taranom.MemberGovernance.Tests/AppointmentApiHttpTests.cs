@@ -136,7 +136,7 @@ public sealed class AppointmentApiHttpTests
 
 
     [Fact]
-    public async Task AvailableCenterDiscoveryExposesOnlyRealFutureOpenCapacityToCurrentMembers()
+    public async Task MemberDiscoveryNeverPublishesUnreviewedAdminCenterEvenWithLiveCapacity()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var setup = new AppointmentApiFixture(ct);
@@ -148,53 +148,91 @@ public sealed class AppointmentApiHttpTests
 
         using var anonymous = setup.Factory.CreateClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(endpoint, ct)).StatusCode);
-        using var noGrant = setup.AuthenticatedIdentityClient(memberSubject);
-        Assert.Equal(HttpStatusCode.Forbidden, (await noGrant.GetAsync(endpoint, ct)).StatusCode);
+        using var member = setup.AuthenticatedIdentityClient(memberSubject);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync(endpoint, ct)).StatusCode);
+        await setup.GrantAsync(staleSubject, "MemberAppointmentsManage",
+            "stale-discovery-member", ct, currentEvidence: false);
+        using var stale = setup.AuthenticatedIdentityClient(staleSubject);
+        Assert.Equal(HttpStatusCode.Forbidden, (await stale.GetAsync(endpoint, ct)).StatusCode);
 
-        await setup.GrantAsync(staleSubject, "MemberAppointmentsManage", "stale-discovery-member", ct,
-            currentEvidence: false);
-        using var staleMember = setup.AuthenticatedIdentityClient(staleSubject);
-        Assert.Equal(HttpStatusCode.Forbidden, (await staleMember.GetAsync(endpoint, ct)).StatusCode);
-
-        await setup.GrantAsync(memberSubject, "MemberAppointmentsManage",
-            "discovery-member-" + Guid.NewGuid().ToString("N"), ct);
+        var memberRef = "discovery-member-" + Guid.NewGuid().ToString("N");
+        await setup.GrantAsync(memberSubject, "MemberAppointmentsManage", memberRef, ct);
         await setup.GrantAsync(centerSubject, "CenterAppointmentsManage", centerRef, ct);
         using var staff = setup.AuthenticatedIdentityClient(centerSubject);
-
         var startsAt = DateTimeOffset.UtcNow.AddDays(4);
         var define = await staff.PostAsJsonAsync($"/api/v1/centers/{centerRef}/appointment-slots",
             new { requestId = Guid.NewGuid(), expectedRevision = 0,
-                slotRef = "discovery-open-slot", doctorRef = "opaque-doctor",
+                slotRef = "discovery-unreviewed", doctorRef = "opaque-unverified",
                 startsAt, endsAt = startsAt.AddMinutes(30) }, ct);
         Assert.Equal(HttpStatusCode.OK, define.StatusCode);
 
-        var available = await noGrant.GetAsync(endpoint, ct);
+        using var available = await member.GetAsync(endpoint, ct);
         Assert.Equal(HttpStatusCode.OK, available.StatusCode);
         Assert.Equal("no-store", available.Headers.CacheControl?.ToString());
-        using var data = await available.Content.ReadFromJsonAsync<JsonDocument>(ct);
-        var options = data!.RootElement.GetProperty("centers").EnumerateArray()
-            .Where(item => item.GetProperty("centerRef").GetString() == centerRef).ToArray();
-        var option = Assert.Single(options);
-        Assert.Equal(1, option.GetProperty("openSlotCount").GetInt32());
-        Assert.Equal(1, option.GetProperty("revision").GetInt64());
-        Assert.True(option.GetProperty("nextAvailableAt").GetDateTimeOffset() > DateTimeOffset.UtcNow);
-        Assert.False(option.TryGetProperty("doctorName", out _));
-        Assert.False(option.TryGetProperty("specialty", out _));
-        Assert.False(option.TryGetProperty("city", out _));
+        using var payload = await available.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.True(payload!.RootElement.GetProperty("publicationGateRequired").GetBoolean());
+        Assert.Empty(payload.RootElement.GetProperty("centers").EnumerateArray());
 
-        // A booking changes the persisted slot to Booked; discovery must not
-        // continue advertising the now-unavailable capacity.
-        var memberRef = "discovery-member-booking-" + Guid.NewGuid().ToString("N");
+        // The private schedule still exists and has not been silently deleted.
+        var privateSchedule = await staff.GetAsync(
+            $"/api/v1/centers/{centerRef}/appointment-slots", ct);
+        using var schedule = await privateSchedule.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Single(schedule!.RootElement.GetProperty("slots").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task ForgedCenterGrantWithoutCanonicalCenterCannotEnterCenterOperations()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        var fakeCenter = "center-never-admin-defined-" + Guid.NewGuid().ToString("N");
+        var subject = "stale-grant-" + Guid.NewGuid().ToString("N");
+        var memberSubject = "member-for-phantom-" + Guid.NewGuid().ToString("N");
+        await using (var db = NpgsqlDataSource.Create(
+            Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!))
+        await using (var connection = await db.OpenConnectionAsync(ct))
+        await using (var inject = new NpgsqlCommand("""
+            INSERT INTO taranom_panel_access_grant
+                (issuer,subject,capability,scope_ref,grant_state,
+                 session_current,subject_mapping_current,permission_version_current,
+                 grant_not_revoked,audit_ready)
+            VALUES (@issuer,@subject,'CenterAccessGrantsManage',@center,'active',
+                    true,true,true,true,true)
+            """, connection))
+        {
+            inject.Parameters.AddWithValue("issuer",
+                "https://appointments.test.invalid/realms/taranom");
+            inject.Parameters.AddWithValue("subject", subject);
+            inject.Parameters.AddWithValue("center", fakeCenter);
+            Assert.Equal(1, await inject.ExecuteNonQueryAsync(ct));
+        }
+
+        using var fakeManager = setup.AuthenticatedIdentityClient(subject);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await fakeManager.GetAsync($"/api/v1/centers/{fakeCenter}/access-grants", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await fakeManager.PostAsJsonAsync($"/api/v1/centers/{fakeCenter}/access-grants",
+                new { requestId=Guid.NewGuid(),targetSubject="another-subject",
+                      capability="CenterRosterManage",reason="Disallowed phantom center" }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await fakeManager.GetAsync($"/api/v1/centers/{fakeCenter}/directory-draft", ct)).StatusCode);
+        using var scopes = await fakeManager.GetAsync("/api/v1/me/center-directory-draft-scopes", ct);
+        using var scopesDoc = await scopes.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Empty(scopesDoc!.RootElement.GetProperty("scopes").EnumerateArray());
+
+        var memberRef = "member-phantom-" + Guid.NewGuid().ToString("N");
         await setup.GrantAsync(memberSubject, "MemberAppointmentsManage", memberRef, ct);
-        var booked = await noGrant.PostAsJsonAsync(
-            $"/api/v1/member/members/{memberRef}/centers/{centerRef}/appointments",
-            new { requestId = Guid.NewGuid(), expectedRevision = 1,
-                slotRef = "discovery-open-slot" }, ct);
-        Assert.Equal(HttpStatusCode.OK, booked.StatusCode);
-        using var afterBooking = await (await noGrant.GetAsync(endpoint, ct))
-            .Content.ReadFromJsonAsync<JsonDocument>(ct);
-        Assert.DoesNotContain(afterBooking!.RootElement.GetProperty("centers").EnumerateArray(),
-            item => item.GetProperty("centerRef").GetString() == centerRef);
+        using var member = setup.AuthenticatedIdentityClient(memberSubject);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await member.GetAsync(
+                $"/api/v1/member/members/{memberRef}/centers/{fakeCenter}/appointment-slots", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await member.PostAsJsonAsync(
+                $"/api/v1/member/members/{memberRef}/centers/{fakeCenter}/appointments",
+                new { requestId=Guid.NewGuid(),expectedRevision=0,slotRef="phantom" }, ct)).StatusCode);
+        using var appointmentScope = await fakeManager.GetAsync("/api/v1/me/appointment-scopes", ct);
+        using var grants = await appointmentScope.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Empty(grants!.RootElement.GetProperty("appointmentScopes").EnumerateArray());
     }
 
     [Fact]
