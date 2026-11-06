@@ -122,3 +122,14 @@ currently entitled member receives an empty `centers` collection with
 has private open slots. It must not automatically publish the center based
 on capacity, Admin creation or physician draft fields. The separate
 publication decision/evidence contract is still absent.
+
+## Immutable canonical definition and revocation boundary
+
+The Admin-defined canonical center identity is immutable in this technical
+slice. PostgreSQL rejects UPDATE, DELETE and TRUNCATE on canonical rows, not
+only on creation receipts; future approved correction/closure must introduce
+a separately reviewed versioned lifecycle. The center grant-mutation service
+checks and holds both the canonical center row and the actor's live
+`CenterAccessGrantsManage` grant with transaction-level `FOR SHARE`,
+avoiding grant writes that overtake revocation after middleware evaluation.
+No Admin-to-manager grant is automatically generated.

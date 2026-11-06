@@ -8,6 +8,7 @@ internal enum CenterAccessGrantOutcome
     Replayed,
     Conflict,
     NotFound,
+    Forbidden,
     Invalid
 }
 
@@ -91,6 +92,25 @@ internal sealed class CenterAccessGrantService(NpgsqlDataSource dataSource)
             canonical.Parameters.AddWithValue("center", centerRef);
             if (await canonical.ExecuteScalarAsync(cancellationToken) is null)
                 return CenterAccessGrantOutcome.NotFound;
+        }
+
+        // The endpoint's authorization may be older than a concurrent grant
+        // revocation. Lock the current actor grant before replay or mutation
+        // so the revocation and grant write have a deterministic ordering.
+        await using (var actorGrant = new NpgsqlCommand("""
+            SELECT 1 FROM taranom_panel_access_grant
+            WHERE issuer=@issuer AND subject=@subject AND
+              capability='CenterAccessGrantsManage' AND scope_ref=@center AND
+              grant_state='active' AND subject_mapping_current AND
+              permission_version_current AND grant_not_revoked AND audit_ready
+            FOR SHARE
+            """, connection, transaction))
+        {
+            actorGrant.Parameters.AddWithValue("issuer", actorIssuer);
+            actorGrant.Parameters.AddWithValue("subject", actorSubject);
+            actorGrant.Parameters.AddWithValue("center", centerRef);
+            if (await actorGrant.ExecuteScalarAsync(cancellationToken) is null)
+                return CenterAccessGrantOutcome.Forbidden;
         }
 
         string[]? existingEvent = null;

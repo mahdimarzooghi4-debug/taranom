@@ -98,6 +98,25 @@ public sealed class AdminCenterRegistryApiHttpTests
             q.Parameters.AddWithValue("center",center);
             Assert.Equal(0L,(long)(await q.ExecuteScalarAsync(ct))!);
         }
+        await using(var canonicalUpdate=new NpgsqlCommand("""
+            UPDATE taranom_canonical_center SET city='unapproved-change'
+            WHERE center_ref=@center
+            """,conn))
+        {
+            canonicalUpdate.Parameters.AddWithValue("center",center);
+            var ex=await Assert.ThrowsAsync<PostgresException>(
+                async()=>await canonicalUpdate.ExecuteNonQueryAsync(ct));
+            Assert.Equal("55000",ex.SqlState);
+        }
+        await using(var canonicalDelete=new NpgsqlCommand("""
+            DELETE FROM taranom_canonical_center WHERE center_ref=@center
+            """,conn))
+        {
+            canonicalDelete.Parameters.AddWithValue("center",center);
+            var ex=await Assert.ThrowsAsync<PostgresException>(
+                async()=>await canonicalDelete.ExecuteNonQueryAsync(ct));
+            Assert.Equal("55000",ex.SqlState);
+        }
         await using(var q=new NpgsqlCommand("""
             UPDATE taranom_canonical_center_creation_receipt
             SET fingerprint=repeat('0',64) WHERE center_ref=@center

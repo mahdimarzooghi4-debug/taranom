@@ -436,6 +436,7 @@ static IResult CenterGrantResponse(
             authorizationRefreshRequired = false
         }),
     CenterAccessGrantOutcome.NotFound => Results.NotFound(),
+    CenterAccessGrantOutcome.Forbidden => Results.Forbid(),
     CenterAccessGrantOutcome.Conflict => Results.Conflict(new { code = "IDEMPOTENCY_KEY_CONFLICT" }),
     _ => Results.BadRequest(new { code = "INVALID_CENTER_ACCESS_GRANT" })
 };
@@ -604,6 +605,16 @@ public sealed class AppointmentDatabaseBootstrap(
                 RETURN NULL;
             END;
             ';
+            DROP TRIGGER IF EXISTS trg_taranom_canonical_center_update_delete
+                ON taranom_canonical_center;
+            CREATE TRIGGER trg_taranom_canonical_center_update_delete
+                BEFORE UPDATE OR DELETE ON taranom_canonical_center
+                FOR EACH ROW EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
+            DROP TRIGGER IF EXISTS trg_taranom_canonical_center_truncate
+                ON taranom_canonical_center;
+            CREATE TRIGGER trg_taranom_canonical_center_truncate
+                BEFORE TRUNCATE ON taranom_canonical_center
+                FOR EACH STATEMENT EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
             DROP TRIGGER IF EXISTS trg_taranom_canonical_center_receipt_mutation
                 ON taranom_canonical_center_creation_receipt;
             CREATE TRIGGER trg_taranom_canonical_center_receipt_mutation
