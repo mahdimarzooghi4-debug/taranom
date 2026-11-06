@@ -50,7 +50,7 @@ test('lost creation ACK reconciles with original UUID without another POST',asyn
  await expect(page.getByText('نتیجه ثبت نامطمئن است؛ هیچ درخواست دومی ارسال نمی‌شود.')).toBeVisible();
  await expect(page.getByRole('button',{name:'ایجاد مرکز با شناسه مرجع'})).toHaveCount(0);
  await page.getByRole('button',{name:'بررسی نتیجه ثبت'}).click();
- await expect(page.getByRole('status')).toContainText(ref);
+ await expect(page.getByRole('status').filter({hasText:ref})).toBeVisible();
  expect(posts).toBe(1);expect(lookups).toBe(1);
 });
 test('denied admin does not reveal sample center records or enable writes',async({page})=>{
