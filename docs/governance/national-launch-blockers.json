@@ -58,9 +58,11 @@
       "status": "BLOCKED_UNVERIFIED",
       "policy_refs": [
         "TRN-BIZ-043",
-        "TRN-BIZ-044"
+        "TRN-BIZ-044",
+        "TRN-BIZ-055"
       ],
       "missing_evidence": [
+        "ADMIN_DEFINED_CENTER_REGISTRY",
         "PROVIDER_LICENSE_AND_CONTRACT",
         "NATIONAL_COVERAGE_EVIDENCE"
       ]

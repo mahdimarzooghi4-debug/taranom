@@ -1,11 +1,17 @@
 # TRN-TECH-277 — Center and doctor *unverified* directory draft registry
 
 Figma frames: center profile 160:2; center doctors and roster 135:46 and 136:2.
-Decisions: TRN-BIZ-043/044, TRN-BIZ-053/054.
+Decisions: TRN-BIZ-043/044, TRN-BIZ-053/054/055.
 
 ## Scope
 This increment introduces *center-controlled private draft records*, not a
 medical provider directory, clinician identity proof or qualified search.
+
+The canonical clinical-center record is Admin-created under TRN-BIZ-055.
+These draft endpoints do not create a center, establish canonical identity,
+provision a center-manager account/grant, or mutate the canonical center
+record. Every draft is scoped to a pre-existing center reference and a current
+server-side grant.
 - Current OIDC issuer+subject and centrally versioned scopes stay mandatory.
 - CenterAccessGrantsManage can GET/PUT its own center profile draft.
 - CenterRosterManage can GET and PUT doctor claims in its own center.
@@ -13,8 +19,13 @@ medical provider directory, clinician identity proof or qualified search.
   enforcement as other center endpoints.
 - GET /api/v1/me/center-directory-draft-scopes returns current grant scopes
   only. It confers no capability on its own.
-- Center and doctor names/city/specialty are **center-claimed data**, not official
-  verified credentials. The marker UNVERIFIED_DRAFT is fixed by the backend.
+- Center profile fields and doctor names/specialty are **center-claimed draft
+  data**, not canonical center identity or official verified credentials. The
+  marker UNVERIFIED_DRAFT is fixed by the backend.
+- A center profile draft is only a submission by the center. It cannot change
+  the Admin-defined canonical center record, create a center, or appear in the
+  member-facing directory. Admin review/acceptance of profile changes is not
+  implemented or specified by this contract.
 - PostgreSQL keeps center revisions and per-center doctor revisions, plus an
   append-only command audit keyed by center+actor+request ID.
 - Writes recheck the current grant with a transaction-held FOR SHARE lock,
@@ -41,10 +52,16 @@ uncertain responses. These are CI tests with synthetic authenticated subjects,
 not actual clinician onboarding or live identity-provider evidence.
 
 ## Next dependencies
-- Authoritative licensed provider/center identity and independent evidence
-  source(s), contractual binding, responsible human qualification workflow.
+- Admin-owned canonical center registry: center creation, canonical fields,
+  stable reference issuance, Admin authorization/audit, and center-manager
+  association/grant provisioning.
+- Explicit Admin review/acceptance contract for center-submitted profile
+  corrections; until then they remain private unverified drafts.
+- Authoritative legal center/provider identity and licence evidence,
+  contractual binding, and responsible human qualification workflow.
 - Explicit approved publication gate for the national patient search directory,
   then city/specialty matching against approved evidence-backed records.
+  Admin creation alone is not publication or service qualification.
 - Real OIDC browser session/BFF and trusted grant bootstrap. No deployment,
   merge, Stage, release, actual contracts, or medical permissions.
 
