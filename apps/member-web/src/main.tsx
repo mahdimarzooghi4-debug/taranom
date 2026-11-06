@@ -1,3 +1,4 @@
+import { PatientAccount } from './patient-account';
 import { PatientSupport } from './patient-support';
 import { PatientProfile } from './patient-profile';
 import { FigmaBooking } from './figma-booking';
@@ -15,7 +16,7 @@ const node = document.getElementById('root');
 if (!node) throw new Error('Member application root unavailable');
 createRoot(node).render(
   <StrictMode>
-    {window.location.pathname==='/patient-app/support' ? <PatientSupport/> : ['/patient-app/personal-info','/patient-app/edit-info'].includes(window.location.pathname) ? <PatientProfile editing={window.location.pathname.endsWith('/edit-info')}/> : ['/patient-app/slots','/patient-app/review'].includes(window.location.pathname) ? <FigmaBooking/> : ['/patient-app/appointments','/patient-app/appointment-detail','/patient-app/request-tracking'].includes(window.location.pathname) ? <FigmaAppointments/> : window.location.pathname === '/patient-app' || window.location.pathname.startsWith('/patient-app/')
+    {window.location.pathname==='/patient-app/account' ? <PatientAccount/> : window.location.pathname==='/patient-app/support' ? <PatientSupport/> : ['/patient-app/personal-info','/patient-app/edit-info'].includes(window.location.pathname) ? <PatientProfile editing={window.location.pathname.endsWith('/edit-info')}/> : ['/patient-app/slots','/patient-app/review'].includes(window.location.pathname) ? <FigmaBooking/> : ['/patient-app/appointments','/patient-app/appointment-detail','/patient-app/request-tracking'].includes(window.location.pathname) ? <FigmaAppointments/> : window.location.pathname === '/patient-app' || window.location.pathname.startsWith('/patient-app/')
       ? <PatientMobileApp />
       : window.location.pathname === '/patient-portal' || window.location.pathname.startsWith('/patient-portal/')
       ? <PatientWebPortal />
