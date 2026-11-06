@@ -83,12 +83,19 @@ public sealed class CenterManagerRequestApiHttpTests
         Assert.Equal(requestId.ToString("D"),row.GetProperty("requestId").GetString());
         Assert.Equal("PENDING_REVIEW",row.GetProperty("state").GetString());
         Assert.False(row.GetProperty("managerAssigned").GetBoolean());
+        using var observed=await applicant.GetAsync(Base+"/"+requestId,ct);
+        Assert.Equal(HttpStatusCode.OK,observed.StatusCode);
+        using var receipt=await observed.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Equal("Observed",receipt!.RootElement.GetProperty("outcome").GetString());
+        Assert.False(receipt.RootElement.GetProperty("managerAssigned").GetBoolean());
 
         using var unrelated = fx.AuthenticatedIdentityClient(
             "unrelated-" + Guid.NewGuid().ToString("N"));
         using var privateView = await unrelated.GetAsync(Base,ct);
         using var privateJson = await privateView.Content.ReadFromJsonAsync<JsonDocument>(ct);
         Assert.Empty(privateJson!.RootElement.GetProperty("requests").EnumerateArray());
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await unrelated.GetAsync(Base+"/"+requestId,ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await applicant.GetAsync($"/api/v1/centers/{center}/access-grants",ct)).StatusCode);
         Assert.Equal(0L,await CountManagerGrantsAsync(center,claimant,ct));

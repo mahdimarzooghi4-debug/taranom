@@ -28,6 +28,8 @@ internal static class CenterManagerRequestEndpoints
             .RequireAuthorization(authenticatedPolicy);
         app.MapGet("/api/v1/me/center-manager-requests", ListOwnAsync)
             .RequireAuthorization(authenticatedPolicy);
+        app.MapGet("/api/v1/me/center-manager-requests/{requestId:guid}", ReadOwnAsync)
+            .RequireAuthorization(authenticatedPolicy);
         app.MapGet("/api/v1/operations/center-manager-requests", ListAdminAsync)
             .RequirePanelCapability(PanelCapability.AdminCenterRegistryManage);
         app.MapPost("/api/v1/operations/center-manager-requests/{requestId:guid}/review",
@@ -85,6 +87,10 @@ internal static class CenterManagerRequestEndpoints
         await using var tx = await conn.BeginTransactionAsync(ct);
         // One unverified manager claim per OIDC identity and canonical center.
         // This also serializes two different UUIDs submitted in parallel.
+        // A UUID collision between unrelated actors must resolve as an
+        // explicit conflict instead of surfacing a database uniqueness error.
+        await LockAsync(conn, tx, "manager-request-uuid:" +
+            input.RequestId.ToString("D"), ct);
         await LockAsync(conn, tx,
             "manager-request:" + id.Value.Issuer + ":" + id.Value.Subject +
             ":" + input.CenterRef, ct);
@@ -148,6 +154,35 @@ internal static class CenterManagerRequestEndpoints
             centerRef = input.CenterRef, state = Pending, managerAssigned = false });
     }
 
+    // Read-only recovery for a lost POST acknowledgement. The lookup is
+    // restricted to the original OIDC issuer/subject and never reissues POST.
+    private static async Task<IResult> ReadOwnAsync(
+        Guid requestId, HttpContext context, NpgsqlDataSource db,
+        CancellationToken ct)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var id = Identity(context);
+        if (id is null) return Results.Forbid();
+        if (requestId == Guid.Empty) return Results.BadRequest();
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var cmd = new NpgsqlCommand("""
+            SELECT r.center_ref,COALESCE(review.decision,'PENDING_REVIEW')
+            FROM taranom_center_manager_request AS r
+            LEFT JOIN taranom_center_manager_request_review AS review
+              ON review.request_id=r.request_id
+            WHERE r.request_id=@request AND r.issuer=@issuer AND r.subject=@subject
+            """, conn);
+        cmd.Parameters.AddWithValue("request", requestId);
+        cmd.Parameters.AddWithValue("issuer", id.Value.Issuer);
+        cmd.Parameters.AddWithValue("subject", id.Value.Subject);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return Results.NotFound(new { code = "MANAGER_REQUEST_NOT_OBSERVED" });
+        return Results.Ok(new { outcome="Observed", requestId,
+            centerRef=reader.GetString(0), state=reader.GetString(1),
+            managerAssigned=false, associationGateRequired=true });
+    }
+
     private static async Task<IResult> ListOwnAsync(
         string? after, HttpContext context, NpgsqlDataSource db, CancellationToken ct)
     {
@@ -170,7 +205,9 @@ internal static class CenterManagerRequestEndpoints
         NpgsqlDataSource db, (string Issuer, string Subject) actor,
         string? after, bool admin, CancellationToken ct)
     {
-        if (after is not null && !Guid.TryParseExact(after, "D", out _))
+        if (after is not null &&
+            (!Guid.TryParseExact(after, "D", out var parsed) ||
+             !string.Equals(parsed.ToString("D"), after, StringComparison.Ordinal)))
             return Results.BadRequest(new { code = "INVALID_MANAGER_REQUEST_CURSOR" });
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var cmd = new NpgsqlCommand("""
