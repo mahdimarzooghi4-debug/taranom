@@ -53,7 +53,9 @@ internal static class CenterDirectoryDraftEndpoints
             context.Response.Headers.CacheControl = "no-store";
             await using var connection = await db.OpenConnectionAsync(ct);
             var profile = await ReadCenterAsync(connection, null, centerRef, ct);
-            return Results.Ok(new { centerRef, profile, verificationState = "UNVERIFIED_DRAFT" });
+            return Results.Ok(new { centerRef, profile = new {
+                revision = profile.Revision, displayName = profile.DisplayName, city = profile.City },
+                verificationState = "UNVERIFIED_DRAFT" });
         }).RequirePanelCapability(PanelCapability.CenterAccessGrantsManage);
 
         center.MapPut("/directory-draft", async (string centerRef,
