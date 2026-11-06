@@ -11,7 +11,7 @@ export class AppointmentApiError extends Error {
 export async function api<T>(path:string,init:RequestInit={}):Promise<T>{
  const token=await window.taranomSession?.getAccessToken();
  init.signal?.throwIfAborted();
- if(!token)throw new Error('برای دیدن نوبت‌ها، ابتدا باید نشست ورود معتبر برقرار شود.');
+ if(!token)throw new AppointmentApiError(401,'برای ادامه، ابتدا باید نشست ورود معتبر برقرار شود.');
  const response=await fetch(path,{...init,redirect:'error',credentials:'omit',cache:'no-store',headers:{'Accept':'application/json','Authorization':'Bearer '+token,...(init.body?{'Content-Type':'application/json'}:{}),...init.headers}});
  if(!response.ok)throw new AppointmentApiError(response.status,response.status===401?'نشست ورود معتبر نیست یا منقضی شده است.':response.status===403?'دسترسی نوبت این حساب فعال نیست.':response.status===409?'وضعیت نوبت تغییر کرده؛ فهرست را تازه کنید.':'دریافت پاسخ سرویس نوبت‌دهی ناموفق بود.');
  return await response.json() as T;
@@ -62,4 +62,21 @@ export async function saveMyProfile(profile:MemberProfile,requestId:string){
  const result=await api<{outcome:string;revision:number}>('/api/v1/me/profile',{method:'PUT',body:JSON.stringify({requestId,expectedRevision:profile.revision,fullName:profile.fullName,birthDate:profile.birthDate,city:profile.city})});
  if(!result||!['Applied','Replayed'].includes(result.outcome)||!Number.isSafeInteger(result.revision)||result.revision<=profile.revision)throw new Error('نتیجه ذخیره مشخصات قابل تأیید نیست.');
  return result;
+}
+
+export type SupportTopic='account'|'group'|'appointments'|'privacy';
+export type SupportCommand={requestId:string;topic:SupportTopic;message:string};
+export type SupportRequest=SupportCommand&{requestRef:string;state:'Registered';createdAt:string};
+export type SupportPage={requests:SupportRequest[];nextBefore:string|null};
+const validSupport=(r:SupportRequest)=>r&&typeof r.requestRef==='string'&&r.requestRef.length>0&&typeof r.requestId==='string'&&['account','group','appointments','privacy'].includes(r.topic)&&typeof r.message==='string'&&r.state==='Registered'&&typeof r.createdAt==='string'&&Number.isFinite(Date.parse(r.createdAt));
+export async function getMySupportRequests(options:{before?:string;requestId?:string}={},signal?:AbortSignal):Promise<SupportPage>{
+ const query=new URLSearchParams(options);
+ const result=await api<SupportPage>('/api/v1/me/support-requests'+(query.size?'?'+query:''),{signal});
+ if(!result||!Array.isArray(result.requests)||!result.requests.every(validSupport)||!(result.nextBefore===null||typeof result.nextBefore==='string'&&/^[1-9]\d*$/.test(result.nextBefore)))throw new Error('پاسخ پیگیری درخواست معتبر نیست.');
+ return result;
+}
+export async function createMySupportRequest(command:SupportCommand){
+ const result=await api<{outcome:string;request:SupportRequest}>('/api/v1/me/support-requests',{method:'POST',body:JSON.stringify(command)});
+ if(!result||!['Applied','Replayed'].includes(result.outcome)||!validSupport(result.request)||result.request.requestId!==command.requestId||result.request.topic!==command.topic||result.request.message!==command.message.trim())throw new Error('ثبت درخواست قابل تأیید نیست.');
+ return result.request;
 }

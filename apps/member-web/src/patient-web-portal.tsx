@@ -50,7 +50,7 @@ export function PatientWebPortal() {
           {pages.filter((item) => item.group === group).map((item) => <a key={item.key} href={item.path} aria-current={page.key === item.key ? 'page' : undefined} className={page.key === item.key ? 'active' : ''} onClick={(event) => go(event, item.path)}><span aria-hidden="true">{item.icon}</span>{item.label}<b aria-hidden="true">‹</b></a>)}
         </div>)}
       </nav>
-      <div className="patient-sidebar-help"><strong>پشتیبانی ترنم</strong><span>راهنمایی دربارهٔ عضویت و خدمات</span><a href="mailto:support@example.invalid">تماس با پشتیبانی</a></div>
+      <div className="patient-sidebar-help"><strong>پشتیبانی ترنم</strong><span>راهنمایی دربارهٔ عضویت و خدمات</span><a href="/patient-app/support">ثبت درخواست پشتیبانی</a></div>
       <div className="patient-sidebar-footer">{['appointments','account'].includes(page.key)?'نوبت‌ها از حساب مجاز دریافت می‌شوند. سایر صفحات پیش‌نمایش‌اند.':'حساب و اطلاعات این محیط نمونه‌اند.'}</div>
     </aside>
     <div className="patient-workspace">

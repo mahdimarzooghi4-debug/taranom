@@ -333,6 +333,7 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments/{bookingRe
 }).RequirePanelCapability(PanelCapability.MemberAppointmentsManage);
 
 app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
+app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
 
 app.Run();
 
@@ -412,6 +413,21 @@ public sealed class AppointmentDatabaseBootstrap(
         await appointments.InitializeAsync(cancellationToken);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
+            CREATE TABLE IF NOT EXISTS taranom_member_support_request (
+                sequence_no bigserial PRIMARY KEY,
+                issuer text NOT NULL,
+                subject text NOT NULL,
+                request_id uuid NOT NULL,
+                request_ref uuid NOT NULL UNIQUE,
+                topic text NOT NULL CHECK (topic IN ('account','group','appointments','privacy')),
+                message text NOT NULL,
+                fingerprint text NOT NULL,
+                state text NOT NULL CHECK (state = 'Registered'),
+                created_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE (issuer,subject,request_id)
+            );
+            CREATE INDEX IF NOT EXISTS ix_taranom_member_support_owner
+                ON taranom_member_support_request (issuer,subject,sequence_no DESC);
             CREATE TABLE IF NOT EXISTS taranom_member_profile (
                 issuer text NOT NULL,
                 subject text NOT NULL,
