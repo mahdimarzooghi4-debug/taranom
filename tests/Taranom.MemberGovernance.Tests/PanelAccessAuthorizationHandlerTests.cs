@@ -167,7 +167,7 @@ public sealed class PanelAccessAuthorizationHandlerTests
             .AddScheme<SyntheticTestAuthenticationOptions, SyntheticTestAuthenticationHandler>(
                 "synthetic-test", options => options.Authenticated = authenticated);
         builder.Services.AddSingleton<IPanelAccessEvidenceSource>(
-            new FixedEvidenceSource(evidence));
+            new FixedEvidenceSource(evidence, expectedCapability: PanelCapability.CenterRevenueRead));
         builder.Services.Configure<PanelAccessOptions>(
             options => options.TrustedIssuer = Issuer);
         builder.Services.AddTaranomPanelAuthorization();
@@ -225,23 +225,24 @@ public sealed class PanelAccessAuthorizationHandlerTests
             (PanelAccessPolicyNames.TaranomFundRead,
                 PanelCapability.TaranomFundRead),
             (PanelAccessPolicyNames.SupportedCaseFinanceRead,
-                PanelCapability.SupportedCaseFinanceRead)
+                PanelCapability.SupportedCaseFinanceRead),
+            (PanelAccessPolicyNames.MemberAppointmentsManage,
+                PanelCapability.MemberAppointmentsManage),
+            (PanelAccessPolicyNames.CenterAccessGrantsManage,
+                PanelCapability.CenterAccessGrantsManage)
         };
         Assert.Equal(expected, PanelAccessPolicyNames.All
             .Select(item => (item.Name, item.Capability)));
 
-        using var services = BuildServices(new FixedEvidenceSource(Evidence()), Issuer);
-        var authorization = services.GetRequiredService<IAuthorizationService>();
-
         foreach (var (policyName, requiredCapability) in expected)
-        foreach (var (claimPolicyName, claimedCapability) in expected)
+        foreach (var (_, serverCapability) in expected)
         {
+            using var services = BuildServices(
+                new FixedEvidenceSource(Evidence(), expectedCapability: serverCapability), Issuer);
+            var authorization = services.GetRequiredService<IAuthorizationService>();
             var result = await authorization.AuthorizeAsync(
-                Principal(claimedCapability),
-                new object(),
-                policyName);
-
-            Assert.Equal(requiredCapability == claimedCapability, result.Succeeded);
+                Principal(), new object(), policyName);
+            Assert.Equal(requiredCapability == serverCapability, result.Succeeded);
         }
     }
 
@@ -249,12 +250,12 @@ public sealed class PanelAccessAuthorizationHandlerTests
     public async Task ExactEvidenceAuthorizesThroughAspNetAuthorizationService()
     {
         var resource = new object();
-        var source = new FixedEvidenceSource(Evidence(), resource);
+        var source = new FixedEvidenceSource(Evidence(), expectedResource: resource, expectedCapability: PanelCapability.CenterRevenueRead);
         using var services = BuildServices(source, Issuer);
         var authorization = services.GetRequiredService<IAuthorizationService>();
 
         var result = await authorization.AuthorizeAsync(
-            Principal(PanelCapability.CenterRevenueRead),
+            Principal(),
             resource,
             PanelAccessPolicyNames.CenterRevenueRead);
 
@@ -269,7 +270,7 @@ public sealed class PanelAccessAuthorizationHandlerTests
         var authorization = services.GetRequiredService<IAuthorizationService>();
 
         var result = await authorization.AuthorizeAsync(
-            Principal(PanelCapability.CenterRevenueRead),
+            Principal(),
             new object(),
             PanelAccessPolicyNames.CenterRevenueRead);
 
@@ -283,7 +284,7 @@ public sealed class PanelAccessAuthorizationHandlerTests
         var authorization = services.GetRequiredService<IAuthorizationService>();
 
         var result = await authorization.AuthorizeAsync(
-            Principal(PanelCapability.CenterRevenueRead),
+            Principal(),
             new object(),
             PanelAccessPolicyNames.CenterRevenueRead);
 
@@ -293,7 +294,7 @@ public sealed class PanelAccessAuthorizationHandlerTests
     [Fact]
     public async Task UnauthenticatedPrincipalIsDeniedBeforeEvidenceCanAuthorize()
     {
-        using var services = BuildServices(new FixedEvidenceSource(Evidence()), Issuer);
+        using var services = BuildServices(new FixedEvidenceSource(Evidence(), expectedCapability: PanelCapability.CenterRevenueRead), Issuer);
         var authorization = services.GetRequiredService<IAuthorizationService>();
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
 
@@ -308,11 +309,13 @@ public sealed class PanelAccessAuthorizationHandlerTests
     [Fact]
     public async Task DifferentCapabilityCannotSatisfyNamedPolicy()
     {
-        using var services = BuildServices(new FixedEvidenceSource(Evidence()), Issuer);
+        using var services = BuildServices(
+            new FixedEvidenceSource(Evidence(), expectedCapability: PanelCapability.CenterAppointmentsManage),
+            Issuer);
         var authorization = services.GetRequiredService<IAuthorizationService>();
 
         var result = await authorization.AuthorizeAsync(
-            Principal(PanelCapability.CenterAppointmentsManage),
+            Principal(),
             new object(),
             PanelAccessPolicyNames.CenterRevenueRead);
 
@@ -329,11 +332,11 @@ public sealed class PanelAccessAuthorizationHandlerTests
                 PermissionVersionCurrent = PanelEvidenceState.Rejected
             }
         };
-        using var services = BuildServices(new FixedEvidenceSource(stale), Issuer);
+        using var services = BuildServices(new FixedEvidenceSource(stale, expectedCapability: PanelCapability.CenterRevenueRead), Issuer);
         var authorization = services.GetRequiredService<IAuthorizationService>();
 
         var result = await authorization.AuthorizeAsync(
-            Principal(PanelCapability.CenterRevenueRead),
+            Principal(),
             new object(),
             PanelAccessPolicyNames.CenterRevenueRead);
 
@@ -347,7 +350,7 @@ public sealed class PanelAccessAuthorizationHandlerTests
         var authorization = services.GetRequiredService<IAuthorizationService>();
 
         var result = await authorization.AuthorizeAsync(
-            Principal(PanelCapability.CenterRevenueRead),
+            Principal(),
             new object(),
             PanelAccessPolicyNames.CenterRevenueRead);
 
@@ -368,15 +371,14 @@ public sealed class PanelAccessAuthorizationHandlerTests
         return services.BuildServiceProvider();
     }
 
-    private static ClaimsPrincipal Principal(PanelCapability capability)
+    private static ClaimsPrincipal Principal()
     {
-        var capabilityToken = PanelAccessPolicy.GetCapabilityToken(capability)!;
-        var claim = new Claim(
-            PanelAccessPolicy.GrantClaimType,
-            $"v1|{Scope.Length}|{Scope}|{capabilityToken}",
-            ClaimValueTypes.String,
-            Issuer);
-        return new ClaimsPrincipal(new ClaimsIdentity([claim], "synthetic-test-auth"));
+        var claims = new[]
+        {
+            new Claim("iss", Issuer),
+            new Claim("sub", "synthetic-subject")
+        };
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, "synthetic-test-auth"));
     }
 
     private static PanelAccessEvidence Evidence()
@@ -409,7 +411,7 @@ public sealed class PanelAccessAuthorizationHandlerTests
             if (!Options.Authenticated)
                 return Task.FromResult(AuthenticateResult.NoResult());
 
-            var principal = Principal(PanelCapability.CenterRevenueRead);
+            var principal = Principal();
             var ticket = new AuthenticationTicket(principal, Scheme.Name);
             return Task.FromResult(AuthenticateResult.Success(ticket));
         }
@@ -417,7 +419,8 @@ public sealed class PanelAccessAuthorizationHandlerTests
 
     private sealed class FixedEvidenceSource(
         PanelAccessEvidence? evidence,
-        object? expectedResource = null) : IPanelAccessEvidenceSource
+        object? expectedResource = null,
+        PanelCapability? expectedCapability = null) : IPanelAccessEvidenceSource
     {
         internal object? LastResource { get; private set; }
 
@@ -427,8 +430,9 @@ public sealed class PanelAccessAuthorizationHandlerTests
             object? authorizationResource)
         {
             LastResource = authorizationResource;
-            if (expectedResource is not null && !ReferenceEquals(
-                    expectedResource, authorizationResource))
+            if ((expectedResource is not null && !ReferenceEquals(
+                    expectedResource, authorizationResource)) ||
+                (expectedCapability is not null && expectedCapability != capability))
                 return ValueTask.FromResult<PanelAccessEvidence?>(null);
             return ValueTask.FromResult(evidence);
         }
