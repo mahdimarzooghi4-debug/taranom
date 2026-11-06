@@ -133,3 +133,11 @@ checks and holds both the canonical center row and the actor's live
 `CenterAccessGrantsManage` grant with transaction-level `FOR SHARE`,
 avoiding grant writes that overtake revocation after middleware evaluation.
 No Admin-to-manager grant is automatically generated.
+
+## Correct patient-facing publication status
+
+The member UI requires an explicit `publicationGateRequired=true`
+and empty `centers` payload. It shows a publication hold rather than an
+incorrect "no free capacity" statement. A forged/malformed response
+containing centers without an approved publication contract fails closed;
+the browser tests cover authorization, home entry, mobile and malformed data.
