@@ -17,3 +17,18 @@ A canonical center ID is mandatory and independently checked inside the write tr
 The real OIDC identity/subject directory and authoritative proof of center representation do not exist in the deployment. User-provided reason text is UNVERIFIED; no inference about identity/legality/clinical authority is made. A future independently approved Admin bootstrap and manager provisioning contract is mandatory before any manager access is granted. Browser OIDC/BFF is still not connected. CI tests use synthetic authenticated subjects only.
 
 No automatic grant, public center publication, certified provider discovery, actual legal authorization, production onboarding, merge, Stage, release or production behavior.
+
+## Connected UI (unverified, local test boundary)
+
+The center React route /center-portal/manager-request is reachable without an
+existing center grant but requires the host's authenticated OIDC session
+token. It submits only the server-owned center reference and unverified
+reason. After uncertain transport it retrieves the exact request receipt by
+the original UUID; it does not resubmit the POST.
+
+The Admin panel /admin/center-manager-requests now lists claims through the
+AdminCenterRegistryManage protected API, records a documented human review,
+and always displays manager access as unassigned. Unknown review results
+never trigger automatic retry. Browser Chromium regressions cover these
+flows, unauthenticated users, denial and invalid responses. The host
+OIDC browser session itself is still not provisioned; CI tokens are test-only.
