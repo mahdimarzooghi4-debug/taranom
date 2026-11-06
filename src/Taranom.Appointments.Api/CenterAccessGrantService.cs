@@ -19,13 +19,22 @@ internal sealed record CenterAccessGrantRecord(
 
 internal sealed class CenterAccessGrantService(NpgsqlDataSource dataSource)
 {
+    // A center manager may delegate operational tasks, but CANNOT
+    // appoint or revoke another manager. An initial manager and any
+    // succession must pass separate accountable Admin governance.
     private static readonly HashSet<string> DelegableCapabilities = new(StringComparer.Ordinal)
     {
-        "CenterAccessGrantsManage",
         "CenterRosterManage",
         "CenterAppointmentsManage",
         "CenterRevenueRead"
     };
+    private static readonly string[] VisibleCapabilities =
+    [
+        "CenterAccessGrantsManage",
+        "CenterRosterManage",
+        "CenterAppointmentsManage",
+        "CenterRevenueRead"
+    ];
 
     internal async Task<IReadOnlyList<CenterAccessGrantRecord>> ListAsync(
         string issuer,
@@ -43,7 +52,7 @@ internal sealed class CenterAccessGrantService(NpgsqlDataSource dataSource)
             """, connection);
         command.Parameters.AddWithValue("issuer", issuer);
         command.Parameters.AddWithValue("center_ref", centerRef);
-        command.Parameters.AddWithValue("capabilities", DelegableCapabilities.ToArray());
+        command.Parameters.AddWithValue("capabilities", VisibleCapabilities);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var results = new List<CenterAccessGrantRecord>();
         while (await reader.ReadAsync(cancellationToken))

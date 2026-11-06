@@ -13,6 +13,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Taranom.MemberGovernance;
+using Taranom.AppointmentScheduling;
+using Taranom.AppointmentScheduling.Postgres;
 using Xunit;
 
 namespace Taranom.MemberGovernance.Tests;
@@ -85,6 +87,21 @@ public sealed class AppointmentApiHttpTests
                 capability = "MemberAppointmentsManage", reason = "Not a center capability" },
             cancellationToken);
         Assert.Equal(HttpStatusCode.BadRequest, memberCapability.StatusCode);
+        // A center manager must NOT create another access-grant manager,
+        // even when already holding CenterAccessGrantsManage themselves.
+        var attemptedManagerDelegation = await manager.PostAsJsonAsync(accessGrants,
+            new { requestId = Guid.NewGuid(), targetSubject = staffSubject,
+                capability = "CenterAccessGrantsManage",
+                reason = "Bypass explicit Admin appointment" }, cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, attemptedManagerDelegation.StatusCode);
+        var attemptedManagerRevocation = await manager.PostAsJsonAsync(
+            accessGrants + "/revoke",
+            new { requestId = Guid.NewGuid(), targetSubject = staffSubject,
+                capability = "CenterAccessGrantsManage",
+                reason = "Bypass Admin-managed manager lifecycle" }, cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, attemptedManagerRevocation.StatusCode);
+        using var cannotManage = await staff.GetAsync(accessGrants, cancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, cannotManage.StatusCode);
 
         var revoked = await manager.PostAsJsonAsync(accessGrants + "/revoke",
             new { requestId = Guid.NewGuid(), targetSubject = staffSubject,
@@ -292,7 +309,7 @@ public sealed class AppointmentApiHttpTests
     }
 
     [Fact]
-    public async Task MemberCanBookAndCancelOnlyWithinItsGrantedMemberScope()
+    public async Task UnpublishedMemberBookingIsBlockedButExistingAppointmentCanBeReadAndCancelled()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var setup = new AppointmentApiFixture(cancellationToken);
@@ -328,21 +345,33 @@ public sealed class AppointmentApiHttpTests
 
         var path = $"/api/v1/member/members/{memberRef}/centers/{centerRef}";
         var slots = await memberClient.GetAsync(path + "/appointment-slots", cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, slots.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, slots.StatusCode);
+        using (var unavailable = await slots.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken))
+            Assert.Equal("CENTER_PUBLICATION_NOT_AUTHORIZED",
+                unavailable!.RootElement.GetProperty("code").GetString());
         var bookingRequestId = Guid.NewGuid();
         var bookPayload = new { requestId = bookingRequestId, expectedRevision = 1, slotRef = "member-slot-1" };
         var book = await memberClient.PostAsJsonAsync(path + "/appointments",
             bookPayload, cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, book.StatusCode);
-        using var bookingJson = await book.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
-        var bookingRef = bookingJson!.RootElement.GetProperty("appointment")
-            .GetProperty("bookingRef").GetGuid();
-
+        Assert.Equal(HttpStatusCode.Forbidden, book.StatusCode);
+        using (var denial = await book.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken))
+            Assert.Equal("CENTER_PUBLICATION_NOT_AUTHORIZED",
+                denial!.RootElement.GetProperty("code").GetString());
         var replayedBooking = await memberClient.PostAsJsonAsync(
             path + "/appointments", bookPayload, cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, replayedBooking.StatusCode);
-        using var replayJson = await replayedBooking.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
-        Assert.Equal("Replayed", replayJson!.RootElement.GetProperty("outcome").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, replayedBooking.StatusCode);
+
+        // TEST-ONLY historical booking fixture. It bypasses the public
+        // route solely to preserve coverage of existing-appointment reads
+        // and patient-owned cancellation under an unapproved center.
+        var store = setup.Factory.Services.GetRequiredService<PostgresAppointmentScheduleStore>();
+        var historical = await store.ApplyAsync(centerRef,
+            new AppointmentAuditActor(
+                "https://appointments.test.invalid/realms/taranom", memberSubject),
+            snapshot => snapshot.Book(bookingRequestId, snapshot.Revision,
+                memberRef, "member-slot-1"), cancellationToken);
+        Assert.Equal(AppointmentCommandOutcome.Applied, historical.Outcome);
+        var bookingRef = historical.Booking!.BookingRef;
 
         using var memberAppointmentsResponse = await memberClient.GetAsync(
             "/api/v1/me/appointments", cancellationToken);

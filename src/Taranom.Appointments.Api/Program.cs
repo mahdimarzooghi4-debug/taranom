@@ -264,6 +264,12 @@ member.MapGet("/members/{memberRef}/centers/{centerRef}/appointment-slots", asyn
 {
     if (!await CanonicalCenterGuard.ExistsAsync(db, centerRef, cancellationToken))
         return Results.NotFound(new {code="CENTER_NOT_ADMIN_DEFINED"});
+    // Member-facing capacity is a form of clinical-service publication.
+    // No authority for publication is configured; never expose slots
+    // solely because someone knows an opaque center reference.
+    return Results.Json(new { code = "CENTER_PUBLICATION_NOT_AUTHORIZED" },
+        statusCode: StatusCodes.Status403Forbidden);
+    /* Future implementation requires a separate verified publication gate.
     var snapshot = await store.ReadAsync(centerRef, cancellationToken);
     return Results.Ok(new
     {
@@ -271,7 +277,7 @@ member.MapGet("/members/{memberRef}/centers/{centerRef}/appointment-slots", asyn
         revision = snapshot?.Revision ?? 0,
         slots = snapshot?.Slots.Values.Where(item => item.State == AppointmentSlotState.Open)
             .OrderBy(item => item.StartsAt).ToArray() ?? Array.Empty<AppointmentSlot>()
-    });
+    }); */
 }).RequirePanelCapability(PanelCapability.MemberAppointmentsManage);
 
 member.MapGet("/members/{memberRef}/centers/{centerRef}/appointments", async (
@@ -309,10 +315,11 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments", async (
     if (resolvedMemberRef is null || actor is null) return Results.Forbid();
     if (!await CanonicalCenterGuard.ExistsAsync(db, centerRef, cancellationToken))
         return Results.NotFound(new {code="CENTER_NOT_ADMIN_DEFINED"});
-    var change = await store.ApplyAsync(centerRef, actor,
-        snapshot => snapshot.Book(request.RequestId, request.ExpectedRevision,
-            resolvedMemberRef, request.SlotRef), cancellationToken);
-    return AppointmentResponse(change.Outcome, change);
+    // Unknown or Admin-defined-only centers are not approved providers.
+    // Booking is blocked independently of the center search UI, capacity,
+    // member scopes, and knowledge of exact center and slot references.
+    return Results.Json(new { code = "CENTER_PUBLICATION_NOT_AUTHORIZED" },
+        statusCode: StatusCodes.Status403Forbidden);
 }).RequirePanelCapability(PanelCapability.MemberAppointmentsManage);
 
 member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments/{bookingRef:guid}/cancel", async (

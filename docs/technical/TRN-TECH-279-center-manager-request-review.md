@@ -32,3 +32,22 @@ and always displays manager access as unassigned. Unknown review results
 never trigger automatic retry. Browser Chromium regressions cover these
 flows, unauthenticated users, denial and invalid responses. The host
 OIDC browser session itself is still not provisioned; CI tokens are test-only.
+
+## Center-manager privilege escalation and patient publication hardening
+
+The center-managed grant delegation allowlist now excludes
+`CenterAccessGrantsManage` for BOTH grant and revoke; managers may not
+create or dismiss other center managers by using the staff-grant API.
+Existing manager grants remain visible to a legitimately scoped manager
+for read-only governance inspection; initial appointment/succession is
+still blocked pending an approved Admin-only authority contract.
+
+Member-facing direct slot browsing and POST booking are fail-closed with
+`403 CENTER_PUBLICATION_NOT_AUTHORIZED` for existing unverified centers,
+even if callers know exact center/slot references and hold member scopes.
+This prevents bypass of the empty public discovery catalog. Historic
+member appointment reads and cancellation remain available under exact
+member identity and schedule ownership checks, tested against
+TEST-ONLY historical records seeded by the internal store. Future
+publication requires independent qualified provider evidence and a
+versioned approval contract, not a UI toggle or Admin center creation.
