@@ -30,14 +30,10 @@ jobs:
         run: |
           npm run typecheck
           npm run build
-      - name: Assert no fake member adapters and no bundled synthetic authentication
+      - name: Verify member API clients are host-authenticated and no fake state exists
         run: |
-          test ! -e src/fixtures
-          test ! -e src/mocks
-          test ! -e src/auth-provider.ts
-          if grep -R -E -i 'localStorage\.setItem|sessionStorage\.setItem|/api/v1/|Bearer |fake(balance|login|token)' src; then
-            echo 'Forbidden real/member-state adapter found' >&2; exit 1
-          fi
+          PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/policy_checks -p 'test_member_web_api_boundary.py' -v
+          python3 ../../tools/policy_checks/check_member_web_api_boundary.py --source-root src
       - name: Install Chromium for browser-level tests
         run: npx playwright install --with-deps chromium
       - name: Run Playwright member web browser tests
