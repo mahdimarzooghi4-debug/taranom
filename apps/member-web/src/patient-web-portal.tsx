@@ -26,7 +26,7 @@ export function PatientWebPortal() {
     return () => window.removeEventListener('popstate', sync);
   }, []);
 
-  useEffect(() => { document.title = `ترنم | ${page.label} · پورتال نمونه`; }, [page]);
+  useEffect(() => { document.title = `ترنم | ${page.label}${page.key==='appointments'?'':' · پورتال نمونه'}`; }, [page]);
 
   function go(event: MouseEvent<HTMLAnchorElement>, href: string) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
@@ -42,7 +42,7 @@ export function PatientWebPortal() {
     <a className="patient-skip" href="#patient-portal-main">پرش به محتوای اصلی</a>
     <aside className="patient-sidebar" aria-label="پورتال بیمار">
       <div className="patient-sidebar-brand"><img src="/assets/taranom-logo.png" alt="ترنم · اکوسیستم سلامت" /></div>
-      <div className="patient-sidebar-account"><span className="patient-avatar">ن</span><span><strong>نیلوفر رضایی</strong><small>حساب نمونه · تهران</small></span><i aria-hidden="true">⌄</i></div>
+      <div className="patient-sidebar-account"><span className="patient-avatar">{page.key==='appointments'?'•':'ن'}</span><span><strong>{page.key==='appointments'?'حساب بیمار':'نیلوفر رضایی'}</strong><small>{page.key==='appointments'?'پروفایل هنوز متصل نشده':'حساب نمونه · تهران'}</small></span><i aria-hidden="true">⌄</i></div>
       <button className="patient-menu-toggle" type="button" aria-expanded={mobileMenu} onClick={() => setMobileMenu(!mobileMenu)}>{mobileMenu ? 'بستن فهرست' : 'منوی پورتال'} <span aria-hidden="true">☰</span></button>
       <nav className={mobileMenu ? 'patient-nav is-open' : 'patient-nav'} aria-label="بخش‌های پورتال">
         {['خدمات درمانی', 'حساب و همراهان'].map((group) => <div className="patient-nav-group" key={group}>
@@ -51,10 +51,10 @@ export function PatientWebPortal() {
         </div>)}
       </nav>
       <div className="patient-sidebar-help"><strong>پشتیبانی ترنم</strong><span>راهنمایی دربارهٔ عضویت و خدمات</span><a href="mailto:support@example.invalid">تماس با پشتیبانی</a></div>
-      <div className="patient-sidebar-footer">حساب و اطلاعات این محیط نمونه‌اند.</div>
+      <div className="patient-sidebar-footer">{page.key==='appointments'?'نوبت‌ها از حساب مجاز دریافت می‌شوند. سایر صفحات پیش‌نمایش‌اند.':'حساب و اطلاعات این محیط نمونه‌اند.'}</div>
     </aside>
     <div className="patient-workspace">
-      <header className="patient-topbar"><div className="patient-breadcrumb">ترنم <span>›</span> پورتال بیمار <span>›</span> {page.label}</div><div className="patient-topbar-actions"><button type="button" className="patient-notification" aria-label="اعلان‌ها · نمونه"><img src="/assets/header-bell-dome.svg" alt="" /><img src="/assets/header-bell-clapper.svg" alt="" /><img src="/assets/header-notification-dot.svg" alt="" /></button><span className="patient-user">نیلوفر رضایی</span></div></header>
+      <header className="patient-topbar"><div className="patient-breadcrumb">ترنم <span>›</span> پورتال بیمار <span>›</span> {page.label}</div><div className="patient-topbar-actions"><button type="button" className="patient-notification" aria-label="اعلان‌ها · نمونه"><img src="/assets/header-bell-dome.svg" alt="" /><img src="/assets/header-bell-clapper.svg" alt="" /><img src="/assets/header-notification-dot.svg" alt="" /></button><span className="patient-user">{page.key==='appointments'?'حساب بیمار':'نیلوفر رضایی'}</span></div></header>
       <main id="patient-portal-main" className="patient-main">
         {page.key === 'overview' ? <section className="patient-dashboard" aria-labelledby="patient-portal-title">
           <div className="patient-welcome"><span className="patient-welcome-badge">پورتال عضو · حساب نمونه</span><h1 id="patient-portal-title" tabIndex={-1}>سلام نیلوفر، خوش آمدی</h1><p>وضعیت خدمات و پیگیری‌های درمانی شما در یک نگاه</p><a href={`${base}/appointments`} onClick={(event) => go(event, `${base}/appointments`)}>رفتن به نوبت‌های من <span aria-hidden="true">←</span></a></div>

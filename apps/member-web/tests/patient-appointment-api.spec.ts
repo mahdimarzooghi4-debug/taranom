@@ -4,7 +4,7 @@ test('PATIENT-API: own appointments load and patient cancellation persists visib
  let cancelled=false;const methods:string[]=[];
  await page.route('**/api/v1/**',async route=>{const req=route.request(),url=new URL(req.url());methods.push(req.method()+' '+url.pathname);expect(req.headers().authorization).toBe('Bearer synthetic-ci-token');
   if(url.pathname==='/api/v1/me/appointments')return route.fulfill({json:{appointments:[{centerRef:'center-synthetic-1',scheduleRevision:3,bookingRef:'booking-synthetic-1',memberRef:'member-synthetic-1',slotRef:'slot-synthetic-1',startsAt:'2026-11-20T09:00:00Z',state:cancelled?'CancelledByMember':'Booked'}]}});
-  if(url.pathname.endsWith('/booking-synthetic-1/cancel')){cancelled=true;expect(req.method()).toBe('POST');return route.fulfill({status:200,json:{state:'CancelledByMember'}})}
+  if(url.pathname.endsWith('/booking-synthetic-1/cancel')){cancelled=true;expect(req.method()).toBe('POST');return route.fulfill({status:200,json:{outcome:'Applied',revision:4,appointment:{bookingRef:'booking-synthetic-1',memberRef:'member-synthetic-1',centerRef:'center-synthetic-1',state:2}}})}
   return route.fulfill({status:404});
  });
  await page.goto('/patient-app/appointments');

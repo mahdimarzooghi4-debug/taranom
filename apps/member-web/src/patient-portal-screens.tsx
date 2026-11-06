@@ -1,3 +1,4 @@
+import { PatientWebAppointments } from './patient-web-appointments';
 import type { MouseEvent } from 'react';
 
 export type PatientPortalScreenKey = 'appointments' | 'records' | 'prescriptions' | 'credit' | 'family' | 'referrals' | 'account';
@@ -6,20 +7,7 @@ type Navigate = (event: MouseEvent<HTMLAnchorElement>, href: string) => void;
 export function PatientPortalScreen({ pageKey, go }: { pageKey: PatientPortalScreenKey; go: Navigate }) {
   const goTo = (event: MouseEvent<HTMLAnchorElement>, href: string) => go(event, href);
 
-  if (pageKey === 'appointments') return (
-    <section className="portal-page" aria-labelledby="portal-page-title">
-      <header className="portal-page-heading"><div><h1 id="portal-page-title" tabIndex={-1}>نوبت‌های من</h1><p>درخواست‌ها و نوبت‌های ثبت‌شدهٔ خود را دنبال کنید.</p></div><button type="button" disabled>گرفتن نوبت جدید</button></header>
-      <section className="portal-search-card" aria-label="جست‌وجوی پزشک یا مرکز درمانی">
-        <strong>جست‌وجوی پزشک یا مرکز درمانی</strong><div className="portal-search-fields"><span><small>شهر</small><b>تهران</b></span><span><small>تخصص</small><b>متخصص داخلی</b></span><button type="button" disabled>جست‌وجو</button></div>
-      </section>
-      <div className="portal-page-subtitle"><h2>وضعیت نوبت‌ها</h2><span>نمونهٔ نمایشی</span></div>
-      <div className="appointment-stats"><article><small>نوبت‌های انجام‌شده</small><strong>۱۲</strong><span>در سوابق شما</span></article><article><small>در انتظار پاسخ</small><strong>۱</strong><span>درخواست ثبت‌شده</span></article><article><small>نوبت‌های آینده</small><strong>۱</strong><span>در انتظار مراجعه</span></article></div>
-      <section className="portal-list-section"><h2>نوبت‌های پیش رو</h2><article className="appointment-card"><div className="appointment-card-main"><span className="sample-status">تأیید شده · نمونه</span><h3>دکتر سارا رضایی</h3><p>متخصص داخلی</p><strong>۲۴ آبان ۱۴۰۵ · ساعت ۱۱:۰۰</strong><small>درمانگاه مهر ترنم · تهران</small></div><div className="appointment-card-actions"><a href="/patient-portal/appointments" onClick={(event) => goTo(event, '/patient-portal/appointments')}>جزئیات نوبت</a><button type="button" disabled aria-describedby="appointment-sample-note">لغو نوبت</button></div></article></section>
-      <section className="portal-list-section"><h2>در انتظار پاسخ مرکز</h2><article className="request-card"><span className="pending-status">در حال بررسی</span><div><strong>دکتر امیر کاظمی · متخصص قلب و عروق</strong><small>بیمارستان مهر ترنم · ۲۶ آبان · ساعت ۱۰:۳۰</small></div></article></section>
-      <section className="portal-list-section"><h2>سوابق نوبت</h2><div className="portal-table"><div><span>۲۹ مهر</span><strong>ویزیت انجام‌شده</strong><small>دکتر سارا رضایی</small><em>انجام‌شده</em></div><div><span>۲۵ مهر</span><strong>لغو نوبت توسط بیمار</strong><small>درمانگاه مهر ترنم</small><em>لغوشده</em></div></div></section>
-      <p className="portal-sample-note" id="appointment-sample-note">تمام نام‌ها، زمان‌ها و وضعیت‌ها نمونه‌اند. ثبت، تأیید یا لغو نوبت هنوز به سرویس واقعی نوبت‌دهی متصل نیست.</p>
-    </section>
-  );
+  if (pageKey === 'appointments') return <PatientWebAppointments/>;
 
   if (pageKey === 'records' || pageKey === 'prescriptions') return (
     <section className="portal-page" aria-labelledby="portal-page-title">

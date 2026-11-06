@@ -25,7 +25,11 @@ export async function getMyAppointments(signal?:AbortSignal){
    ['Booked','CancelledByMember'].includes(item.state))) throw new Error('پاسخ نوبت‌دهی معتبر نیست. دوباره تلاش کنید.');
  return response;
 }
-export const cancelMyAppointment=(item:MemberAppointment,requestId:string=crypto.randomUUID())=>api('/api/v1/member/members/'+encodeURIComponent(item.memberRef)+'/centers/'+encodeURIComponent(item.centerRef)+'/appointments/'+encodeURIComponent(item.bookingRef)+'/cancel',{method:'POST',body:JSON.stringify({requestId,expectedRevision:item.scheduleRevision})});
+export async function cancelMyAppointment(item:MemberAppointment,requestId:string=crypto.randomUUID()){
+ const result=await api<{outcome:string;revision:number;appointment:{bookingRef:string;memberRef:string;centerRef:string;state:2|'CancelledByMember'}}>('/api/v1/member/members/'+encodeURIComponent(item.memberRef)+'/centers/'+encodeURIComponent(item.centerRef)+'/appointments/'+encodeURIComponent(item.bookingRef)+'/cancel',{method:'POST',body:JSON.stringify({requestId,expectedRevision:item.scheduleRevision})});
+ if(!result||!['Applied','Replayed'].includes(result.outcome)||!Number.isSafeInteger(result.revision)||!result.appointment||result.appointment.bookingRef!==item.bookingRef||result.appointment.memberRef!==item.memberRef||result.appointment.centerRef!==item.centerRef||![2,'CancelledByMember'].includes(result.appointment.state))throw new Error('نتیجه لغو نوبت قابل تأیید نیست.');
+ return result;
+}
 
 export type OpenSlot={slotRef:string;centerRef:string;doctorRef:string;startsAt:string;endsAt:string;state:1|'Open'};
 export type MemberSchedule={centerRef:string;revision:number;slots:OpenSlot[]};
