@@ -8,7 +8,7 @@ export class AppointmentApiError extends Error {
  readonly status:number;
  constructor(status:number,message:string){super(message);this.status=status}
 }
-async function api<T>(path:string,init:RequestInit={}):Promise<T>{
+export async function api<T>(path:string,init:RequestInit={}):Promise<T>{
  const token=await window.taranomSession?.getAccessToken();
  init.signal?.throwIfAborted();
  if(!token)throw new Error('برای دیدن نوبت‌ها، ابتدا باید نشست ورود معتبر برقرار شود.');
@@ -49,4 +49,17 @@ export async function bookMemberAppointment(memberRef:string,centerRef:string,co
  const result=await api<{outcome:string;revision:number;appointment:{bookingRef:string;memberRef:string;centerRef:string;slotRef:string}}>(memberPath(memberRef,centerRef)+'/appointments',{method:'POST',body:JSON.stringify(command)});
  if(!result||!['Applied','Replayed'].includes(result.outcome)||!Number.isSafeInteger(result.revision)||result.revision<0||!result.appointment||typeof result.appointment.bookingRef!=='string'||!result.appointment.bookingRef||result.appointment.memberRef!==memberRef||result.appointment.centerRef!==centerRef||result.appointment.slotRef!==command.slotRef)throw new Error('نتیجه ثبت نوبت قابل تأیید نیست.');
  return result.appointment;
+}
+
+export type MemberProfile={revision:number;fullName:string;birthDate:string|null;city:string};
+export async function getMyProfile(signal?:AbortSignal){
+ const result=await api<{profile:MemberProfile}>('/api/v1/me/profile',{signal});
+ const p=result?.profile;
+ if(!p||!Number.isSafeInteger(p.revision)||p.revision<0||typeof p.fullName!=='string'||typeof p.city!=='string'||!(p.birthDate===null||typeof p.birthDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(p.birthDate)&&Number.isFinite(Date.parse(p.birthDate))))throw new Error('پاسخ مشخصات فردی معتبر نیست.');
+ return p;
+}
+export async function saveMyProfile(profile:MemberProfile,requestId:string){
+ const result=await api<{outcome:string;revision:number}>('/api/v1/me/profile',{method:'PUT',body:JSON.stringify({requestId,expectedRevision:profile.revision,fullName:profile.fullName,birthDate:profile.birthDate,city:profile.city})});
+ if(!result||!['Applied','Replayed'].includes(result.outcome)||!Number.isSafeInteger(result.revision)||result.revision<=profile.revision)throw new Error('نتیجه ذخیره مشخصات قابل تأیید نیست.');
+ return result;
 }

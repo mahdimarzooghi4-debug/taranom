@@ -7,12 +7,12 @@ const date=(value:string)=>new Intl.DateTimeFormat('fa-IR',{dateStyle:'medium',t
 const dayKey=(value:string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tehran',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
 const dayLabel=(value:string)=>new Intl.DateTimeFormat('fa-IR',{timeZone:'Asia/Tehran',weekday:'short',month:'short',day:'numeric'}).format(new Date(value));
 const time=(value:string)=>new Intl.DateTimeFormat('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit'}).format(new Date(value));
-export function AppointmentPage({title,subtitle,children}:{title:string;subtitle:string;children:ReactNode}){
+export function AppointmentPage({title,subtitle,children,activeSection='appointments'}:{title:string;subtitle:string;children:ReactNode;activeSection?:'appointments'|'account'}){
  return <div className="appointments-surface" dir="rtl"><div className="appointments-phone"><div className="appointments-body">
  <header className="appointments-header"><img className="appointments-logo" src="/assets/appointments/logo.png" alt="ترنم · اکوسیستم سلامت"/>
  <a className="appointments-bell" href={base+'/notifications'} aria-label="اعلان‌ها"><img src="/assets/appointments/bell.svg" width="22" height="22" alt=""/></a><h1>{title}</h1><p>{subtitle}</p></header>
  <main className="appointments-main booking-main">{children}</main>
- <nav className="appointments-nav" aria-label="ناوبری اصلی">{([['home','خانه',''],['record','پرونده','/records'],['calendar','نوبت‌ها','/appointments'],['account','حساب من','/account']] as const).map(([icon,label,path])=><a href={base+path} key={icon} aria-current={icon==='calendar'?'page':undefined}><img src={'/assets/appointments/'+icon+'.svg'} width="24" height="24" alt=""/>{label}</a>)}</nav>
+ <nav className="appointments-nav" aria-label="ناوبری اصلی">{([['home','خانه',''],['record','پرونده','/records'],['calendar','نوبت‌ها','/appointments'],['account','حساب من','/account']] as const).map(([icon,label,path])=><a href={base+path} key={icon} aria-current={(activeSection==='account'?icon==='account':icon==='calendar')?'page':undefined}><img src={'/assets/appointments/'+(activeSection==='account'&&icon==='account'?'account-active':activeSection==='account'&&icon==='calendar'?'calendar-inactive':icon)+'.svg'} width="24" height="24" alt=""/>{label}</a>)}</nav>
  </div></div></div>;
 }
 type Load={kind:'loading'}|{kind:'error';message:string}|{kind:'ready';data:MemberSchedule};

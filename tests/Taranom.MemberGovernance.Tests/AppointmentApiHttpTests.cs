@@ -17,6 +17,7 @@ using Xunit;
 
 namespace Taranom.MemberGovernance.Tests;
 
+[Collection("AppointmentApiHttp")]
 public sealed class AppointmentApiHttpTests
 {
     [Fact]

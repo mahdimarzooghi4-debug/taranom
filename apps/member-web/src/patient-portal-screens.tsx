@@ -1,3 +1,4 @@
+import { PatientProfile } from './patient-profile';
 import { PatientWebAppointments } from './patient-web-appointments';
 import type { MouseEvent } from 'react';
 
@@ -48,13 +49,7 @@ export function PatientPortalScreen({ pageKey, go }: { pageKey: PatientPortalScr
     </section>
   );
 
-  if (pageKey === 'account') return (
-    <section className="portal-page" aria-labelledby="portal-page-title">
-      <header className="portal-page-heading"><div><h1 id="portal-page-title" tabIndex={-1}>حساب کاربری</h1><p>مشخصات حساب و وضعیت عضویت را ببینید.</p></div><span className="portal-date-chip">اطلاعات نمونه</span></header>
-      <div className="account-grid"><section className="account-card"><h2>مشخصات حساب</h2><div className="account-fields"><div><small>نام و نام خانوادگی</small><strong>نیلوفر رضایی</strong></div><div><small>تاریخ تولد</small><strong>۱۵ خرداد ۱۳۷۲</strong></div><div><small>شماره همراه</small><strong dir="ltr">۰۹۱۲ *** ۶۷۸۹</strong></div><div><small>کد ملی</small><strong dir="ltr">۰۳۶ ***** ۱۲</strong></div><div><small>شهر</small><strong>تهران</strong></div><div><small>جنسیت</small><strong>زن</strong></div></div><button type="button" disabled>ویرایش مشخصات</button></section><section className="account-membership"><h2>عضویت ترنم</h2><span>عضویت نمونه · فعال</span><small>مبنای محاسبهٔ حق عضویت</small><strong>سن عضو</strong><hr /><small>پرداخت‌کنندهٔ نمونه</small><strong>خود عضو</strong><hr /><p>اعضای زیرمجموعه را می‌توانید مدیریت کنید.</p><a href="/patient-portal/family" onClick={(event) => goTo(event, '/patient-portal/family')}>مدیریت اعضا</a></section></div>
-      <p className="portal-info-note">حق عضویت براساس سن محاسبه می‌شود. این صفحه با داده‌های ساختگی نمایش داده می‌شود و هیچ حساب واقعی یا وضعیت عضویتی را تأیید نمی‌کند.</p>
-    </section>
-  );
+  if (pageKey === 'account') return <PatientProfile web/>;
 
   return null;
 }

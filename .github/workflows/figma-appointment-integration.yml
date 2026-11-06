@@ -7,6 +7,7 @@ on:
       - 'src/Taranom.Appointments.Api/**'
       - 'src/Taranom.AppointmentScheduling*/**'
       - 'tests/Taranom.MemberGovernance.Tests/Appointment*'
+      - 'tests/Taranom.MemberGovernance.Tests/MemberProfile*'
       - '.github/workflows/figma-appointment-integration.yml'
   workflow_dispatch:
 permissions:
@@ -28,7 +29,7 @@ jobs:
       - run: npm run check --prefix apps/member-web
       - run: npm run check --prefix apps/center-web
       - run: npx --prefix apps/member-web playwright install --with-deps chromium
-      - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts figma-booking-flow.spec.ts patient-web-appointment-api.spec.ts
+      - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts figma-booking-flow.spec.ts patient-web-appointment-api.spec.ts patient-profile-api.spec.ts
       - run: npm run test:e2e --prefix apps/center-web -- figma-appointment-api.spec.ts
   backend-postgres-contracts:
     runs-on: ubuntu-latest
@@ -63,3 +64,4 @@ jobs:
           -class Taranom.MemberGovernance.Tests.AppointmentApiHttpTests
           -class Taranom.MemberGovernance.Tests.AppointmentPostgresStoreTests
           -class Taranom.MemberGovernance.Tests.AppointmentSchedulingTests
+          -class Taranom.MemberGovernance.Tests.MemberProfileApiHttpTests

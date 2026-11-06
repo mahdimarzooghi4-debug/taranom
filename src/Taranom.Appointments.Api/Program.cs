@@ -332,6 +332,8 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments/{bookingRe
     return AppointmentResponse(change.Outcome, change);
 }).RequirePanelCapability(PanelCapability.MemberAppointmentsManage);
 
+app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
+
 app.Run();
 
 static AppointmentAuditActor? ResolveAppointmentAuditActor(ClaimsPrincipal principal)
@@ -410,6 +412,24 @@ public sealed class AppointmentDatabaseBootstrap(
         await appointments.InitializeAsync(cancellationToken);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
+            CREATE TABLE IF NOT EXISTS taranom_member_profile (
+                issuer text NOT NULL,
+                subject text NOT NULL,
+                revision bigint NOT NULL CHECK (revision > 0),
+                full_name text NOT NULL,
+                birth_date date NULL,
+                city text NOT NULL,
+                PRIMARY KEY (issuer,subject)
+            );
+            CREATE TABLE IF NOT EXISTS taranom_member_profile_audit (
+                issuer text NOT NULL,
+                subject text NOT NULL,
+                request_id uuid NOT NULL,
+                fingerprint text NOT NULL,
+                result_revision bigint NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (issuer,subject,request_id)
+            );
             CREATE TABLE IF NOT EXISTS taranom_panel_access_grant (
                 issuer text NOT NULL,
                 subject text NOT NULL,
