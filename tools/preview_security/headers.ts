@@ -14,7 +14,7 @@ export const disconnectedPreviewSecurityHeaders: Readonly<Record<string, string>
       "style-src 'self'",
       "img-src 'self' data:",
       "font-src 'self'",
-      "connect-src 'none'",
+      "connect-src 'self'",
       "worker-src 'none'",
       "media-src 'none'",
     ].join('; '),

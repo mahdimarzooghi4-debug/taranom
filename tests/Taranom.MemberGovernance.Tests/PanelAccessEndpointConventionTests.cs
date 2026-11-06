@@ -25,7 +25,7 @@ public sealed class PanelAccessEndpointConventionTests
     public async Task HttpEndpointsEnforceTheExactCapabilityFromTheCentralCatalog()
     {
         var definitions = PanelAccessPolicyNames.All;
-        Assert.Equal(8, definitions.Count);
+        Assert.Equal(10, definitions.Count);
 
         foreach (var authenticatedCapability in definitions.Select(item => item.Capability))
         {

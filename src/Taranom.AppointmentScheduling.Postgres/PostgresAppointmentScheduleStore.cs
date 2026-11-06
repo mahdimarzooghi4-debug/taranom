@@ -24,6 +24,12 @@ public sealed class PostgresAppointmentScheduleStore(NpgsqlDataSource dataSource
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // IF NOT EXISTS alone does not serialize PostgreSQL catalog creation on a cold database.
+        await using (var schemaLock = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(hashtextextended('taranom.appointment.schema.v1',0))",
+            connection, transaction))
+            await schemaLock.ExecuteNonQueryAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
             CREATE TABLE IF NOT EXISTS taranom_appointment_schedule (
                 center_ref text PRIMARY KEY,
@@ -47,8 +53,9 @@ public sealed class PostgresAppointmentScheduleStore(NpgsqlDataSource dataSource
             );
             CREATE INDEX IF NOT EXISTS ix_taranom_appointment_audit_center_time
                 ON taranom_appointment_audit_event (center_ref, occurred_at DESC);
-            """, connection);
+            """, connection, transaction);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<AppointmentScheduleSnapshot?> ReadAsync(

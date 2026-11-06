@@ -114,6 +114,7 @@ public sealed class PanelAccessPolicyTests
     [InlineData(6, "SupportedCaseFinanceRead")]
     [InlineData(7, "MemberAppointmentsManage")]
     [InlineData(8, "CenterAccessGrantsManage")]
+    [InlineData(9, "SupportRequestsManage")]
     public void CentralCapabilityTokensRemainStable(int value, string expected)
     {
         Assert.Equal(expected, PanelAccessPolicy.GetCapabilityToken((PanelCapability)value));

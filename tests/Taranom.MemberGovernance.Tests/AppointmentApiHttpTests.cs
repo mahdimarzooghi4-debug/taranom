@@ -13,10 +13,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Taranom.MemberGovernance;
+using Taranom.AppointmentScheduling;
+using Taranom.AppointmentScheduling.Postgres;
 using Xunit;
 
 namespace Taranom.MemberGovernance.Tests;
 
+[Collection("AppointmentApiHttp")]
 public sealed class AppointmentApiHttpTests
 {
     [Fact]
@@ -84,6 +87,21 @@ public sealed class AppointmentApiHttpTests
                 capability = "MemberAppointmentsManage", reason = "Not a center capability" },
             cancellationToken);
         Assert.Equal(HttpStatusCode.BadRequest, memberCapability.StatusCode);
+        // A center manager must NOT create another access-grant manager,
+        // even when already holding CenterAccessGrantsManage themselves.
+        var attemptedManagerDelegation = await manager.PostAsJsonAsync(accessGrants,
+            new { requestId = Guid.NewGuid(), targetSubject = staffSubject,
+                capability = "CenterAccessGrantsManage",
+                reason = "Bypass explicit Admin appointment" }, cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, attemptedManagerDelegation.StatusCode);
+        var attemptedManagerRevocation = await manager.PostAsJsonAsync(
+            accessGrants + "/revoke",
+            new { requestId = Guid.NewGuid(), targetSubject = staffSubject,
+                capability = "CenterAccessGrantsManage",
+                reason = "Bypass Admin-managed manager lifecycle" }, cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, attemptedManagerRevocation.StatusCode);
+        using var cannotManage = await staff.GetAsync(accessGrants, cancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, cannotManage.StatusCode);
 
         var revoked = await manager.PostAsJsonAsync(accessGrants + "/revoke",
             new { requestId = Guid.NewGuid(), targetSubject = staffSubject,
@@ -131,6 +149,107 @@ public sealed class AppointmentApiHttpTests
             "CenterAppointmentsManage|center-scope-a",
             "MemberAppointmentsManage|member-scope-a"
         }, scopes);
+    }
+
+
+    [Fact]
+    public async Task MemberDiscoveryNeverPublishesUnreviewedAdminCenterEvenWithLiveCapacity()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        var centerRef = "center-discovery-" + Guid.NewGuid().ToString("N");
+        var centerSubject = "center-discovery-staff-" + Guid.NewGuid().ToString("N");
+        var memberSubject = "center-discovery-member-" + Guid.NewGuid().ToString("N");
+        var staleSubject = "center-discovery-stale-" + Guid.NewGuid().ToString("N");
+        const string endpoint = "/api/v1/me/available-appointment-centers";
+
+        using var anonymous = setup.Factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(endpoint, ct)).StatusCode);
+        using var member = setup.AuthenticatedIdentityClient(memberSubject);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync(endpoint, ct)).StatusCode);
+        await setup.GrantAsync(staleSubject, "MemberAppointmentsManage",
+            "stale-discovery-member", ct, currentEvidence: false);
+        using var stale = setup.AuthenticatedIdentityClient(staleSubject);
+        Assert.Equal(HttpStatusCode.Forbidden, (await stale.GetAsync(endpoint, ct)).StatusCode);
+
+        var memberRef = "discovery-member-" + Guid.NewGuid().ToString("N");
+        await setup.GrantAsync(memberSubject, "MemberAppointmentsManage", memberRef, ct);
+        await setup.GrantAsync(centerSubject, "CenterAppointmentsManage", centerRef, ct);
+        using var staff = setup.AuthenticatedIdentityClient(centerSubject);
+        var startsAt = DateTimeOffset.UtcNow.AddDays(4);
+        var define = await staff.PostAsJsonAsync($"/api/v1/centers/{centerRef}/appointment-slots",
+            new { requestId = Guid.NewGuid(), expectedRevision = 0,
+                slotRef = "discovery-unreviewed", doctorRef = "opaque-unverified",
+                startsAt, endsAt = startsAt.AddMinutes(30) }, ct);
+        Assert.Equal(HttpStatusCode.OK, define.StatusCode);
+
+        using var available = await member.GetAsync(endpoint, ct);
+        Assert.Equal(HttpStatusCode.OK, available.StatusCode);
+        Assert.Equal("no-store", available.Headers.CacheControl?.ToString());
+        using var payload = await available.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.True(payload!.RootElement.GetProperty("publicationGateRequired").GetBoolean());
+        Assert.Empty(payload.RootElement.GetProperty("centers").EnumerateArray());
+
+        // The private schedule still exists and has not been silently deleted.
+        var privateSchedule = await staff.GetAsync(
+            $"/api/v1/centers/{centerRef}/appointment-slots", ct);
+        using var schedule = await privateSchedule.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Single(schedule!.RootElement.GetProperty("slots").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task ForgedCenterGrantWithoutCanonicalCenterCannotEnterCenterOperations()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        var fakeCenter = "center-never-admin-defined-" + Guid.NewGuid().ToString("N");
+        var subject = "stale-grant-" + Guid.NewGuid().ToString("N");
+        var memberSubject = "member-for-phantom-" + Guid.NewGuid().ToString("N");
+        await using (var db = NpgsqlDataSource.Create(
+            Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!))
+        await using (var connection = await db.OpenConnectionAsync(ct))
+        await using (var inject = new NpgsqlCommand("""
+            INSERT INTO taranom_panel_access_grant
+                (issuer,subject,capability,scope_ref,grant_state,
+                 session_current,subject_mapping_current,permission_version_current,
+                 grant_not_revoked,audit_ready)
+            VALUES (@issuer,@subject,'CenterAccessGrantsManage',@center,'active',
+                    true,true,true,true,true)
+            """, connection))
+        {
+            inject.Parameters.AddWithValue("issuer",
+                "https://appointments.test.invalid/realms/taranom");
+            inject.Parameters.AddWithValue("subject", subject);
+            inject.Parameters.AddWithValue("center", fakeCenter);
+            Assert.Equal(1, await inject.ExecuteNonQueryAsync(ct));
+        }
+
+        using var fakeManager = setup.AuthenticatedIdentityClient(subject);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await fakeManager.GetAsync($"/api/v1/centers/{fakeCenter}/access-grants", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await fakeManager.PostAsJsonAsync($"/api/v1/centers/{fakeCenter}/access-grants",
+                new { requestId=Guid.NewGuid(),targetSubject="another-subject",
+                      capability="CenterRosterManage",reason="Disallowed phantom center" }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await fakeManager.GetAsync($"/api/v1/centers/{fakeCenter}/directory-draft", ct)).StatusCode);
+        using var scopes = await fakeManager.GetAsync("/api/v1/me/center-directory-draft-scopes", ct);
+        using var scopesDoc = await scopes.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Empty(scopesDoc!.RootElement.GetProperty("scopes").EnumerateArray());
+
+        var memberRef = "member-phantom-" + Guid.NewGuid().ToString("N");
+        await setup.GrantAsync(memberSubject, "MemberAppointmentsManage", memberRef, ct);
+        using var member = setup.AuthenticatedIdentityClient(memberSubject);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await member.GetAsync(
+                $"/api/v1/member/members/{memberRef}/centers/{fakeCenter}/appointment-slots", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await member.PostAsJsonAsync(
+                $"/api/v1/member/members/{memberRef}/centers/{fakeCenter}/appointments",
+                new { requestId=Guid.NewGuid(),expectedRevision=0,slotRef="phantom" }, ct)).StatusCode);
+        using var appointmentScope = await fakeManager.GetAsync("/api/v1/me/appointment-scopes", ct);
+        using var grants = await appointmentScope.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Empty(grants!.RootElement.GetProperty("appointmentScopes").EnumerateArray());
     }
 
     [Fact]
@@ -190,7 +309,7 @@ public sealed class AppointmentApiHttpTests
     }
 
     [Fact]
-    public async Task MemberCanBookAndCancelOnlyWithinItsGrantedMemberScope()
+    public async Task UnpublishedMemberBookingIsBlockedButExistingAppointmentCanBeReadAndCancelled()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var setup = new AppointmentApiFixture(cancellationToken);
@@ -226,21 +345,33 @@ public sealed class AppointmentApiHttpTests
 
         var path = $"/api/v1/member/members/{memberRef}/centers/{centerRef}";
         var slots = await memberClient.GetAsync(path + "/appointment-slots", cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, slots.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, slots.StatusCode);
+        using (var unavailable = await slots.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken))
+            Assert.Equal("CENTER_PUBLICATION_NOT_AUTHORIZED",
+                unavailable!.RootElement.GetProperty("code").GetString());
         var bookingRequestId = Guid.NewGuid();
         var bookPayload = new { requestId = bookingRequestId, expectedRevision = 1, slotRef = "member-slot-1" };
         var book = await memberClient.PostAsJsonAsync(path + "/appointments",
             bookPayload, cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, book.StatusCode);
-        using var bookingJson = await book.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
-        var bookingRef = bookingJson!.RootElement.GetProperty("appointment")
-            .GetProperty("bookingRef").GetGuid();
-
+        Assert.Equal(HttpStatusCode.Forbidden, book.StatusCode);
+        using (var denial = await book.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken))
+            Assert.Equal("CENTER_PUBLICATION_NOT_AUTHORIZED",
+                denial!.RootElement.GetProperty("code").GetString());
         var replayedBooking = await memberClient.PostAsJsonAsync(
             path + "/appointments", bookPayload, cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, replayedBooking.StatusCode);
-        using var replayJson = await replayedBooking.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken);
-        Assert.Equal("Replayed", replayJson!.RootElement.GetProperty("outcome").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, replayedBooking.StatusCode);
+
+        // TEST-ONLY historical booking fixture. It bypasses the public
+        // route solely to preserve coverage of existing-appointment reads
+        // and patient-owned cancellation under an unapproved center.
+        var store = setup.Factory.Services.GetRequiredService<PostgresAppointmentScheduleStore>();
+        var historical = await store.ApplyAsync(centerRef,
+            new AppointmentAuditActor(
+                "https://appointments.test.invalid/realms/taranom", memberSubject),
+            snapshot => snapshot.Book(bookingRequestId, snapshot.Revision,
+                memberRef, "member-slot-1"), cancellationToken);
+        Assert.Equal(AppointmentCommandOutcome.Applied, historical.Outcome);
+        var bookingRef = historical.Booking!.BookingRef;
 
         using var memberAppointmentsResponse = await memberClient.GetAsync(
             "/api/v1/me/appointments", cancellationToken);
@@ -342,6 +473,24 @@ internal sealed class AppointmentApiFixture : IAsyncDisposable
         string grantState = "active")
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        // TEST-ONLY fixture setup: these synthetic seeded centers are not
+        // runtime API creations and never establish medical qualification.
+        // This keeps earlier appointment contract tests exercising their
+        // original behavior while production API guards require canonical IDs.
+        if (capability.StartsWith("Center", StringComparison.Ordinal) &&
+            scopeRef.StartsWith("center", StringComparison.Ordinal))
+        {
+            await using var seed = new NpgsqlCommand("""
+                INSERT INTO taranom_canonical_center
+                  (center_ref,display_name,city,defined_by_issuer,defined_by_subject)
+                VALUES (@center,'Synthetic test center','Synthetic test city',
+                        @issuer,'synthetic-fixture-only')
+                ON CONFLICT (center_ref) DO NOTHING
+                """, connection);
+            seed.Parameters.AddWithValue("center", scopeRef);
+            seed.Parameters.AddWithValue("issuer", Issuer);
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
         await using var command = new NpgsqlCommand("""
             INSERT INTO taranom_panel_access_grant
                 (issuer, subject, capability, scope_ref, grant_state,

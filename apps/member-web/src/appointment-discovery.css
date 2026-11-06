@@ -1,0 +1,8 @@
+.booking-center-search{display:block;font-size:12px;margin:0 0 12px;color:#05294f}
+.booking-center-search input{display:block;box-sizing:border-box;width:100%;font:inherit;border:1px solid #b7cadb;border-radius:12px;padding:12px;margin-top:8px;background:white}
+.booking-center-footnote{font-size:11px;color:#66788f;margin:0 0 14px;line-height:1.8}
+.booking-centers{display:flex;flex-direction:column;gap:12px}
+.booking-center-card{margin:0;min-height:0}
+.booking-center-card h2{overflow-wrap:anywhere}
+.booking-center-card p{line-height:1.8}
+.booking-center-link{display:block;text-decoration:none;text-align:center;padding:11px;border-radius:12px;margin-top:12px;font-size:13px}

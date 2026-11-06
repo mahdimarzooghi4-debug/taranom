@@ -8,6 +8,7 @@ internal enum CenterAccessGrantOutcome
     Replayed,
     Conflict,
     NotFound,
+    Forbidden,
     Invalid
 }
 
@@ -18,13 +19,22 @@ internal sealed record CenterAccessGrantRecord(
 
 internal sealed class CenterAccessGrantService(NpgsqlDataSource dataSource)
 {
+    // A center manager may delegate operational tasks, but CANNOT
+    // appoint or revoke another manager. An initial manager and any
+    // succession must pass separate accountable Admin governance.
     private static readonly HashSet<string> DelegableCapabilities = new(StringComparer.Ordinal)
     {
-        "CenterAccessGrantsManage",
         "CenterRosterManage",
         "CenterAppointmentsManage",
         "CenterRevenueRead"
     };
+    private static readonly string[] VisibleCapabilities =
+    [
+        "CenterAccessGrantsManage",
+        "CenterRosterManage",
+        "CenterAppointmentsManage",
+        "CenterRevenueRead"
+    ];
 
     internal async Task<IReadOnlyList<CenterAccessGrantRecord>> ListAsync(
         string issuer,
@@ -42,7 +52,7 @@ internal sealed class CenterAccessGrantService(NpgsqlDataSource dataSource)
             """, connection);
         command.Parameters.AddWithValue("issuer", issuer);
         command.Parameters.AddWithValue("center_ref", centerRef);
-        command.Parameters.AddWithValue("capabilities", DelegableCapabilities.ToArray());
+        command.Parameters.AddWithValue("capabilities", VisibleCapabilities);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var results = new List<CenterAccessGrantRecord>();
         while (await reader.ReadAsync(cancellationToken))
@@ -78,6 +88,38 @@ internal sealed class CenterAccessGrantService(NpgsqlDataSource dataSource)
             lockCommand.Parameters.AddWithValue("request_key",
                 $"{actorIssuer}\n{actorSubject}\n{mutation.RequestId:D}");
             await lockCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // A center-level grant must never be issued against an arbitrary
+        // opaque string. Require the Admin-defined center row and hold it
+        // through this transaction before replay or any grant mutation.
+        await using (var canonical = new NpgsqlCommand("""
+            SELECT 1 FROM taranom_canonical_center
+            WHERE center_ref=@center FOR SHARE
+            """, connection, transaction))
+        {
+            canonical.Parameters.AddWithValue("center", centerRef);
+            if (await canonical.ExecuteScalarAsync(cancellationToken) is null)
+                return CenterAccessGrantOutcome.NotFound;
+        }
+
+        // The endpoint's authorization may be older than a concurrent grant
+        // revocation. Lock the current actor grant before replay or mutation
+        // so the revocation and grant write have a deterministic ordering.
+        await using (var actorGrant = new NpgsqlCommand("""
+            SELECT 1 FROM taranom_panel_access_grant
+            WHERE issuer=@issuer AND subject=@subject AND
+              capability='CenterAccessGrantsManage' AND scope_ref=@center AND
+              grant_state='active' AND subject_mapping_current AND
+              permission_version_current AND grant_not_revoked AND audit_ready
+            FOR SHARE
+            """, connection, transaction))
+        {
+            actorGrant.Parameters.AddWithValue("issuer", actorIssuer);
+            actorGrant.Parameters.AddWithValue("subject", actorSubject);
+            actorGrant.Parameters.AddWithValue("center", centerRef);
+            if (await actorGrant.ExecuteScalarAsync(cancellationToken) is null)
+                return CenterAccessGrantOutcome.Forbidden;
         }
 
         string[]? existingEvent = null;
