@@ -392,6 +392,7 @@ app.MapCenterDirectoryDraftEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
 app.MapSupportOperationsEndpoints();
+app.MapMemberNotificationEndpoints(IdentityAppointmentScopesPolicy);
 app.MapAdminCenterRegistryEndpoints();
 app.MapCenterManagerRequestEndpoints(IdentityAppointmentScopesPolicy);
 app.MapCenterManagerCaseWorkspaceEndpoints();
@@ -499,6 +500,18 @@ public sealed class AppointmentDatabaseBootstrap(
             ALTER TABLE taranom_member_support_request ADD CONSTRAINT taranom_member_support_request_state_check
                 CHECK ((state='Registered' AND revision=0 AND reply IS NULL AND replied_at IS NULL)
                     OR (state='Answered' AND revision=1 AND reply IS NOT NULL AND replied_at IS NOT NULL));
+            CREATE TABLE IF NOT EXISTS taranom_member_support_notification (
+                sequence_no bigserial PRIMARY KEY,
+                request_ref uuid NOT NULL UNIQUE REFERENCES taranom_member_support_request(request_ref),
+                created_at timestamptz NOT NULL,
+                read_at timestamptz NULL
+            );
+            INSERT INTO taranom_member_support_notification(request_ref,created_at)
+                SELECT s.request_ref,s.replied_at FROM taranom_member_support_request s
+                WHERE s.state='Answered' AND NOT EXISTS (
+                    SELECT 1 FROM taranom_member_support_notification n WHERE n.request_ref=s.request_ref)
+                ORDER BY s.replied_at,s.request_ref
+                ON CONFLICT (request_ref) DO NOTHING;
             CREATE TABLE IF NOT EXISTS taranom_support_reply_receipt (
                 issuer text NOT NULL,
                 subject text NOT NULL,

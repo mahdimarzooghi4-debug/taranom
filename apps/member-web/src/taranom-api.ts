@@ -96,3 +96,17 @@ export async function getAvailableAppointmentCenters(signal?:AbortSignal):Promis
   throw new Error('فهرست مراکز بدون مجوز انتشار قابل استفاده نیست.');
  return response.centers;
 }
+
+export type MemberNotification={notificationRef:string;sourceRequestId:string;kind:'SupportAnswered';createdAt:string;readAt:string|null};
+export type NotificationPage={notifications:MemberNotification[];unreadCount:number;nextBefore:string|null};
+const notificationId=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
+const validNotification=(n:MemberNotification)=>n&&notificationId(n.notificationRef)&&notificationId(n.sourceRequestId)&&n.kind==='SupportAnswered'&&typeof n.createdAt==='string'&&Number.isFinite(Date.parse(n.createdAt))&&(n.readAt===null||typeof n.readAt==='string'&&Number.isFinite(Date.parse(n.readAt)));
+export async function getMyNotifications(options:{before?:string;notificationRef?:string}={},signal?:AbortSignal):Promise<NotificationPage>{
+ const query=new URLSearchParams(options),result=await api<NotificationPage>('/api/v1/me/notifications'+(query.size?'?'+query:''),{signal});
+ if(!result||!Array.isArray(result.notifications)||!result.notifications.every(validNotification)||new Set(result.notifications.map(n=>n.notificationRef)).size!==result.notifications.length||!Number.isSafeInteger(result.unreadCount)||result.unreadCount<0||!(result.nextBefore===null||typeof result.nextBefore==='string'&&/^[1-9]\d*$/.test(result.nextBefore)))throw new Error('پاسخ اعلان‌ها معتبر نیست.');
+ return result;
+}
+export async function markMyNotificationRead(notificationRef:string){
+ const result=await api<{notificationRef:string;readAt:string}>('/api/v1/me/notifications/'+encodeURIComponent(notificationRef)+'/read',{method:'POST'});
+ if(!result||result.notificationRef!==notificationRef||typeof result.readAt!=='string'||!Number.isFinite(Date.parse(result.readAt)))throw new Error('خواندن اعلان هنوز قابل تأیید نیست.');return result;
+}

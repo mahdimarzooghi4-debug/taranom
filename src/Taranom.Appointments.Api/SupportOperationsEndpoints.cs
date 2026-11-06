@@ -107,6 +107,17 @@ internal static class SupportOperationsEndpoints
                 if (!await reader.ReadAsync(ct)) throw new InvalidOperationException("Support update missing.");
                 ticket = Read(reader);
             }
+            await using (var notification = new NpgsqlCommand("""
+                INSERT INTO taranom_member_support_notification(request_ref,created_at)
+                SELECT request_ref,replied_at FROM taranom_member_support_request
+                WHERE request_ref=@ref AND issuer=@issuer AND state='Answered'
+                ON CONFLICT (request_ref) DO NOTHING
+                """, connection, transaction))
+            {
+                notification.Parameters.AddWithValue("ref", requestRef);
+                notification.Parameters.AddWithValue("issuer", issuer);
+                await notification.ExecuteNonQueryAsync(ct);
+            }
             await using (var audit = new NpgsqlCommand("""
                 INSERT INTO taranom_support_reply_receipt(issuer,subject,request_id,request_ref,fingerprint)
                 VALUES (@issuer,@subject,@id,@ref,@fingerprint)

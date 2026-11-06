@@ -29,7 +29,7 @@ export function PatientAccount(){
   <div className="account-settings">
    <a href="/patient-app/personal-info"><span>اطلاعات فردی</span><span aria-hidden="true">‹</span></a>
    <button disabled title="مدیریت رضایت‌ها هنوز به بک‌اند متصل نشده است."><span>رضایت‌ها و دسترسی‌ها</span><small>در انتظار اتصال</small></button>
-   <button disabled title="تنظیمات اعلان‌ها و حریم خصوصی هنوز به بک‌اند متصل نشده است."><span>اعلان‌ها و حریم خصوصی</span><small>در انتظار اتصال</small></button>
+   <a href="/patient-app/notifications"><span>اعلان‌ها</span><span aria-hidden="true">‹</span></a>
    <a href="/patient-app/support"><span>پشتیبانی</span><span aria-hidden="true">‹</span></a>
    <button className="account-signout" disabled title="خروج امن با اتصال نشست ورود فعال می‌شود."><span>خروج از حساب</span><small>نیازمند اتصال ورود</small></button>
   </div>

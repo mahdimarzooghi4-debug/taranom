@@ -8,15 +8,17 @@ export function PatientSupport(){
  const [topic,setTopic]=useState<SupportTopic|''>(''),[message,setMessage]=useState('');
  const [state,setState]=useState<'idle'|'saving'|'uncertain'|'confirmed'>('idle');
  const [error,setError]=useState(''),[confirmed,setConfirmed]=useState<SupportRequest|null>(null);
- const [historyOpen,setHistoryOpen]=useState(false),[history,setHistory]=useState<SupportPage|null>(null),[historyError,setHistoryError]=useState(''),[loading,setLoading]=useState(false),[cursor,setCursor]=useState<string|undefined>(),[refresh,setRefresh]=useState(0);
+ const requestedId=new URLSearchParams(window.location.search).get('requestId');
+ const exactRequest=requestedId&&/^[a-f0-9-]{36}$/i.test(requestedId)?requestedId:undefined;
+ const [historyOpen,setHistoryOpen]=useState(Boolean(exactRequest)),[history,setHistory]=useState<SupportPage|null>(null),[historyError,setHistoryError]=useState(''),[loading,setLoading]=useState(false),[cursor,setCursor]=useState<string|undefined>(),[refresh,setRefresh]=useState(0);
  const pending=useRef<SupportCommand|null>(null),busy=useRef(false),alive=useRef(true);
  useEffect(()=>{alive.current=true;document.title='ترنم | پشتیبانی';return()=>{alive.current=false}},[]);
  useEffect(()=>{
   if(!historyOpen)return;
   const controller=new AbortController();setHistory(null);setLoading(true);setHistoryError('');
-  getMySupportRequests(cursor?{before:cursor}:{},controller.signal).then(result=>{if(!controller.signal.aborted)setHistory(result)}).catch((e:unknown)=>{if(!controller.signal.aborted)setHistoryError(e instanceof Error?e.message:'دریافت درخواست‌ها ناموفق بود.')}).finally(()=>{if(!controller.signal.aborted)setLoading(false)});
+  getMySupportRequests({...cursor?{before:cursor}:{},...exactRequest?{requestId:exactRequest}:{}},controller.signal).then(result=>{if(!controller.signal.aborted)setHistory(result)}).catch((e:unknown)=>{if(!controller.signal.aborted)setHistoryError(e instanceof Error?e.message:'دریافت درخواست‌ها ناموفق بود.')}).finally(()=>{if(!controller.signal.aborted)setLoading(false)});
   return()=>controller.abort();
- },[historyOpen,cursor,refresh]);
+ },[historyOpen,cursor,refresh,exactRequest]);
  function applySuccess(request:SupportRequest){
   if(!alive.current)return;
   setConfirmed(request);setState('confirmed');setError('');setMessage('');setTopic('');pending.current=null;setCursor(undefined);setRefresh(x=>x+1);
