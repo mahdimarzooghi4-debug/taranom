@@ -41,3 +41,9 @@ and cannot update canonical Admin-entered fields.
 Neither Admin creation nor the registry record supplies licensure, legal
 identity, quality approval, clinical access, national availability, member
 publication, contracts or treatment-credit payment permission.
+
+## Manager application path (TRN-BIZ-056)
+
+The proposed manager submits a request from their own authenticated subject,
+then an independently authorized Admin reviews it. Request/review history remains
+unverified and cannot grant center access. See TRN-BIZ-056 and TRN-TECH-279.
