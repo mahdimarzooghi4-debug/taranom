@@ -48,9 +48,12 @@ not actual clinician onboarding or live identity-provider evidence.
 - Real OIDC browser session/BFF and trusted grant bootstrap. No deployment,
   merge, Stage, release, actual contracts, or medical permissions.
 
-## Session freshness hardening
-The server-authoritative authorization evidence now reads session_current
-from the current central grant, instead of assuming it from OIDC presence.
-The same flag is required on member appointment-scope and own-booking reads.
-A valid token with an otherwise-current but stale session flag cannot read or
-write center drafts. Independent PostgreSQL HTTP regression covers this state.
+## Independently scoped session evidence
+A delegated center grant begins with session_current=false; this is not a
+revocation and does not establish a live-session fact for another subject.
+Authenticated OIDC identity establishes request-session validity, while current
+central grant records establish exact capability, resource scope, current
+subject mapping, permission version, revocation and audit readiness. Draft
+endpoints must not treat the grant row's initially-false session marker as
+proof of missing OIDC authentication. An HTTP regression covers the actual
+center-manager delegated staff path and cross-center isolation.

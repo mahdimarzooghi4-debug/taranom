@@ -29,7 +29,7 @@ internal static class CenterDirectoryDraftEndpoints
                 SELECT capability, scope_ref FROM taranom_panel_access_grant
                 WHERE issuer=@issuer AND subject=@subject
                   AND capability IN ('CenterAccessGrantsManage','CenterRosterManage')
-                  AND grant_state='active' AND session_current
+                  AND grant_state='active'
                   AND subject_mapping_current AND permission_version_current
                   AND grant_not_revoked AND audit_ready
                 ORDER BY capability,scope_ref
@@ -147,7 +147,7 @@ internal static class CenterDirectoryDraftEndpoints
             SELECT 1 FROM taranom_panel_access_grant
             WHERE issuer=@issuer AND subject=@subject AND scope_ref=@center
               AND capability=@capability AND grant_state='active'
-              AND session_current AND subject_mapping_current
+              AND subject_mapping_current
               AND permission_version_current AND grant_not_revoked AND audit_ready
             FOR SHARE
             """, connection, transaction))

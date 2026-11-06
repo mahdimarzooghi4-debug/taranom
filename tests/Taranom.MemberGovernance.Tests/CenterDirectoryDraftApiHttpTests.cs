@@ -93,57 +93,47 @@ public sealed class CenterDirectoryDraftApiHttpTests
 
 
     [Fact]
-    public async Task StaleSessionFlagDeniesDirectoryAndMemberScopeEvenWithOtherwiseCurrentGrant()
+    public async Task ManagerDelegatedRosterGrantWorksWithAuthenticatedStaffWithoutInventedSessionFlag()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var setup = new AppointmentApiFixture(ct);
-        var center = "center-session-" + Guid.NewGuid().ToString("N");
-        var managerSubject = "center-session-manager-" + Guid.NewGuid().ToString("N");
-        var memberSubject = "center-session-member-" + Guid.NewGuid().ToString("N");
+        var center = "center-delegated-roster-" + Guid.NewGuid().ToString("N");
+        var managerSubject = "center-delegated-manager-" + Guid.NewGuid().ToString("N");
+        var staffSubject = "center-delegated-staff-" + Guid.NewGuid().ToString("N");
         await setup.GrantAsync(managerSubject, "CenterAccessGrantsManage", center, ct);
-        await setup.GrantAsync(memberSubject, "MemberAppointmentsManage",
-            "member-session-" + Guid.NewGuid().ToString("N"), ct);
 
         using var manager = setup.AuthenticatedIdentityClient(managerSubject);
-        using var member = setup.AuthenticatedIdentityClient(memberSubject);
-        Assert.Equal(HttpStatusCode.OK,
-            (await manager.GetAsync($"/api/v1/centers/{center}/directory-draft", ct)).StatusCode);
+        using var staff = setup.AuthenticatedIdentityClient(staffSubject);
+        var rosterPath = $"/api/v1/centers/{center}/doctor-drafts";
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync(rosterPath, ct)).StatusCode);
 
-        await using var db = NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!);
-        await using var conn = await db.OpenConnectionAsync(ct);
-        await using (var stale = new NpgsqlCommand("""
-            UPDATE taranom_panel_access_grant
-               SET session_current=false
-             WHERE issuer=@issuer AND subject IN (@manager,@member)
-            """, conn))
-        {
-            stale.Parameters.AddWithValue("issuer", "https://appointments.test.invalid/realms/taranom");
-            stale.Parameters.AddWithValue("manager", managerSubject);
-            stale.Parameters.AddWithValue("member", memberSubject);
-            Assert.Equal(2, await stale.ExecuteNonQueryAsync(ct));
-        }
+        var delegated = await manager.PostAsJsonAsync(
+            $"/api/v1/centers/{center}/access-grants", new
+            {
+                requestId = Guid.NewGuid(), targetSubject = staffSubject,
+                capability = "CenterRosterManage", reason = "Authorized draft roster editing"
+            }, ct);
+        Assert.Equal(HttpStatusCode.OK, delegated.StatusCode);
 
+        // New center grants intentionally set session_current=false in their
+        // own row. OIDC proves the staff's authenticated session on request;
+        // the central grant still proves actual scope/freshness/revocation.
+        var list = await staff.GetAsync(rosterPath, ct);
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        var scopes = await staff.GetAsync("/api/v1/me/center-directory-draft-scopes", ct);
+        using var scopesDoc = await scopes.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Contains(scopesDoc!.RootElement.GetProperty("scopes").EnumerateArray(),
+            item => item.GetProperty("capability").GetString() == "CenterRosterManage" &&
+                item.GetProperty("scopeRef").GetString() == center);
+
+        var upsert = await staff.PutAsJsonAsync(rosterPath + "/doctor-delegated",
+            new { requestId = Guid.NewGuid(), expectedRevision = 0L,
+                displayName = "نام اعلامی", specialty = "تخصص اعلامی" }, ct);
+        Assert.Equal(HttpStatusCode.OK, upsert.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
-            (await manager.GetAsync($"/api/v1/centers/{center}/directory-draft", ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await manager.PutAsJsonAsync($"/api/v1/centers/{center}/directory-draft",
-                new { requestId = Guid.NewGuid(), expectedRevision = 0,
-                    displayName = "مرکز غیرمجاز", city = "تهران" }, ct)).StatusCode);
-
-        using var memberScopes = await member.GetAsync("/api/v1/me/appointment-scopes", ct);
-        Assert.Equal(HttpStatusCode.OK, memberScopes.StatusCode);
-        using var scopesDoc = await memberScopes.Content.ReadFromJsonAsync<JsonDocument>(ct);
-        Assert.Empty(scopesDoc!.RootElement.GetProperty("appointmentScopes").EnumerateArray());
-
-        using var directoryScopes = await manager.GetAsync("/api/v1/me/center-directory-draft-scopes", ct);
-        Assert.Equal(HttpStatusCode.OK, directoryScopes.StatusCode);
-        using var directoryDoc = await directoryScopes.Content.ReadFromJsonAsync<JsonDocument>(ct);
-        Assert.Empty(directoryDoc!.RootElement.GetProperty("scopes").EnumerateArray());
-
-        using var appointments = await member.GetAsync("/api/v1/me/appointments", ct);
-        Assert.Equal(HttpStatusCode.OK, appointments.StatusCode);
-        using var own = await appointments.Content.ReadFromJsonAsync<JsonDocument>(ct);
-        Assert.Empty(own!.RootElement.GetProperty("appointments").EnumerateArray());
+            (await staff.PutAsJsonAsync($"/api/v1/centers/{center}-other/doctor-drafts/doctor-delegated",
+                new { requestId = Guid.NewGuid(), expectedRevision = 0L,
+                    displayName = "نام اعلامی", specialty = "تخصص اعلامی" }, ct)).StatusCode);
     }
 
     [Fact]

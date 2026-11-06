@@ -45,7 +45,7 @@ app.MapGet("/api/v1/me/appointment-scopes", async (
         WHERE issuer = @issuer AND subject = @subject
           AND capability IN ('CenterAppointmentsManage', 'MemberAppointmentsManage')
           AND grant_state = 'active'
-          AND session_current AND subject_mapping_current
+          AND subject_mapping_current
           AND permission_version_current AND grant_not_revoked AND audit_ready
         ORDER BY capability, scope_ref
         """;
@@ -120,7 +120,7 @@ app.MapGet("/api/v1/me/appointments", async (
               AND grant_row.capability = 'MemberAppointmentsManage'
               AND grant_row.scope_ref = booking.value ->> 'memberRef'
               AND grant_row.grant_state = 'active'
-              AND grant_row.session_current AND grant_row.subject_mapping_current
+              AND grant_row.subject_mapping_current
               AND grant_row.permission_version_current
               AND grant_row.grant_not_revoked
               AND grant_row.audit_ready
