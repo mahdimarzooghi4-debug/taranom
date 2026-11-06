@@ -80,3 +80,19 @@ export async function createMySupportRequest(command:SupportCommand){
  if(!result||!['Applied','Replayed'].includes(result.outcome)||!validSupport(result.request)||result.request.requestId!==command.requestId||result.request.topic!==command.topic||result.request.message!==command.message.trim())throw new Error('ثبت درخواست قابل تأیید نیست.');
  return result.request;
 }
+
+/** Current schedule-derived center references only; not verified provider identities. */
+export type AvailableAppointmentCenter={
+ centerRef:string;revision:number;openSlotCount:number;nextAvailableAt:string;
+};
+export async function getAvailableAppointmentCenters(signal?:AbortSignal):Promise<AvailableAppointmentCenter[]>{
+ const response=await api<{centers:AvailableAppointmentCenter[]}>('/api/v1/me/available-appointment-centers',{signal});
+ if(!response||!Array.isArray(response.centers)||response.centers.length>50||
+   !response.centers.every(center=>center&&typeof center.centerRef==='string'&&
+    center.centerRef.trim().length>0&&Number.isSafeInteger(center.revision)&&center.revision>=0&&
+    Number.isSafeInteger(center.openSlotCount)&&center.openSlotCount>0&&
+    typeof center.nextAvailableAt==='string'&&Number.isFinite(Date.parse(center.nextAvailableAt)))||
+   new Set(response.centers.map(center=>center.centerRef)).size!==response.centers.length)
+  throw new Error('فهرست ظرفیت مراکز معتبر نیست. دوباره تلاش کنید.');
+ return response.centers;
+}

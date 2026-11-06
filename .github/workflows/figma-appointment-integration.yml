@@ -35,7 +35,7 @@ jobs:
       - run: npm run check --prefix apps/member-web
       - run: npm run check --prefix apps/center-web
       - run: npx --prefix apps/member-web playwright install --with-deps chromium
-      - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts figma-booking-flow.spec.ts patient-web-appointment-api.spec.ts patient-profile-api.spec.ts patient-support-api.spec.ts patient-account-api.spec.ts
+      - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts figma-booking-flow.spec.ts patient-web-appointment-api.spec.ts patient-profile-api.spec.ts patient-support-api.spec.ts patient-account-api.spec.ts patient-discovery-api.spec.ts
       - run: npm run test:e2e --prefix apps/center-web -- figma-appointment-api.spec.ts
       - run: npm run test:e2e --prefix apps/ops-web -- --config playwright.support.config.ts
   backend-postgres-contracts:

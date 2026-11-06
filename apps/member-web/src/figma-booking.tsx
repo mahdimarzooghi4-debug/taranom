@@ -69,7 +69,7 @@ export function FigmaBooking(){
  const days=load.kind==='ready'?[...new Set(load.data.slots.map(s=>dayKey(s.startsAt)))]:[];
  const locked=status!=='idle';
  return <AppointmentPage title={status==='confirmed'?'نوبت ثبت شد':review?'بازبینی نوبت':'انتخاب زمان نوبت'} subtitle={review?'پیش از ثبت، اطلاعات را بررسی کنید':'زمان مناسب خود را انتخاب کنید'}>
- {!centerRef?<section className="appointment-state"><h2>ابتدا مرکز مراجعه را انتخاب کنید</h2><p>از جزئیات یکی از نوبت‌های خود، «نوبت مجدد در همین مرکز» را انتخاب کنید. جست‌وجوی مراکز هنوز متصل نشده است.</p></section>:<>
+ {!centerRef?<section className="appointment-state"><h2>ابتدا مرکز مراجعه را انتخاب کنید</h2><p>از فهرست ظرفیت‌های ثبت‌شدهٔ مراکز، مرکز مراجعه را انتخاب کنید. اطلاعات نام و تخصص پزشکان هنوز مرجع تأییدشده ندارد.</p><a className="appointment-primary" href={base+'/booking'}>دیدن مراکز دارای ظرفیت</a></section>:<>
  {error&&<p role="alert" className="appointment-error">{error}</p>}
  {status==='confirmed'?<section className="appointment-success" role="status"><h2>ثبت نوبت تأیید شد</h2><p>{selected&&date(selected.startsAt)}</p><a className="appointment-primary" href={base+'/appointment-detail?'+new URLSearchParams({booking:bookingRef,center:centerRef})}>مشاهدهٔ جزئیات نوبت</a></section>:<>
  {scopes?.length===0&&<p className="appointment-state" role="status">دسترسی نوبت‌گیری برای این حساب فعال نیست.</p>}
