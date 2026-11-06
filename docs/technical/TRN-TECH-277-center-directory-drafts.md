@@ -47,3 +47,10 @@ not actual clinician onboarding or live identity-provider evidence.
   then city/specialty matching against approved evidence-backed records.
 - Real OIDC browser session/BFF and trusted grant bootstrap. No deployment,
   merge, Stage, release, actual contracts, or medical permissions.
+
+## Session freshness hardening
+The server-authoritative authorization evidence now reads session_current
+from the current central grant, instead of assuming it from OIDC presence.
+The same flag is required on member appointment-scope and own-booking reads.
+A valid token with an otherwise-current but stale session flag cannot read or
+write center drafts. Independent PostgreSQL HTTP regression covers this state.
