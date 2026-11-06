@@ -26,7 +26,7 @@ internal sealed class CentralPanelAccessEvidenceSource(NpgsqlDataSource dataSour
         string? scopeHint = null;
         string? scopeRef;
         if (capability is PanelCapability.CenterAppointmentsManage or
-            PanelCapability.CenterAccessGrantsManage)
+            PanelCapability.CenterAccessGrantsManage or PanelCapability.CenterRosterManage)
         {
             scopeHint = httpContext.Request.RouteValues["centerRef"]?.ToString();
             scopeRef = scopeHint;

@@ -403,6 +403,7 @@ app.MapGet("/api/v1/me/available-appointment-centers", async (
     return Results.Ok(new { centers });
 }).RequireAuthorization(IdentityAppointmentScopesPolicy);
 
+app.MapCenterDirectoryDraftEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
 app.MapSupportOperationsEndpoints();
@@ -484,6 +485,10 @@ public sealed class AppointmentDatabaseBootstrap(
     {
         await appointments.InitializeAsync(cancellationToken);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var schemaLock = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(hashtextextended('taranom.panel-api.schema.v1', 0))", connection, transaction))
+            await schemaLock.ExecuteNonQueryAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
             CREATE TABLE IF NOT EXISTS taranom_member_support_request (
                 sequence_no bigserial PRIMARY KEY,
@@ -564,8 +569,38 @@ public sealed class AppointmentDatabaseBootstrap(
                 created_at timestamptz NOT NULL DEFAULT now(),
                 UNIQUE (actor_issuer, actor_subject, request_id)
             );
-            """, connection);
+
+            CREATE TABLE IF NOT EXISTS taranom_center_directory_draft (
+                center_ref text PRIMARY KEY,
+                revision bigint NOT NULL CHECK (revision > 0),
+                display_name text NOT NULL,
+                city text NOT NULL,
+                updated_at timestamptz NOT NULL DEFAULT now()
+            );
+            CREATE TABLE IF NOT EXISTS taranom_center_doctor_draft (
+                center_ref text NOT NULL,
+                doctor_ref text NOT NULL,
+                revision bigint NOT NULL CHECK (revision > 0),
+                display_name text NOT NULL,
+                specialty text NOT NULL,
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (center_ref, doctor_ref)
+            );
+            CREATE TABLE IF NOT EXISTS taranom_center_directory_draft_audit (
+                center_ref text NOT NULL,
+                actor_issuer text NOT NULL,
+                actor_subject text NOT NULL,
+                request_id uuid NOT NULL,
+                action text NOT NULL CHECK (action IN ('center-profile','doctor-claim')),
+                target_ref text NOT NULL,
+                fingerprint char(64) NOT NULL,
+                result_revision bigint NOT NULL CHECK (result_revision > 0),
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (center_ref,actor_issuer,actor_subject,request_id)
+            );
+            """, connection, transaction);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 }
 
