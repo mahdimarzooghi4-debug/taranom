@@ -1,0 +1,16 @@
+.directory-draft{display:flex;flex-direction:column;gap:16px;max-width:920px}
+.directory-warning{border:1px solid #c4d4e0;background:#f4f8fc}
+.directory-warning strong{font-size:15px}
+.directory-warning p{line-height:1.9;font-size:13px}
+.directory-center{font-size:13px;overflow-wrap:anywhere}
+.directory-field{display:block;font-size:13px;margin:14px 0;font-weight:600}
+.directory-field input,.directory-field select{display:block;width:100%;box-sizing:border-box;border:1px solid #b7cadb;border-radius:10px;padding:12px;font:inherit;margin-top:7px;background:#fff;color:#082a4c}
+.directory-error{color:#9f2424;border:1px solid #dea7a7;padding:12px;border-radius:10px}
+.directory-note{color:#155c3c;border:1px solid #aacfb5;padding:12px;border-radius:10px}
+.directory-form{display:block}.directory-form h2{font-size:17px;margin-bottom:15px}
+.directory-form>p{font-size:12px;color:#50647d}
+.directory-reset{border:1px solid #b7cadb;border-radius:10px;background:white;color:#153b5b;padding:10px 16px;margin:10px;cursor:pointer}
+.directory-draft table{width:100%;border-collapse:collapse;font-size:12px}
+.directory-draft th,.directory-draft td{padding:12px;border-bottom:1px solid #dbe5ed;text-align:right;overflow-wrap:anywhere}
+.directory-draft td button{border:1px solid #abc0d2;background:white;border-radius:8px;padding:6px;cursor:pointer}
+@media(max-width:640px){.directory-draft{max-width:100%}.directory-draft table{min-width:640px}}
