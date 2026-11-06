@@ -134,6 +134,69 @@ public sealed class AppointmentApiHttpTests
         }, scopes);
     }
 
+
+    [Fact]
+    public async Task AvailableCenterDiscoveryExposesOnlyRealFutureOpenCapacityToCurrentMembers()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        var centerRef = "center-discovery-" + Guid.NewGuid().ToString("N");
+        var centerSubject = "center-discovery-staff-" + Guid.NewGuid().ToString("N");
+        var memberSubject = "center-discovery-member-" + Guid.NewGuid().ToString("N");
+        var staleSubject = "center-discovery-stale-" + Guid.NewGuid().ToString("N");
+        const string endpoint = "/api/v1/me/available-appointment-centers";
+
+        using var anonymous = setup.Factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(endpoint, ct)).StatusCode);
+        using var noGrant = setup.AuthenticatedIdentityClient(memberSubject);
+        Assert.Equal(HttpStatusCode.Forbidden, (await noGrant.GetAsync(endpoint, ct)).StatusCode);
+
+        await setup.GrantAsync(staleSubject, "MemberAppointmentsManage", "stale-discovery-member", ct,
+            currentEvidence: false);
+        using var staleMember = setup.AuthenticatedIdentityClient(staleSubject);
+        Assert.Equal(HttpStatusCode.Forbidden, (await staleMember.GetAsync(endpoint, ct)).StatusCode);
+
+        await setup.GrantAsync(memberSubject, "MemberAppointmentsManage",
+            "discovery-member-" + Guid.NewGuid().ToString("N"), ct);
+        await setup.GrantAsync(centerSubject, "CenterAppointmentsManage", centerRef, ct);
+        using var staff = setup.AuthenticatedIdentityClient(centerSubject);
+
+        var startsAt = DateTimeOffset.UtcNow.AddDays(4);
+        var define = await staff.PostAsJsonAsync($"/api/v1/centers/{centerRef}/appointment-slots",
+            new { requestId = Guid.NewGuid(), expectedRevision = 0,
+                slotRef = "discovery-open-slot", doctorRef = "opaque-doctor",
+                startsAt, endsAt = startsAt.AddMinutes(30) }, ct);
+        Assert.Equal(HttpStatusCode.OK, define.StatusCode);
+
+        var available = await noGrant.GetAsync(endpoint, ct);
+        Assert.Equal(HttpStatusCode.OK, available.StatusCode);
+        Assert.Equal("no-store", available.Headers.CacheControl?.ToString());
+        using var data = await available.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var options = data!.RootElement.GetProperty("centers").EnumerateArray()
+            .Where(item => item.GetProperty("centerRef").GetString() == centerRef).ToArray();
+        var option = Assert.Single(options);
+        Assert.Equal(1, option.GetProperty("openSlotCount").GetInt32());
+        Assert.Equal(1, option.GetProperty("revision").GetInt64());
+        Assert.True(option.GetProperty("nextAvailableAt").GetDateTimeOffset() > DateTimeOffset.UtcNow);
+        Assert.False(option.TryGetProperty("doctorName", out _));
+        Assert.False(option.TryGetProperty("specialty", out _));
+        Assert.False(option.TryGetProperty("city", out _));
+
+        // A booking changes the persisted slot to Booked; discovery must not
+        // continue advertising the now-unavailable capacity.
+        var memberRef = "discovery-member-booking-" + Guid.NewGuid().ToString("N");
+        await setup.GrantAsync(memberSubject, "MemberAppointmentsManage", memberRef, ct);
+        var booked = await noGrant.PostAsJsonAsync(
+            $"/api/v1/member/members/{memberRef}/centers/{centerRef}/appointments",
+            new { requestId = Guid.NewGuid(), expectedRevision = 1,
+                slotRef = "discovery-open-slot" }, ct);
+        Assert.Equal(HttpStatusCode.OK, booked.StatusCode);
+        using var afterBooking = await (await noGrant.GetAsync(endpoint, ct))
+            .Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.DoesNotContain(afterBooking!.RootElement.GetProperty("centers").EnumerateArray(),
+            item => item.GetProperty("centerRef").GetString() == centerRef);
+    }
+
     [Fact]
     public async Task AppointmentRoutesRequireAuthenticationAndExactCenterCapability()
     {
