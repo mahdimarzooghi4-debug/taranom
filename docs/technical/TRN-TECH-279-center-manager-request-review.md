@@ -62,3 +62,22 @@ claim the receipt. The browser now reconciles against this precise read-only
 route; it never relies on an ambiguous first page or matching reason text,
 and never re-POSTs an uncertain review. No grant or identity-verified state
 is materialized by the lookup.
+
+## Read-only Admin case workspace (TRN-TECH-280)
+
+The Admin may inspect a single manager claim at
+`GET /api/v1/operations/center-manager-requests/{requestId}/workspace`.
+This endpoint combines the actual Admin-defined center name/city (still
+UNVERIFIED), exact OIDC issuer/subject, immutable applicant reason,
+reviewer lineage/reason, and a count of competing claims against the
+same center. It is gated by the current AdminCenterRegistryManage grant,
+no-store and NOT reachable by an unprivileged applicant. The concurrent
+claim count is descriptive, not a conflict threshold or automated decision.
+
+The workspace explicitly reports
+`representationEvidence.sourceStatus=NOT_CONNECTED`,
+`authorityVerified=false`, and `criteriaDefined=false` because no
+trusted provider/organizational authority integration or approval rule
+exists. It never creates or promotes a manager grant and must not be
+mistaken for an adjudication record. The current one-shot review
+and independent authority verification boundary are unchanged.

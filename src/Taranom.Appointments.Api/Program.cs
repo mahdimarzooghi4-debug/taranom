@@ -394,6 +394,7 @@ app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
 app.MapSupportOperationsEndpoints();
 app.MapAdminCenterRegistryEndpoints();
 app.MapCenterManagerRequestEndpoints(IdentityAppointmentScopesPolicy);
+app.MapCenterManagerCaseWorkspaceEndpoints();
 
 app.Run();
 
