@@ -40,7 +40,7 @@ test('authenticated applicant submits own identity-bound unverified request',asy
   .fill('I represent this clinical center for management review');
  await page.getByRole('button',{name:'ارسال درخواست برای بررسی ادمین'}).click();
  await expect(page.getByText('درخواست ثبت شد و در انتظار بررسی ادمین است؛ هنوز مجوز مدیریت صادر نشده است.')).toBeVisible();
- await expect(page.getByText('در انتظار بررسی ادمین')).toBeVisible();
+ await expect(page.getByText('در انتظار بررسی ادمین',{exact:true})).toBeVisible();
  expect(posts).toBe(1);
  expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
 });
