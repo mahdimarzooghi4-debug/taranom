@@ -27,6 +27,7 @@ test('authorized center manager saves and reloads an unverified center draft',as
  await expect.poll(()=>updates).toBe(1);
  await expect(page.getByLabel('نام اعلامی مرکز')).toHaveValue('مرکز آزمایشی');
  await expect(page.getByText('نسخه فعلی: ۱')).toBeVisible();
+ await expect(page.getByText('اطلاعات اعلامی با رسید ثبت شد؛ هویت و صلاحیت همچنان تأیید نشده‌اند.')).toBeVisible();
  await expect(page.getByText('تأیید صلاحیت پزشکی')).toHaveCount(0);
  expect(await page.evaluate(()=>Object.keys(localStorage).length+Object.keys(sessionStorage).length)).toBe(0);
 });
@@ -73,6 +74,66 @@ test('missing current grant shows no draft content or writable form',async({page
  await expect(page.getByRole('button',{name:'ثبت پیش‌نویس با کنترل نسخه'})).toHaveCount(0);
  expect(otherCalls).toBe(0);
 });
+
+test('late doctor page from a previous center is ignored after switching scope',async({page})=>{
+ await login(page);
+ let releaseOld!:()=>void;
+ const delayedOldPage=new Promise<void>(resolve=>{releaseOld=resolve});
+ await page.route('**/api/v1/**',async route=>{
+  const request=route.request(),url=new URL(request.url()),path=url.pathname;
+  if(path.endsWith('/center-directory-draft-scopes'))return route.fulfill({json:{scopes:[
+   {capability:'CenterRosterManage',scopeRef:'center-a'},
+   {capability:'CenterRosterManage',scopeRef:'center-b'}]}});
+  if(path.endsWith('/doctor-drafts')&&request.method()==='GET'){
+   const center=path.split('/')[4];
+   if(center==='center-a'&&url.searchParams.has('after')){
+    await delayedOldPage;
+    return route.fulfill({json:{centerRef:'center-a',doctors:[{
+     doctorRef:'late-old-page',revision:1,displayName:'پزشک مرکز قبلی',
+     specialty:'تخصص اعلامی',verificationState:'UNVERIFIED_DRAFT'}],nextAfter:null}});
+   }
+   if(center==='center-a')return route.fulfill({json:{centerRef:'center-a',doctors:[{
+    doctorRef:'first-old-page',revision:1,displayName:'پزشک اول',
+    specialty:'تخصص اعلامی',verificationState:'UNVERIFIED_DRAFT'}],nextAfter:'first-old-page'}});
+   if(center==='center-b')return route.fulfill({json:{centerRef:'center-b',doctors:[{
+    doctorRef:'current-center-doctor',revision:1,displayName:'پزشک مرکز جاری',
+    specialty:'تخصص اعلامی',verificationState:'UNVERIFIED_DRAFT'}],nextAfter:null}});
+  }
+  return route.fulfill({status:404});
+ });
+ await page.goto('/center-portal/doctors');
+ await page.getByLabel('مرکز دارای مجوز').selectOption('center-a');
+ await expect(page.getByRole('cell',{name:'first-old-page'})).toBeVisible();
+ await page.getByRole('button',{name:'صفحه بعد فهرست'}).click();
+ await page.getByLabel('مرکز دارای مجوز').selectOption('center-b');
+ await expect(page.getByRole('cell',{name:'current-center-doctor'})).toBeVisible();
+ releaseOld();
+ await expect(page.getByRole('cell',{name:'late-old-page'})).toHaveCount(0);
+});
+
+test('deterministic stale revision response blocks resubmission until re-read',async({page})=>{
+ await login(page);
+ let puts=0,reads=0;
+ await page.route('**/api/v1/**',route=>{
+  const request=route.request(),path=new URL(request.url()).pathname;
+  if(path.endsWith('/center-directory-draft-scopes'))return route.fulfill({json:{scopes:[{capability:'CenterAccessGrantsManage',scopeRef:'center-stale'}]}});
+  if(path.endsWith('/directory-draft')&&request.method()==='GET'){
+   reads++;return route.fulfill({json:{centerRef:'center-stale',profile:{revision:reads>1?1:0,displayName:reads>1?'مرکز نسخه جدید':'',city:reads>1?'قم':''},verificationState:'UNVERIFIED_DRAFT'}});
+  }
+  if(path.endsWith('/directory-draft')&&request.method()==='PUT'){puts++;return route.fulfill({status:409,json:{code:'DIRECTORY_DRAFT_STALE_REVISION'}})}
+  return route.fulfill({status:404});
+ });
+ await page.goto('/center-portal/profile');
+ await page.getByLabel('نام اعلامی مرکز').fill('نام قدیمی');
+ await page.getByLabel('شهر اعلامی').fill('تهران');
+ await page.getByRole('button',{name:'ثبت پیش‌نویس با کنترل نسخه'}).click();
+ await expect(page.getByRole('alert')).toContainText('اطلاعات برنامه تغییر کرده');
+ await expect(page.getByRole('button',{name:'ثبت پیش‌نویس با کنترل نسخه'})).toHaveCount(0);
+ await page.getByRole('button',{name:'بازخوانی از پایگاه داده'}).click();
+ await expect(page.getByLabel('نام اعلامی مرکز')).toHaveValue('مرکز نسخه جدید');
+ expect(puts).toBe(1);
+});
+
 test('uncertain save is not automatically repeated',async({page})=>{
  await login(page);
  let puts=0;

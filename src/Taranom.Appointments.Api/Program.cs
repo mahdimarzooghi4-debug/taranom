@@ -598,6 +598,26 @@ public sealed class AppointmentDatabaseBootstrap(
                 created_at timestamptz NOT NULL DEFAULT now(),
                 PRIMARY KEY (center_ref,actor_issuer,actor_subject,request_id)
             );
+            CREATE OR REPLACE FUNCTION taranom_reject_center_directory_audit_mutation()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $
+            BEGIN
+                RAISE EXCEPTION 'CENTER_DIRECTORY_AUDIT_APPEND_ONLY'
+                    USING ERRCODE = '55000';
+                RETURN NULL;
+            END;
+            $;
+            DROP TRIGGER IF EXISTS trg_taranom_center_directory_audit_update_delete
+                ON taranom_center_directory_draft_audit;
+            CREATE TRIGGER trg_taranom_center_directory_audit_update_delete
+                BEFORE UPDATE OR DELETE ON taranom_center_directory_draft_audit
+                FOR EACH ROW EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
+            DROP TRIGGER IF EXISTS trg_taranom_center_directory_audit_truncate
+                ON taranom_center_directory_draft_audit;
+            CREATE TRIGGER trg_taranom_center_directory_audit_truncate
+                BEFORE TRUNCATE ON taranom_center_directory_draft_audit
+                FOR EACH STATEMENT EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
             """, connection, transaction);
         await command.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

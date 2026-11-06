@@ -57,3 +57,15 @@ subject mapping, permission version, revocation and audit readiness. Draft
 endpoints must not treat the grant row's initially-false session marker as
 proof of missing OIDC authentication. An HTTP regression covers the actual
 center-manager delegated staff path and cross-center isolation.
+
+## Audit and browser-state hardening
+- The center-directory command audit now has PostgreSQL UPDATE, DELETE and
+  TRUNCATE rejection triggers; an HTTP/PostgreSQL regression verifies all
+  three operations fail and the accepted row remains present.
+- The browser distinguishes deterministic 4xx conflicts/denials from an
+  uncertain transport/server outcome. Deterministic failures block writes
+  until a fresh read; uncertain outcomes never auto-replay.
+- Doctor pagination responses are bound to the currently selected center and
+  request generation, preventing a delayed page from a prior center or prior
+  reload from contaminating the current roster. Successful save feedback
+  survives the post-write refresh.

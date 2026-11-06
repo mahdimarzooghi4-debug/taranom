@@ -89,6 +89,28 @@ public sealed class CenterDirectoryDraftApiHttpTests
         query.Parameters.AddWithValue("center", center);
         query.Parameters.AddWithValue("subject", subject);
         Assert.Equal(1L, (long)(await query.ExecuteScalarAsync(ct))!);
+
+        async Task AssertAuditMutationBlocked(string sql)
+        {
+            await using var mutation = new NpgsqlCommand(sql, conn);
+            mutation.Parameters.AddWithValue("center", center);
+            mutation.Parameters.AddWithValue("subject", subject);
+            var failure = await Assert.ThrowsAsync<PostgresException>(
+                async () => await mutation.ExecuteNonQueryAsync(ct));
+            Assert.Equal("55000", failure.SqlState);
+        }
+
+        await AssertAuditMutationBlocked("""
+            UPDATE taranom_center_directory_draft_audit
+            SET fingerprint=repeat('0',64)
+            WHERE center_ref=@center AND actor_subject=@subject
+            """);
+        await AssertAuditMutationBlocked("""
+            DELETE FROM taranom_center_directory_draft_audit
+            WHERE center_ref=@center AND actor_subject=@subject
+            """);
+        await AssertAuditMutationBlocked("TRUNCATE taranom_center_directory_draft_audit");
+        Assert.Equal(1L, (long)(await query.ExecuteScalarAsync(ct))!);
     }
 
 
