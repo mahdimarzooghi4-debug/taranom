@@ -45,6 +45,28 @@ internal static class AdminCenterRegistryEndpoints
                 nextAfter=rows.Count>20?refs[19]:null});
         }).RequirePanelCapability(PanelCapability.AdminCenterRegistryManage);
 
+        // Recover a lost create response by inspecting only this actor's
+        // transaction receipt. It never creates a center on GET.
+        app.MapGet("/api/v1/operations/centers/creation-requests/{requestId:guid}", async (
+            Guid requestId,HttpContext context,NpgsqlDataSource db,CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl="no-store";
+            if(requestId==Guid.Empty)return Results.BadRequest();
+            var issuer=context.User.FindFirst("iss")?.Value;
+            var subject=context.User.FindFirst("sub")?.Value;
+            await using var conn=await db.OpenConnectionAsync(ct);
+            await using var cmd=new NpgsqlCommand("""
+                SELECT center_ref FROM taranom_canonical_center_creation_receipt
+                WHERE issuer=@issuer AND subject=@subject AND request_id=@request
+                """,conn);
+            cmd.Parameters.AddWithValue("issuer",issuer!);
+            cmd.Parameters.AddWithValue("subject",subject!);
+            cmd.Parameters.AddWithValue("request",requestId);
+            var found=await cmd.ExecuteScalarAsync(ct) as string;
+            if(found is null)return Results.NotFound(new {code="CENTER_CREATION_NOT_OBSERVED"});
+            return Results.Ok(new {outcome="Observed",centerRef=found,recordState=Marker});
+        }).RequirePanelCapability(PanelCapability.AdminCenterRegistryManage);
+
         app.MapPost("/api/v1/operations/centers", async (
             AdminCreateCenterCommand input, HttpContext context,
             NpgsqlDataSource db, CancellationToken ct) =>

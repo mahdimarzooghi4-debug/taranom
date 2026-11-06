@@ -13,6 +13,7 @@ on:
       - 'tests/Taranom.MemberGovernance.Tests/MemberProfile*'
       - 'tests/Taranom.MemberGovernance.Tests/MemberSupport*'
       - 'tests/Taranom.MemberGovernance.Tests/CenterDirectoryDraft*'
+      - 'tests/Taranom.MemberGovernance.Tests/AdminCenterRegistry*'
       - '.github/workflows/figma-appointment-integration.yml'
   workflow_dispatch:
 permissions:
@@ -75,6 +76,7 @@ jobs:
           -class Taranom.MemberGovernance.Tests.MemberProfileApiHttpTests
           -class Taranom.MemberGovernance.Tests.MemberSupportApiHttpTests
           -class Taranom.MemberGovernance.Tests.CenterDirectoryDraftApiHttpTests
+          -class Taranom.MemberGovernance.Tests.AdminCenterRegistryApiHttpTests
           -class Taranom.MemberGovernance.Tests.PanelAccessPolicyTests
           -class Taranom.MemberGovernance.Tests.PanelAccessEndpointConventionTests
           -class Taranom.MemberGovernance.Tests.PanelAccessAuthorizationHandlerTests
