@@ -24,6 +24,8 @@ internal static class PanelAccessPolicyNames
     internal const string MemberAppointmentsManage = "panel.member.appointments.manage";
     internal const string CenterAccessGrantsManage = "panel.center.access-grants.manage";
 
+    internal const string SupportRequestsManage = "panel.support.requests.manage";
+
     internal static IReadOnlyList<PanelAccessPolicyDefinition> All { get; } =
         Array.AsReadOnly(new[]
         {
@@ -42,7 +44,9 @@ internal static class PanelAccessPolicyNames
             new PanelAccessPolicyDefinition(
                 MemberAppointmentsManage, PanelCapability.MemberAppointmentsManage),
             new PanelAccessPolicyDefinition(
-                CenterAccessGrantsManage, PanelCapability.CenterAccessGrantsManage)
+                CenterAccessGrantsManage, PanelCapability.CenterAccessGrantsManage),
+            new PanelAccessPolicyDefinition(
+                SupportRequestsManage, PanelCapability.SupportRequestsManage)
         });
 }
 

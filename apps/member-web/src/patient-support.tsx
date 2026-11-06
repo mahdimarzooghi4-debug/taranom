@@ -55,7 +55,7 @@ export function PatientSupport(){
  <button type="button" className="support-history-toggle" aria-expanded={historyOpen} onClick={()=>setHistoryOpen(x=>!x)}>{historyOpen?'بستن درخواست‌های من':'درخواست‌های من'}</button>
  {historyOpen&&<section className="support-history" aria-labelledby="support-history-title"><h2 id="support-history-title">درخواست‌های من</h2>
   {loading&&<p role="status">در حال دریافت درخواست‌ها…</p>}{historyError&&<p className="support-error" role="alert">{historyError}</p>}
-  {history?.requests.map(item=><article key={item.requestRef}><strong>{topics[item.topic]}</strong><span>ثبت‌شده</span><p className="support-tracking"><bdi>{item.requestRef}</bdi></p><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time><p className="support-message">{item.message}</p></article>)}
+  {history?.requests.map(item=><article key={item.requestRef}><strong>{topics[item.topic]}</strong><span>{item.state==='Answered'?'پاسخ داده‌شده':'ثبت‌شده'}</span><p className="support-tracking"><bdi>{item.requestRef}</bdi></p><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time><p className="support-message">{item.message}</p>{item.reply&&item.repliedAt&&<section className="support-reply"><h3>پاسخ پشتیبانی</h3><time dateTime={item.repliedAt}>{formatDate(item.repliedAt)}</time><p className="support-message">{item.reply}</p></section>}</article>)}
   {history&&!history.requests.length&&<p role="status">درخواستی برای نمایش وجود ندارد.</p>}
   <div className="support-history-actions"><button disabled={loading} onClick={()=>{setCursor(undefined);setRefresh(x=>x+1)}}>تازه‌سازی درخواست‌ها</button>{history?.nextBefore&&<button disabled={loading} onClick={()=>setCursor(history.nextBefore!)}>درخواست‌های قدیمی‌تر</button>}</div>
  </section>}

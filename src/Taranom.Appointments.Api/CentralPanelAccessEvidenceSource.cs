@@ -40,6 +40,10 @@ internal sealed class CentralPanelAccessEvidenceSource(NpgsqlDataSource dataSour
             if (string.IsNullOrWhiteSpace(scopeRef))
                 return null;
         }
+        else if (capability == PanelCapability.SupportRequestsManage)
+        {
+            scopeRef = "taranom-support";
+        }
         else
         {
             return null;

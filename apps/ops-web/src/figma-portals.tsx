@@ -1,8 +1,10 @@
+import {SupportDesk} from './support-desk';
 import { useEffect, useState, type MouseEvent } from 'react';
 
 type PortalKind = 'admin' | 'institution';
 type PortalPage = { key: string; title: string; group: string; icon: string; path: string };
 const adminPages: PortalPage[] = [
+  {key:'support',title:'پشتیبانی کاربران',group:'مدیریت سامانه',icon:'◌',path:'/admin/support-requests'},
   { key: 'dashboard', title: 'نمای کلی', group: 'مدیریت سامانه', icon: '⌂', path: '/admin' },
   { key: 'users', title: 'اعضا و کاربران', group: 'مدیریت سامانه', icon: '♙', path: '/admin/users' },
   { key: 'centers', title: 'مراکز درمانی', group: 'خدمات درمانی', icon: '▦', path: '/admin/centers' },
@@ -101,11 +103,11 @@ export function FigmaPortal({ kind }: { kind: PortalKind }) {
       <nav className={mobileMenu ? 'figma-nav is-open' : 'figma-nav'} aria-label="صفحه‌های پنل">
         {groups.map((group) => <section className="figma-nav-group" key={group}><h2>{group}</h2>{pages.filter((item) => item.group === group).map((item) => <a key={item.key} href={item.path} className={item.key === page.key ? 'active' : ''} aria-current={item.key === page.key ? 'page' : undefined} onClick={(event) => navigate(event, item.path)}><span aria-hidden="true">{item.icon}</span>{item.title}<b aria-hidden="true">‹</b></a>)}</section>)}
       </nav>
-      <div className="figma-sidebar-footer"><strong>حساب نمونه</strong><span>اطلاعات این پنل نمایشی است.</span></div>
+      <div className="figma-sidebar-footer"><strong>{page.key==='support'?'پشتیبانی ترنم':'حساب نمونه'}</strong><span>{page.key==='support'?'دسترسی براساس مجوز جاری حساب':'اطلاعات این پنل نمایشی است.'}</span></div>
     </aside>
     <div className="figma-workspace">
-      <header className="figma-topbar"><div className="figma-crumb">ترنم <span>›</span> {portalTitle} <span>›</span> {page.title}</div><div className="figma-topbar-user"><span className="figma-status-dot" />اطلاعات نمونه<span className="figma-user-avatar">ن</span></div></header>
-      <main className="figma-main"><div className="figma-page-heading"><div><p>{portalTitle} / {page.group}</p><h1 id="figma-portal-title" tabIndex={-1}>{page.title}</h1><span>نمایش و گردش کار نمونه · اتصال عملیاتی هنوز برقرار نیست</span></div><button type="button" disabled>عملیات در انتظار اتصال</button></div>
+      <header className="figma-topbar"><div className="figma-crumb">ترنم <span>›</span> {portalTitle} <span>›</span> {page.title}</div><div className="figma-topbar-user"><span className="figma-status-dot" />{page.key==='support'?'پشتیبانی کاربران':'اطلاعات نمونه'}<span className="figma-user-avatar">ن</span></div></header>
+      <main className="figma-main"><div className="figma-page-heading"><div><p>{portalTitle} / {page.group}</p><h1 id="figma-portal-title" tabIndex={-1}>{page.title}</h1><span>{page.key==='support'?'رسیدگی به درخواست‌های ثبت‌شده':'نمایش و گردش کار نمونه · اتصال عملیاتی هنوز برقرار نیست'}</span></div>{page.key!=='support'&&<button type="button" disabled>عملیات در انتظار اتصال</button>}</div>
         <PortalContent kind={kind} page={page} navigate={navigate} />
       </main>
     </div>
@@ -113,6 +115,7 @@ export function FigmaPortal({ kind }: { kind: PortalKind }) {
 }
 
 function PortalContent({ kind, page, navigate }: { kind: PortalKind; page: PortalPage; navigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void }) {
+  if (kind==='admin'&&page.key==='support') return <SupportDesk/>;
   if (page.key === 'dashboard') {
     const stats = kind === 'admin' ? [['اعضای ثبت‌شده', '۱۲٬۸۴۰'], ['مراکز درمانی', '۲۴۸'], ['نوبت‌های امروز', '۳۶۴'], ['پرونده‌های حمایتی', '۱٬۲۸۰']] : [['مددجویان تحت پوشش', '۱٬۲۸۰'], ['پرونده‌های فعال', '۴۲۶'], ['بودجهٔ دوره', '۸۵۰٬۰۰۰٬۰۰۰ تومان'], ['پرداخت‌های ماه', '۵۲۴٬۰۰۰٬۰۰۰ تومان']];
     return <><div className="figma-stat-grid">{stats.map(([label, value], i) => <article key={label}><span className={`figma-stat-icon tone-${i}`}>{['◷','♙','▦','◈'][i]}</span><small>{label}</small><strong>{value}</strong><em>عدد نمونه</em></article>)}</div>

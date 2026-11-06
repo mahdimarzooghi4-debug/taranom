@@ -9,7 +9,7 @@ async function mock(page:Page,mode:'ok'|'lost'|'invalid'='ok'){
   if(req.method()==='POST'){
    posts++;const command=req.postDataJSON();expect(command.subject).toBeUndefined();expect(command.requestId).toMatch(/^[a-f0-9-]{36}$/);
    if(mode==='invalid')return route.fulfill({json:{outcome:'Applied'}});
-   const item={...command,requestRef:tracking,state:'Registered',createdAt:'2026-11-06T09:00:00Z'};requests.push(item);
+   const item={...command,requestRef:tracking,state:'Registered',revision:0,reply:null,repliedAt:null,createdAt:'2026-11-06T09:00:00Z'};requests.push(item);
    if(mode==='lost')return route.abort('failed');return route.fulfill({json:{outcome:'Applied',request:item}});
   }
   const id=url.searchParams.get('requestId');return route.fulfill({json:{requests:id?requests.filter(r=>r.requestId===id):requests,nextBefore:null}});
@@ -39,7 +39,7 @@ test('support history uses server cursor and clears stale data on denied refresh
  await page.addInitScript(()=>{window.taranomSession={getAccessToken:()=> 'synthetic-support-token'}});let denied=false;
  await page.route('**/api/v1/me/support-requests*',route=>{
   if(denied)return route.fulfill({status:403});const before=new URL(route.request().url()).searchParams.get('before');
-  const item={requestRef:before?'older-request':'latest-request',requestId:tracking,topic:'privacy',message:body,state:'Registered',createdAt:'2026-11-06T09:00:00Z'};
+  const item={requestRef:before?'older-request':'latest-request',requestId:tracking,topic:'privacy',message:body,state:'Registered',revision:0,reply:null,repliedAt:null,createdAt:'2026-11-06T09:00:00Z'};
   return route.fulfill({json:{requests:[item],nextBefore:before?null:'21'}});
  });await page.goto('/patient-app/support');await page.getByRole('button',{name:'درخواست‌های من',exact:true}).click();await expect(page.locator('.support-history')).toContainText('latest-request');
  await page.getByRole('button',{name:'درخواست‌های قدیمی‌تر'}).click();await expect(page.locator('.support-history')).toContainText('older-request');
@@ -50,4 +50,9 @@ test('support Figma layout and assets at 390px',async({page})=>{
  await expect.poll(()=>page.locator('.appointments-surface img').evaluateAll(imgs=>imgs.every(i=>(i as HTMLImageElement).complete&&(i as HTMLImageElement).naturalWidth>0))).toBeTruthy();
  await expect(page.getByRole('navigation').getByRole('link',{name:'حساب من'})).toHaveAttribute('aria-current','page');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:'/tmp/taranom-support-390.png',fullPage:true});
+});
+test('member history displays the persisted staff answer',async({page})=>{
+ await page.addInitScript(()=>{window.taranomSession={getAccessToken:()=> 'synthetic-member-token'}});
+ await page.route('**/api/v1/me/support-requests*',route=>route.fulfill({json:{requests:[{requestRef:tracking,requestId:tracking,topic:'account',message:body,state:'Answered',createdAt:'2026-11-06T09:00:00Z',revision:1,reply:'پاسخ آزمایشی ثبت‌شده توسط پشتیبانی',repliedAt:'2026-11-06T10:00:00Z'}],nextBefore:null}}));
+ await page.goto('/patient-app/support');await page.getByRole('button',{name:'درخواست‌های من',exact:true}).click();await expect(page.locator('.support-history')).toContainText('پاسخ داده‌شده');await expect(page.locator('.support-reply')).toContainText('پاسخ آزمایشی ثبت‌شده توسط پشتیبانی');
 });

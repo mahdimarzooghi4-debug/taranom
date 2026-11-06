@@ -10,7 +10,7 @@ namespace Taranom.Appointments.Api;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record MemberSupportCommand(Guid RequestId, string Topic, string Message);
 public sealed record MemberSupportRequest(Guid RequestRef, Guid RequestId, string Topic, string Message,
-    string State, DateTimeOffset CreatedAt);
+    string State, DateTimeOffset CreatedAt, long Revision, string? Reply, DateTimeOffset? RepliedAt);
 
 internal static class MemberSupportEndpoints
 {
@@ -29,7 +29,7 @@ internal static class MemberSupportEndpoints
                 return Results.BadRequest(new { code = "INVALID_SUPPORT_QUERY" });
             await using var connection = await db.OpenConnectionAsync(ct);
             await using var command = new NpgsqlCommand("""
-                SELECT sequence_no,request_ref,request_id,topic,message,state,created_at
+                SELECT sequence_no,request_ref,request_id,topic,message,state,created_at,revision,reply,replied_at
                 FROM taranom_member_support_request
                 WHERE issuer=@issuer AND subject=@subject
                   AND (@request_id IS NULL OR request_id=@request_id)
@@ -48,7 +48,9 @@ internal static class MemberSupportEndpoints
                 if (items.Count == 20) { hasMore = true; break; }
                 lastSequence = reader.GetInt64(0);
                 items.Add(new MemberSupportRequest(reader.GetGuid(1), reader.GetGuid(2), reader.GetString(3),
-                    reader.GetString(4), reader.GetString(5), reader.GetFieldValue<DateTimeOffset>(6)));
+                    reader.GetString(4), reader.GetString(5), reader.GetFieldValue<DateTimeOffset>(6),
+                    reader.GetInt64(7), reader.IsDBNull(8) ? null : reader.GetString(8),
+                    reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTimeOffset>(9)));
             }
             return Results.Ok(new { requests = items,
                 nextBefore = hasMore ? lastSequence.ToString(CultureInfo.InvariantCulture) : null });
@@ -74,7 +76,7 @@ internal static class MemberSupportEndpoints
                     (issuer,subject,request_id,request_ref,topic,message,fingerprint,state)
                 VALUES (@issuer,@subject,@request_id,@request_ref,@topic,@message,@fingerprint,'Registered')
                 ON CONFLICT (issuer,subject,request_id) DO NOTHING
-                RETURNING request_ref,request_id,topic,message,state,created_at
+                RETURNING request_ref,request_id,topic,message,state,created_at,revision,reply,replied_at
                 """, connection, transaction))
             {
                 BindIdentity(create, identity.Value);
@@ -93,7 +95,7 @@ internal static class MemberSupportEndpoints
                 }
             }
             await using var existing = new NpgsqlCommand("""
-                SELECT request_ref,request_id,topic,message,state,created_at,fingerprint
+                SELECT request_ref,request_id,topic,message,state,created_at,revision,reply,replied_at,fingerprint
                 FROM taranom_member_support_request
                 WHERE issuer=@issuer AND subject=@subject AND request_id=@request_id
                 """, connection, transaction);
@@ -101,7 +103,7 @@ internal static class MemberSupportEndpoints
             existing.Parameters.AddWithValue("request_id", input.RequestId);
             await using var old = await existing.ExecuteReaderAsync(ct);
             if (!await old.ReadAsync(ct)) throw new InvalidOperationException("Support request receipt missing.");
-            if (!string.Equals(old.GetString(6), fingerprint, StringComparison.Ordinal))
+            if (!string.Equals(old.GetString(9), fingerprint, StringComparison.Ordinal))
                 return Results.Conflict(new { code = "SUPPORT_REQUEST_ID_CONFLICT" });
             return Results.Ok(new { outcome = "Replayed", request = ReadRequest(old) });
         }).RequireAuthorization(policy);
@@ -109,7 +111,9 @@ internal static class MemberSupportEndpoints
 
     private static MemberSupportRequest ReadRequest(NpgsqlDataReader reader) => new(
         reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
-        reader.GetFieldValue<DateTimeOffset>(5));
+        reader.GetFieldValue<DateTimeOffset>(5), reader.GetInt64(6),
+        reader.IsDBNull(7) ? null : reader.GetString(7),
+        reader.IsDBNull(8) ? null : reader.GetFieldValue<DateTimeOffset>(8));
 
     private static (string Issuer, string Subject)? Identity(HttpContext context)
     {

@@ -334,6 +334,7 @@ member.MapPost("/members/{memberRef}/centers/{centerRef}/appointments/{bookingRe
 
 app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
+app.MapSupportOperationsEndpoints();
 
 app.Run();
 
@@ -425,6 +426,22 @@ public sealed class AppointmentDatabaseBootstrap(
                 state text NOT NULL CHECK (state = 'Registered'),
                 created_at timestamptz NOT NULL DEFAULT now(),
                 UNIQUE (issuer,subject,request_id)
+            );
+            ALTER TABLE taranom_member_support_request ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 0;
+            ALTER TABLE taranom_member_support_request ADD COLUMN IF NOT EXISTS reply text NULL;
+            ALTER TABLE taranom_member_support_request ADD COLUMN IF NOT EXISTS replied_at timestamptz NULL;
+            ALTER TABLE taranom_member_support_request DROP CONSTRAINT IF EXISTS taranom_member_support_request_state_check;
+            ALTER TABLE taranom_member_support_request ADD CONSTRAINT taranom_member_support_request_state_check
+                CHECK ((state='Registered' AND revision=0 AND reply IS NULL AND replied_at IS NULL)
+                    OR (state='Answered' AND revision=1 AND reply IS NOT NULL AND replied_at IS NOT NULL));
+            CREATE TABLE IF NOT EXISTS taranom_support_reply_receipt (
+                issuer text NOT NULL,
+                subject text NOT NULL,
+                request_id uuid NOT NULL,
+                request_ref uuid NOT NULL REFERENCES taranom_member_support_request(request_ref),
+                fingerprint text NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (issuer,subject,request_id)
             );
             CREATE INDEX IF NOT EXISTS ix_taranom_member_support_owner
                 ON taranom_member_support_request (issuer,subject,sequence_no DESC);

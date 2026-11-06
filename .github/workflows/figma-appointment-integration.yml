@@ -4,6 +4,9 @@ on:
     paths:
       - 'apps/member-web/**'
       - 'apps/center-web/**'
+      - 'apps/ops-web/**'
+      - 'src/Taranom.MemberGovernance/PanelAccessPolicy.cs'
+      - 'src/Taranom.PanelAccess.AspNetCore/**'
       - 'src/Taranom.Appointments.Api/**'
       - 'src/Taranom.AppointmentScheduling*/**'
       - 'tests/Taranom.MemberGovernance.Tests/Appointment*'
@@ -26,12 +29,15 @@ jobs:
           node-version: '22'
       - run: npm ci --prefix apps/member-web --no-audit --no-fund
       - run: npm ci --prefix apps/center-web --no-audit --no-fund
+      - run: npm ci --prefix apps/ops-web --no-audit --no-fund
+      - run: npm run check --prefix apps/ops-web
       - run: npm run test:appointments --prefix apps/member-web
       - run: npm run check --prefix apps/member-web
       - run: npm run check --prefix apps/center-web
       - run: npx --prefix apps/member-web playwright install --with-deps chromium
       - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts figma-booking-flow.spec.ts patient-web-appointment-api.spec.ts patient-profile-api.spec.ts patient-support-api.spec.ts
       - run: npm run test:e2e --prefix apps/center-web -- figma-appointment-api.spec.ts
+      - run: npm run test:e2e --prefix apps/ops-web -- --config playwright.support.config.ts
   backend-postgres-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -67,3 +73,6 @@ jobs:
           -class Taranom.MemberGovernance.Tests.AppointmentSchedulingTests
           -class Taranom.MemberGovernance.Tests.MemberProfileApiHttpTests
           -class Taranom.MemberGovernance.Tests.MemberSupportApiHttpTests
+          -class Taranom.MemberGovernance.Tests.PanelAccessPolicyTests
+          -class Taranom.MemberGovernance.Tests.PanelAccessEndpointConventionTests
+          -class Taranom.MemberGovernance.Tests.PanelAccessAuthorizationHandlerTests

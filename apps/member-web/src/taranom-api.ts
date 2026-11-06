@@ -66,9 +66,9 @@ export async function saveMyProfile(profile:MemberProfile,requestId:string){
 
 export type SupportTopic='account'|'group'|'appointments'|'privacy';
 export type SupportCommand={requestId:string;topic:SupportTopic;message:string};
-export type SupportRequest=SupportCommand&{requestRef:string;state:'Registered';createdAt:string};
+export type SupportRequest=SupportCommand&{requestRef:string;state:'Registered'|'Answered';createdAt:string;revision:number;reply:string|null;repliedAt:string|null};
 export type SupportPage={requests:SupportRequest[];nextBefore:string|null};
-const validSupport=(r:SupportRequest)=>r&&typeof r.requestRef==='string'&&r.requestRef.length>0&&typeof r.requestId==='string'&&['account','group','appointments','privacy'].includes(r.topic)&&typeof r.message==='string'&&r.state==='Registered'&&typeof r.createdAt==='string'&&Number.isFinite(Date.parse(r.createdAt));
+const validSupport=(r:SupportRequest)=>r&&typeof r.requestRef==='string'&&r.requestRef.length>0&&typeof r.requestId==='string'&&['account','group','appointments','privacy'].includes(r.topic)&&typeof r.message==='string'&&((r.state==='Registered'&&r.revision===0&&r.reply===null&&r.repliedAt===null)||(r.state==='Answered'&&r.revision===1&&typeof r.reply==='string'&&r.reply.trim().length>=10&&typeof r.repliedAt==='string'&&Number.isFinite(Date.parse(r.repliedAt))))&&typeof r.createdAt==='string'&&Number.isFinite(Date.parse(r.createdAt));
 export async function getMySupportRequests(options:{before?:string;requestId?:string}={},signal?:AbortSignal):Promise<SupportPage>{
  const query=new URLSearchParams(options);
  const result=await api<SupportPage>('/api/v1/me/support-requests'+(query.size?'?'+query:''),{signal});
