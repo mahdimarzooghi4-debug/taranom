@@ -386,6 +386,7 @@ app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
 app.MapSupportOperationsEndpoints();
 app.MapAdminCenterRegistryEndpoints();
+app.MapCenterManagerRequestEndpoints(IdentityAppointmentScopesPolicy);
 
 app.Run();
 
@@ -595,7 +596,30 @@ public sealed class AppointmentDatabaseBootstrap(
                 created_at timestamptz NOT NULL DEFAULT now(),
                 PRIMARY KEY (center_ref,actor_issuer,actor_subject,request_id)
             );
-            CREATE OR REPLACE FUNCTION taranom_reject_center_directory_audit_mutation()
+            CREATE TABLE IF NOT EXISTS taranom_center_manager_request (
+                request_id uuid PRIMARY KEY,
+                issuer text NOT NULL,
+                subject text NOT NULL,
+                center_ref text NOT NULL REFERENCES taranom_canonical_center(center_ref),
+                reason text NOT NULL CHECK (char_length(reason) BETWEEN 10 AND 500),
+                fingerprint char(64) NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE (issuer, subject, center_ref)
+            );
+            CREATE TABLE IF NOT EXISTS taranom_center_manager_request_review (
+                request_id uuid PRIMARY KEY REFERENCES taranom_center_manager_request(request_id),
+                reviewer_issuer text NOT NULL,
+                reviewer_subject text NOT NULL,
+                command_id uuid NOT NULL,
+                decision text NOT NULL CHECK (decision IN
+                    ('REVIEWED_PENDING_VERIFICATION','DECLINED')),
+                reason text NOT NULL CHECK (char_length(reason) BETWEEN 10 AND 500),
+                reviewed_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE (reviewer_issuer,reviewer_subject,command_id)
+            );
+            CREATE INDEX IF NOT EXISTS ix_taranom_manager_requests_owner
+                ON taranom_center_manager_request(issuer,subject,request_id);
+                        CREATE OR REPLACE FUNCTION taranom_reject_center_directory_audit_mutation()
             RETURNS trigger
             LANGUAGE plpgsql
             AS '
@@ -605,7 +629,27 @@ public sealed class AppointmentDatabaseBootstrap(
                 RETURN NULL;
             END;
             ';
-            DROP TRIGGER IF EXISTS trg_taranom_canonical_center_update_delete
+            DROP TRIGGER IF EXISTS trg_taranom_manager_request_history_write
+                ON taranom_center_manager_request;
+            CREATE TRIGGER trg_taranom_manager_request_history_write
+                BEFORE UPDATE OR DELETE ON taranom_center_manager_request
+                FOR EACH ROW EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
+            DROP TRIGGER IF EXISTS trg_taranom_manager_request_history_truncate
+                ON taranom_center_manager_request;
+            CREATE TRIGGER trg_taranom_manager_request_history_truncate
+                BEFORE TRUNCATE ON taranom_center_manager_request
+                FOR EACH STATEMENT EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
+            DROP TRIGGER IF EXISTS trg_taranom_manager_review_history_write
+                ON taranom_center_manager_request_review;
+            CREATE TRIGGER trg_taranom_manager_review_history_write
+                BEFORE UPDATE OR DELETE ON taranom_center_manager_request_review
+                FOR EACH ROW EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
+            DROP TRIGGER IF EXISTS trg_taranom_manager_review_history_truncate
+                ON taranom_center_manager_request_review;
+            CREATE TRIGGER trg_taranom_manager_review_history_truncate
+                BEFORE TRUNCATE ON taranom_center_manager_request_review
+                FOR EACH STATEMENT EXECUTE FUNCTION taranom_reject_center_directory_audit_mutation();
+                        DROP TRIGGER IF EXISTS trg_taranom_canonical_center_update_delete
                 ON taranom_canonical_center;
             CREATE TRIGGER trg_taranom_canonical_center_update_delete
                 BEFORE UPDATE OR DELETE ON taranom_canonical_center
