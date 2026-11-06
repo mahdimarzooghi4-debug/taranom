@@ -10,6 +10,17 @@ type ReviewResult={outcome:'Applied'|'Replayed';requestId:string;state:ReviewSta
  managerAssigned:false};
 type ReviewCommand={commandId:string;decision:Exclude<ReviewState,'PENDING_REVIEW'>;reason:string};
 type PendingReview={requestId:string;command:ReviewCommand};
+type CaseWorkspace={
+ requestId:string;
+ center:{centerRef:string;displayName:string;city:string;definedByIssuer:string;
+  definedBySubject:string;recordState:'ADMIN_DEFINED_UNVERIFIED';licensed:false;published:false};
+ applicant:{issuer:string;subject:string;submittedReason:string;submittedAt:string};
+ review:{state:ReviewState;reason:string|null;reviewerIssuer:string|null;
+  reviewerSubject:string|null;reviewedAt:string|null};
+ otherApplicantClaims:number;
+ representationEvidence:{sourceStatus:'NOT_CONNECTED';authorityVerified:false;criteriaDefined:false};
+ associationGateRequired:true;managerAssignedByThisWorkflow:false;
+};
 class ManagerAdminError extends Error{
  constructor(readonly status:number){super(status===401?'نشست ورود معتبر برای مدیریت الزامی است.':
   status===403?'مجوز بررسی درخواست مدیران مرکز را ندارید.':
@@ -53,10 +64,41 @@ function validate(raw:unknown):Page{
   throw new Error('پاسخ صف بررسی درخواست‌های مدیریت مرکز معتبر نیست.');
  return p;
 }
+function validateWorkspace(raw:unknown,expected:ManagerClaim):CaseWorkspace{
+ const w=raw as CaseWorkspace;
+ if(!w||w.requestId!==expected.requestId||!w.center||
+  w.center.centerRef!==expected.centerRef||
+  w.center.recordState!=='ADMIN_DEFINED_UNVERIFIED'||w.center.licensed!==false||
+  w.center.published!==false||
+  typeof w.center.displayName!=='string'||!w.center.displayName.trim()||
+  typeof w.center.city!=='string'||!w.center.city.trim()||
+  typeof w.center.definedByIssuer!=='string'||
+  typeof w.center.definedBySubject!=='string'||
+  !w.applicant||w.applicant.issuer!==expected.applicantIssuer||
+  w.applicant.subject!==expected.applicantSubject||
+  w.applicant.submittedReason!==expected.reason||
+  !Number.isFinite(Date.parse(w.applicant.submittedAt))||
+  !w.review||w.review.state!==expected.state||
+  !states.includes(w.review.state)||
+  !(w.review.reason===null||typeof w.review.reason==='string')||
+  !(w.review.reviewerIssuer===null||typeof w.review.reviewerIssuer==='string')||
+  !(w.review.reviewerSubject===null||typeof w.review.reviewerSubject==='string')||
+  !(w.review.reviewedAt===null||typeof w.review.reviewedAt==='string'&&
+    Number.isFinite(Date.parse(w.review.reviewedAt)))||
+  !Number.isSafeInteger(w.otherApplicantClaims)||w.otherApplicantClaims<0||
+  !w.representationEvidence||w.representationEvidence.sourceStatus!=='NOT_CONNECTED'||
+  w.representationEvidence.authorityVerified!==false||
+  w.representationEvidence.criteriaDefined!==false||
+  w.associationGateRequired!==true||w.managerAssignedByThisWorkflow!==false)
+  throw new Error('پرونده مدیر مرکز معتبر نیست یا در زمان بررسی تغییر کرده است؛ فهرست را بازخوانی کنید.');
+ return w;
+}
 export function AdminManagerRequests(){
  const [list,setList]=useState<Page|null>(null),[after,setAfter]=useState<string|null>(null);
  const [refresh,setRefresh]=useState(0),[loading,setLoading]=useState(true);
  const [selected,setSelected]=useState<string|null>(null);
+ const [workspace,setWorkspace]=useState<CaseWorkspace|null>(null);
+ const [workspaceLoading,setWorkspaceLoading]=useState(false);
  const [decision,setDecision]=useState<ReviewCommand['decision']>('REVIEWED_PENDING_VERIFICATION');
  const [reason,setReason]=useState(''),[saving,setSaving]=useState(false);
  const [uncertain,setUncertain]=useState(false),[error,setError]=useState(''),[note,setNote]=useState('');
@@ -70,7 +112,20 @@ export function AdminManagerRequests(){
    .finally(()=>{if(!controller.signal.aborted)setLoading(false)});
   return()=>controller.abort();
  },[after,refresh]);
- const reload=()=>{setAfter(null);setRefresh(i=>i+1)};
+ useEffect(()=>{
+  const current=selected?list?.requests.find(r=>r.requestId===selected):undefined;
+  if(!current){setWorkspace(null);setWorkspaceLoading(false);return;}
+  const controller=new AbortController();
+  setWorkspace(null);setWorkspaceLoading(true);
+  api('/'+encodeURIComponent(current.requestId)+'/workspace',{signal:controller.signal})
+   .then(raw=>validateWorkspace(raw,current))
+   .then(item=>{if(!controller.signal.aborted)setWorkspace(item)})
+   .catch(e=>{if(!controller.signal.aborted)
+    setError(e instanceof Error?e.message:'دریافت پرونده مدیر مرکز ناموفق بود.')})
+   .finally(()=>{if(!controller.signal.aborted)setWorkspaceLoading(false)});
+  return()=>controller.abort();
+ },[selected,list]);
+ const reload=()=>{setSelected(null);setWorkspace(null);setAfter(null);setRefresh(i=>i+1)};
  function choose(item:ManagerClaim){
   if(busy.current||uncertain)return;
   setSelected(item.requestId);setDecision('REVIEWED_PENDING_VERIFICATION');
@@ -81,6 +136,9 @@ export function AdminManagerRequests(){
   const item=list?.requests.find(r=>r.requestId===selected);
   const explanation=reason.trim();
   if(busy.current||uncertain||!item||item.state!=='PENDING_REVIEW'||
+    workspace?.requestId!==item.requestId||
+    workspace.review.state!=='PENDING_REVIEW'||
+    workspace.center.centerRef!==item.centerRef||
     explanation.length<10||explanation.length>500)return;
   const command:ReviewCommand={commandId:crypto.randomUUID(),decision,reason:explanation};
   pending.current={requestId:item.requestId,command};
@@ -127,7 +185,8 @@ export function AdminManagerRequests(){
     e instanceof Error?e.message:'بازخوانی وضعیت ناموفق بود.');
   }finally{busy.current=false;setSaving(false)}
  }
- const active=list?.requests.find(r=>r.requestId===selected&&r.state==='PENDING_REVIEW');
+ const active=list?.requests.find(r=>r.requestId===selected&&r.state==='PENDING_REVIEW'&&
+  workspace?.requestId===r.requestId&&workspace.review.state==='PENDING_REVIEW');
  return <section className="manager-admin" dir="rtl">
   <section className="figma-card manager-admin-alert" role="note">
    <h2>بررسی درخواست مدیران مراکز</h2>
@@ -155,6 +214,23 @@ export function AdminManagerRequests(){
    {list.nextAfter&&<button type="button" disabled={saving||loading||uncertain}
     onClick={()=>setAfter(list.nextAfter)}>صفحه بعد</button>}</>}
   </section>
+  {selected&&workspaceLoading&&
+   <p role="status">در حال بارگذاری پرونده مرجع مرکز…</p>}
+  {workspace&&<section className="figma-card manager-admin-workspace">
+   <h2>پرونده مرجع برای بررسی انسانی</h2>
+   <p>مرکز تعریف‌شده توسط ادمین: <strong>{workspace.center.displayName}</strong>،
+    شهر اعلامی: <strong>{workspace.center.city}</strong></p>
+   <p>شناسه مرکز: <bdi>{workspace.center.centerRef}</bdi></p>
+   <p>صادرکننده هویت متقاضی: <bdi>{workspace.applicant.issuer}</bdi>،
+    شناسه حساب متقاضی: <bdi>{workspace.applicant.subject}</bdi></p>
+   <p>شرح درخواست: {workspace.applicant.submittedReason}</p>
+   <p>تعداد درخواست‌های دیگر برای این مرکز: {workspace.otherApplicantClaims}</p>
+   {workspace.otherApplicantClaims>0&&
+    <p role="note">چند متقاضی برای همین مرکز وجود دارند؛ این موضوع باید به‌صورت انسانی بررسی شود.</p>}
+   <p className="manager-admin-no-proof">مرجع مستقل احراز اختیار سازمانی متصل نیست و معیار
+    تصویب انتساب مدیر تعریف نشده است. اطلاعات مرکز نیز تأیید صلاحیت پزشکی یا انتشار نیست.</p>
+   <p>نتیجه این بررسی به‌تنهایی هیچ مجوز مدیریتی صادر نمی‌کند.</p>
+  </section>}
   {active&&<form className="figma-card manager-admin-review" onSubmit={e=>void review(e)}>
    <h2>ثبت نتیجه بررسی درخواست</h2>
    <p>مرجع درخواست: <bdi>{active.requestId}</bdi></p>

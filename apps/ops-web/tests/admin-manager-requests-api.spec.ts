@@ -8,6 +8,20 @@ const request=(state='PENDING_REVIEW',reviewReason:string|null=null)=>({
  submittedAt:'2026-11-06T11:00:00Z',state,
  reviewReason,reviewedAt:reviewReason?'2026-11-06T12:00:00Z':null,managerAssigned:false
 });
+const workspace=(claim= request(),others=2)=>({
+ requestId:claim.requestId,
+ center:{centerRef:claim.centerRef,displayName:'مرکز مرجع ادمین',city:'شیراز',
+  definedByIssuer:'https://test.invalid/realms/taranom',definedBySubject:'admin-creator',
+  recordState:'ADMIN_DEFINED_UNVERIFIED',licensed:false,published:false},
+ applicant:{issuer:claim.applicantIssuer,subject:claim.applicantSubject,
+  submittedReason:claim.reason,submittedAt:claim.submittedAt},
+ review:{state:claim.state,reason:claim.reviewReason,reviewerIssuer:null,
+  reviewerSubject:null,reviewedAt:claim.reviewedAt},
+ otherApplicantClaims:others,
+ representationEvidence:{sourceStatus:'NOT_CONNECTED',
+  authorityVerified:false,criteriaDefined:false},
+ associationGateRequired:true,managerAssignedByThisWorkflow:false
+});
 async function adminSession(page:Page){
  await page.addInitScript(()=>{window.taranomSession={getAccessToken:()=> 'reviewing-admin-test-token'}});
 }
@@ -16,6 +30,8 @@ test('Admin reviews manager request but grants no authority',async({page})=>{
  await page.route(path,route=>{
   const req=route.request();
   expect(req.headers().authorization).toBe('Bearer reviewing-admin-test-token');
+  if(req.method()==='GET'&&new URL(req.url()).pathname.endsWith('/workspace'))
+   return route.fulfill({json:workspace(request(state,reason))});
   if(req.method()==='GET')return route.fulfill({json:{
    requests:[request(state,reason)],nextAfter:null,associationGateRequired:true
   }});
@@ -33,6 +49,9 @@ test('Admin reviews manager request but grants no authority',async({page})=>{
  await page.goto('/admin/center-manager-requests');
  await expect(page.getByText('I claim authorization to manage this center')).toBeVisible();
  await page.getByRole('button',{name:'بررسی درخواست'}).click();
+ await expect(page.getByText('مرکز مرجع ادمین')).toBeVisible();
+ await expect(page.getByText('تعداد درخواست‌های دیگر برای این مرکز: 2')).toBeVisible();
+ await expect(page.getByText('مرجع مستقل احراز اختیار سازمانی متصل نیست',{exact:false})).toBeVisible();
  await page.getByLabel('علت ثبت‌شده توسط ادمین')
   .fill('Waiting for independent proof of identity and authority');
  await page.getByRole('button',{name:'ثبت بررسی انسانی بدون صدور دسترسی'}).click();
@@ -45,6 +64,8 @@ test('Admin reviews manager request but grants no authority',async({page})=>{
 test('Admin may decline manager claim with accountable reason',async({page})=>{
  await adminSession(page);let decision='';
  await page.route(path,route=>{
+  if(route.request().method()==='GET'&&new URL(route.request().url()).pathname.endsWith('/workspace'))
+   return route.fulfill({json:workspace()});
   if(route.request().method()==='POST'){
    decision=route.request().postDataJSON().decision;
    return route.fulfill({json:{outcome:'Applied',requestId:id,
@@ -95,6 +116,8 @@ test('lost review response recovers exact reviewer command, not a matching list 
    posts++;requestCommand=req.postDataJSON().commandId;
    return route.abort('failed');
   }
+  if(url.pathname.endsWith('/workspace'))
+   return route.fulfill({json:workspace()});
   if(url.pathname.includes('/review-receipts/')){
    reads++;
    expect(url.pathname).toContain('/'+id+'/review-receipts/'+requestCommand);
@@ -115,4 +138,38 @@ test('lost review response recovers exact reviewer command, not a matching list 
  await expect(page.getByRole('status').filter({hasText:'رسید همان بررسی'})).toBeVisible();
  expect(posts).toBe(1);expect(reads).toBe(1);
  expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+});
+
+test('Admin cannot review when trusted workspace is unavailable or mismatched',async({page})=>{
+ await adminSession(page);let posts=0;
+ await page.route(path,route=>{
+  const req=route.request();
+  if(req.method()==='POST')posts++;
+  if(req.url().endsWith('/workspace'))return route.fulfill({json:{
+   ...workspace(),center:{...workspace().center,centerRef:'center-'+'c'.repeat(32)}
+  }});
+  return route.fulfill({json:{requests:[request()],nextAfter:null,associationGateRequired:true}});
+ });
+ await page.goto('/admin/center-manager-requests');
+ await page.getByRole('button',{name:'بررسی درخواست'}).click();
+ await expect(page.getByRole('alert')).toContainText('پرونده مدیر مرکز معتبر نیست');
+ await expect(page.getByRole('button',{name:'ثبت بررسی انسانی بدون صدور دسترسی'})).toHaveCount(0);
+ expect(posts).toBe(0);
+});
+test('Admin cannot review when verification status is falsely claimed',async({page})=>{
+ await adminSession(page);let posts=0;
+ await page.route(path,route=>{
+  const req=route.request();
+  if(req.method()==='POST')posts++;
+  if(req.url().endsWith('/workspace'))return route.fulfill({json:{
+   ...workspace(),representationEvidence:{sourceStatus:'CONNECTED',
+    authorityVerified:true,criteriaDefined:true}
+  }});
+  return route.fulfill({json:{requests:[request()],nextAfter:null,associationGateRequired:true}});
+ });
+ await page.goto('/admin/center-manager-requests');
+ await page.getByRole('button',{name:'بررسی درخواست'}).click();
+ await expect(page.getByRole('alert')).toContainText('پرونده مدیر مرکز معتبر نیست');
+ await expect(page.getByRole('button',{name:'ثبت بررسی انسانی بدون صدور دسترسی'})).toHaveCount(0);
+ expect(posts).toBe(0);
 });

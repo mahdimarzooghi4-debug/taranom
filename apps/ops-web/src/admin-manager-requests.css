@@ -17,3 +17,8 @@
 .manager-admin-review label{display:grid;gap:7px}
 .manager-admin-review textarea,.manager-admin-review select{width:100%;box-sizing:border-box;
  padding:10px;border:1px solid #b5c9d8;border-radius:9px;font:inherit;background:#fff}
+
+.manager-admin-workspace{display:grid;gap:10px}
+.manager-admin-workspace p{line-height:1.85;margin:0;overflow-wrap:anywhere}
+.manager-admin-workspace .manager-admin-no-proof{
+ border:1px solid #d4c5a2;background:#fff8e9;padding:12px;border-radius:10px}

@@ -81,3 +81,15 @@ trusted provider/organizational authority integration or approval rule
 exists. It never creates or promotes a manager grant and must not be
 mistaken for an adjudication record. The current one-shot review
 and independent authority verification boundary are unchanged.
+
+## Admin UI case-binding gate
+
+The Admin review form now requires successful receipt of the exact
+Admin-only workspace. The browser verifies case UUID, canonical center,
+OIDC applicant issuer/subject, original reason and immutable review
+state against the queue record. Any mismatch or asserted verified
+authority from a non-authoritative response blocks the review UI.
+The reviewer sees canonical center name/city, competing-claim count,
+and the explicit missing-identity-source and missing-approval-criteria
+gates. This UI verification is defense in depth; backend authorization
+and immutable review conflict handling remain authoritative.
