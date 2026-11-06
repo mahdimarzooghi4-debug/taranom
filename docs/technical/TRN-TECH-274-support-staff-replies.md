@@ -13,3 +13,5 @@ Existing databases are upgraded with additive reply/revision columns plus replac
 Verification: focused browser coverage includes staff response/readback, missing session, forbidden access, stale write, lost-response reconciliation, and patient answer visibility. PostgreSQL HTTP tests include owner isolation, central scope/freshness, concurrent exact replay, changed command rejection, competing writes and missing ticket. Capability catalog tests include the ninth capability.
 
 No payment, external notification, production identity activation, deployment or merge is performed by this increment.
+
+Final CI exposed concurrent first-use appointment DDL in independent PostgreSQL test classes. Appointment store initialization now holds a transaction advisory lock around catalog creation, avoiding the cold-database pg_type duplicate race without serializing normal schedule operations.
