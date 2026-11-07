@@ -11,6 +11,7 @@ export const patientServices={
  account:{title:'حساب من',description:'اطلاعات و تنظیمات حساب',href:'/patient-app/account'},
  profile:{title:'اطلاعات فردی',description:'مشخصات اعلامی شما',href:'/patient-app/personal-info'},
  notifications:{title:'اعلان‌ها',description:'اعلان‌های ثبت‌شدهٔ حساب',href:'/patient-app/notifications'},
+ groupDrafts:{title:'پیش‌نویس‌های دعوت',description:'اطلاعات اولیهٔ دعوت؛ بدون ارسال',href:'/patient-app/group-members'},
  support:{title:'پشتیبانی',description:'ثبت درخواست و مشاهدهٔ پاسخ',href:'/patient-app/support'},
 } as const;
 export type PatientServiceKey=keyof typeof patientServices;

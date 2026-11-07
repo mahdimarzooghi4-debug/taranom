@@ -3,7 +3,7 @@ import {AppointmentPage} from './figma-booking';
 import {patientServices,type PatientServiceKey} from './patient-services';
 import './patient-all-services.css';
 const sections:{title:string;keys:PatientServiceKey[]}[]=[{title:'حساب و عضویت',keys:['membership','finance']},{title:'خدمات درمانی',keys:['guide','booking','records','referrals']}];
-const accountKeys:PatientServiceKey[]=['account','profile','appointments','notifications','support'];
+const accountKeys:PatientServiceKey[]=['account','profile','groupDrafts','appointments','notifications','support'];
 export function PatientAllServices(){
  const [expanded,setExpanded]=useState(false);
  useEffect(()=>{document.title='ترنم | همهٔ خدمات'},[]);

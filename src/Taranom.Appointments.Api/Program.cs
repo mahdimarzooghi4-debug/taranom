@@ -390,6 +390,7 @@ app.MapGet("/api/v1/me/available-appointment-centers", async (
 
 app.MapCenterDirectoryDraftEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
+app.MapMemberGroupDraftEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
 app.MapSupportOperationsEndpoints();
 app.MapMemberNotificationEndpoints(IdentityAppointmentScopesPolicy);
@@ -523,6 +524,23 @@ public sealed class AppointmentDatabaseBootstrap(
             );
             CREATE INDEX IF NOT EXISTS ix_taranom_member_support_owner
                 ON taranom_member_support_request (issuer,subject,sequence_no DESC);
+            CREATE TABLE IF NOT EXISTS taranom_member_group_invite_draft (
+                sequence_no bigserial PRIMARY KEY,
+                issuer text NOT NULL,
+                subject text NOT NULL,
+                draft_ref uuid NOT NULL UNIQUE,
+                request_id uuid NOT NULL,
+                method text NOT NULL CHECK (method IN ('NewRegistration','ExistingMember')),
+                recipient_label text NOT NULL,
+                fingerprint text NOT NULL,
+                state text NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                withdrawn_at timestamptz NULL,
+                CHECK ((state='Draft' AND withdrawn_at IS NULL) OR (state='Withdrawn' AND withdrawn_at IS NOT NULL)),
+                UNIQUE (issuer,subject,request_id)
+            );
+            CREATE INDEX IF NOT EXISTS ix_taranom_group_draft_owner
+                ON taranom_member_group_invite_draft(issuer,subject,sequence_no DESC);
             CREATE TABLE IF NOT EXISTS taranom_member_profile (
                 issuer text NOT NULL,
                 subject text NOT NULL,

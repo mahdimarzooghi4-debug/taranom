@@ -110,3 +110,21 @@ export async function markMyNotificationRead(notificationRef:string){
  const result=await api<{notificationRef:string;readAt:string}>('/api/v1/me/notifications/'+encodeURIComponent(notificationRef)+'/read',{method:'POST'});
  if(!result||result.notificationRef!==notificationRef||typeof result.readAt!=='string'||!Number.isFinite(Date.parse(result.readAt)))throw new Error('خواندن اعلان هنوز قابل تأیید نیست.');return result;
 }
+
+export type GroupDraftMethod='NewRegistration'|'ExistingMember';
+export type GroupDraftCommand={requestId:string;method:GroupDraftMethod;recipientLabel:string};
+export type GroupDraft=GroupDraftCommand&{draftRef:string;state:'Draft'|'Withdrawn';createdAt:string;withdrawnAt:string|null};
+export type GroupDraftPage={drafts:GroupDraft[];nextBefore:string|null};
+const validGroupDraft=(d:GroupDraft)=>d&&notificationId(d.draftRef)&&notificationId(d.requestId)&&['NewRegistration','ExistingMember'].includes(d.method)&&typeof d.recipientLabel==='string'&&d.recipientLabel.trim().length>=2&&typeof d.createdAt==='string'&&Number.isFinite(Date.parse(d.createdAt))&&((d.state==='Draft'&&d.withdrawnAt===null)||(d.state==='Withdrawn'&&typeof d.withdrawnAt==='string'&&Number.isFinite(Date.parse(d.withdrawnAt))));
+export async function getMyGroupDrafts(options:{before?:string;requestId?:string;draftRef?:string}={},signal?:AbortSignal):Promise<GroupDraftPage>{
+ const query=new URLSearchParams(options),result=await api<GroupDraftPage>('/api/v1/me/group-invitation-drafts'+(query.size?'?'+query:''),{signal});
+ if(!result||!Array.isArray(result.drafts)||!result.drafts.every(validGroupDraft)||!(result.nextBefore===null||typeof result.nextBefore==='string'&&/^[1-9]\d*$/.test(result.nextBefore)))throw new Error('پاسخ پیش‌نویس‌های دعوت معتبر نیست.');return result;
+}
+export async function createMyGroupDraft(command:GroupDraftCommand){
+ const result=await api<{outcome:string;draft:GroupDraft}>('/api/v1/me/group-invitation-drafts',{method:'POST',body:JSON.stringify(command)});
+ if(!result||!['Applied','Replayed'].includes(result.outcome)||!validGroupDraft(result.draft)||result.draft.requestId!==command.requestId||result.draft.method!==command.method||result.draft.recipientLabel!==command.recipientLabel.trim())throw new Error('ذخیرهٔ پیش‌نویس هنوز قابل تأیید نیست.');return result.draft;
+}
+export async function withdrawMyGroupDraft(draftRef:string){
+ const result=await api<{draft:GroupDraft}>('/api/v1/me/group-invitation-drafts/'+encodeURIComponent(draftRef)+'/withdraw',{method:'POST'});
+ if(!result||!validGroupDraft(result.draft)||result.draft.draftRef!==draftRef||result.draft.state!=='Withdrawn')throw new Error('بایگانی پیش‌نویس هنوز قابل تأیید نیست.');return result.draft;
+}
