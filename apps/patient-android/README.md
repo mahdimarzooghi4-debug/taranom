@@ -6,7 +6,7 @@ an up-to-date Android System WebView. Target/compile API 35. Uses the existing
 Taranom logo and a persistent Persian preview banner. No iOS project is created.
 
 The current member web bundle is included in the APK, starting at `/patient-app`.
-Existing synthetic labels remain visible. Protected account/appointment/support
+The connected home fails closed without a session; remaining preview routes retain their synthetic labels. Protected account/appointment/support
 routes require the real host session and therefore report it missing. There is
 no fake bearer session, OTP, identity verification, membership or clinical data.
 There is deliberately no INTERNET or other sensitive Android permission, native

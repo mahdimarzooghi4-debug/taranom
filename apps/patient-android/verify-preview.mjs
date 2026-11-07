@@ -30,8 +30,8 @@ try{
   const type=path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.html')?'text/html':path.endsWith('.svg')?'image/svg+xml':path.endsWith('.png')?'image/png':path.endsWith('.woff2')?'font/woff2':'application/manifest+json';
   try{return await route.fulfill({body:await readFile(join(stage,path)),contentType:type,headers:{'Cache-Control':'no-store'}})}catch{return route.fulfill({status:404,body:''})}
  });
- await page.goto('https://appassets.androidplatform.net/patient-app');await page.getByText('حساب نمونه · اطلاعات نمایشی',{exact:true}).waitFor();
- assert(await page.locator('.mobile-app-header img').evaluate(i=>i.complete&&i.naturalWidth>0));
+ await page.goto('https://appassets.androidplatform.net/patient-app');await page.getByRole('heading',{name:'سلام',exact:true}).waitFor();await page.getByRole('alert').filter({hasText:'نشست ورود معتبر'}).waitFor();
+ assert(await page.locator('.appointments-logo').evaluate(i=>i.complete&&i.naturalWidth>0));
  await page.getByRole('navigation',{name:'ناوبری اصلی'}).getByRole('link',{name:/حساب من/}).click();await page.getByRole('heading',{name:'حساب من',exact:true}).waitFor();await page.getByRole('alert').filter({hasText:'نشست ورود'}).waitFor();
  await page.getByRole('link',{name:'پشتیبانی',exact:true}).click();await page.getByRole('heading',{name:'پشتیبانی ترنم',exact:true}).waitFor();
  assert.deepEqual(errors,[]);console.log('Bundled home, logo, account and support render; absent session fails closed; no page errors');
