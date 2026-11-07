@@ -31,7 +31,7 @@ test('lost recipient response reconciles same authenticated recipient without du
 });
 test('recipient can decline without consenting and revoked link offers no response controls',async({page})=>{
  const writes=await receiver(page,'decline');await page.goto('/patient-app/join-group#'+secret);await page.getByRole('button',{name:'بررسی دعوت',exact:true}).click();await page.getByRole('button',{name:'رد دعوت',exact:true}).click();await expect(page.getByRole('region',{name:'وضعیت دعوت'})).toContainText('دعوت رد شد');expect(writes()).toBe(1);
- await page.goto('/patient-app/account');await receiver(page,'revoked');await page.goto('/patient-app/join-group#'+secret);await page.getByRole('button',{name:'بررسی دعوت',exact:true}).click();await expect(page.getByRole('region',{name:'وضعیت دعوت'})).toContainText('پیوند لغو شده');await expect(page.getByRole('button',{name:'پذیرش دعوت',exact:true})).toHaveCount(0);
+ await receiver(page,'revoked');await page.goto('/patient-app/join-group#'+secret);await page.getByRole('button',{name:'بررسی دعوت',exact:true}).click();await expect(page.getByRole('region',{name:'وضعیت دعوت'})).toContainText('پیوند لغو شده');await expect(page.getByRole('button',{name:'پذیرش دعوت',exact:true})).toHaveCount(0);
 });
 test('malformed invitation cannot show active membership or acceptance buttons',async({page})=>{
  await receiver(page,'malformed');await page.goto('/patient-app/join-group#'+secret);await page.getByRole('button',{name:'بررسی دعوت',exact:true}).click();await expect(page.getByRole('alert')).toContainText('قابل تأیید نیست');await expect(page.getByRole('region',{name:'وضعیت دعوت'})).toHaveCount(0);
