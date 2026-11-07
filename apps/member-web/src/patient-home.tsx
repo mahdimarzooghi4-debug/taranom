@@ -1,3 +1,4 @@
+import {patientServices} from './patient-services';
 import {useEffect,useState} from 'react';
 import {AppointmentPage} from './figma-booking';
 import {AppointmentApiError,getMyAppointments,getMyNotifications,getMyProfile,type MemberProfile} from './taranom-api';
@@ -6,12 +7,12 @@ type Overview={profile:MemberProfile|null;upcoming:number|null;unread:number|und
 const empty:Overview={profile:null,upcoming:null,unread:undefined,errors:[]};
 const number=(n:number)=>new Intl.NumberFormat('fa-IR').format(n);
 const tiles=[
- {label:'نوبت‌های من',icon:'calendar',href:'/patient-app/appointments'},
- {label:'گرفتن نوبت',icon:'calendar',href:'/patient-app/booking'},
- {label:'پروندهٔ سلامت',icon:'record'},
- {label:'نسخه‌های من',icon:'prescription'},
- {label:'ارجاع درمانی',icon:'referral'},
- {label:'حمایت درمانی',icon:'wallet'},
+ {label:'نوبت‌های من',icon:'calendar',href:patientServices.appointments.href},
+ {label:'گرفتن نوبت',icon:'calendar',href:patientServices.booking.href},
+ {label:'پروندهٔ سلامت',icon:'record',href:patientServices.records.href},
+ {label:'نسخه‌های من',icon:'prescription',href:patientServices.prescriptions.href},
+ {label:'ارجاع درمانی',icon:'referral',href:patientServices.referrals.href},
+ {label:'حمایت درمانی',icon:'wallet',href:patientServices.finance.href},
 ];
 export function PatientHome(){
  const [overview,setOverview]=useState<Overview>(empty),[loading,setLoading]=useState(true),[attempt,setAttempt]=useState(0),[servicesOpen,setServicesOpen]=useState(false);
@@ -44,6 +45,6 @@ export function PatientHome(){
    return tile.href?<a key={tile.label} className="home-tile" aria-label={tile.label} aria-describedby={tile.label==='نوبت‌های من'&&overview.upcoming!==null?'home-upcoming':undefined} href={tile.href}>{content}</a>:<button disabled key={tile.label} className="home-tile" aria-label={tile.label} title="این خدمت هنوز به بک‌اند متصل نشده است.">{content}</button>;
   })}</div>
   <section className="home-finance"><div><h2>مالی و حمایت درمان</h2><p>اطلاعات مالی در دسترس نیست.</p><small>سهم بیمه پس از استعلام معتبر نمایش داده می‌شود.</small></div><span className="home-icon"><img src="/assets/home/wallet.svg" width="20" height="20" alt=""/></span></section>
-  {servicesOpen&&<section className="home-service-links" id="home-service-links"><h2>خدمات متصل حساب</h2><a href="/patient-app/account">حساب من</a><a href="/patient-app/personal-info">اطلاعات فردی</a><a href="/patient-app/support">پشتیبانی</a><a href="/patient-app/notifications">اعلان‌ها</a><p>دکمه‌های غیرفعال هنوز آمادهٔ استفاده نیستند.</p><button disabled={loading} onClick={()=>setAttempt(x=>x+1)}>تازه‌سازی خانه</button></section>}
+  {servicesOpen&&<section className="home-service-links" id="home-service-links"><h2>خدمات متصل حساب</h2><a href="/patient-app/services">فهرست همهٔ خدمات</a><a href="/patient-app/account">حساب من</a><a href="/patient-app/personal-info">اطلاعات فردی</a><a href="/patient-app/support">پشتیبانی</a><a href="/patient-app/notifications">اعلان‌ها</a><p>دکمه‌های غیرفعال هنوز آمادهٔ استفاده نیستند.</p><button disabled={loading} onClick={()=>setAttempt(x=>x+1)}>تازه‌سازی خانه</button></section>}
  </section></AppointmentPage>;
 }
