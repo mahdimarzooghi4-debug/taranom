@@ -24,7 +24,7 @@ public sealed class MemberGroupInvitationApiHttpTests
     private static async Task<string> State(HttpResponseMessage response, CancellationToken ct)
     {
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var json = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         return json!.RootElement.GetProperty("invitation").GetProperty("state").GetString()!;
     }
     [Fact]

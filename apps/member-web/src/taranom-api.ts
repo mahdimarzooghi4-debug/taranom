@@ -129,19 +129,22 @@ export async function withdrawMyGroupDraft(draftRef:string){
  if(!result||!validGroupDraft(result.draft)||result.draft.draftRef!==draftRef||result.draft.state!=='Withdrawn')throw new Error('بایگانی پیش‌نویس هنوز قابل تأیید نیست.');return result.draft;
 }
 
+async function invitationApi<T>(path:string,init:RequestInit={}):Promise<T>{
+ try{return await api<T>(path,init)}catch(e){if(e instanceof AppointmentApiError&&e.status!==401){const message=e.status===403?'دسترسی این حساب به دعوت مجاز نیست.':e.status===404?'دعوت پیدا نشد یا در دسترس این حساب نیست.':e.status===409?'وضعیت دعوت تغییر کرده یا پیوند دیگر معتبر نیست. دوباره وضعیت را بررسی کنید.':e.status===400?'اطلاعات دعوت معتبر نیست.':'دریافت نتیجهٔ دعوت ناموفق بود.';throw new AppointmentApiError(e.status,message)}throw e}
+}
 export type GroupInvitationState='Pending'|'Accepted'|'Declined'|'Revoked'|'Expired';
 export type GroupInvitation={invitationRef:string;requestId?:string;state:GroupInvitationState;createdAt:string;expiresAt:string;respondedAt:string|null};
 const validInvitation=(v:GroupInvitation)=>v&&notificationId(v.invitationRef)&&['Pending','Accepted','Declined','Revoked','Expired'].includes(v.state)&&typeof v.createdAt==='string'&&Number.isFinite(Date.parse(v.createdAt))&&typeof v.expiresAt==='string'&&Date.parse(v.expiresAt)>Date.parse(v.createdAt)&&(['Accepted','Declined'].includes(v.state)?typeof v.respondedAt==='string'&&Number.isFinite(Date.parse(v.respondedAt)):v.respondedAt===null);
 const invitationPath=(draftRef:string)=>'/api/v1/me/group-invitation-drafts/'+encodeURIComponent(draftRef)+'/invitations';
 export async function getMyGroupInvitation(draftRef:string,requestId?:string,signal?:AbortSignal){
- const r=await api<{invitation:GroupInvitation|null}>(invitationPath(draftRef)+(requestId?'?requestId='+encodeURIComponent(requestId):''),{signal});
+ const r=await invitationApi<{invitation:GroupInvitation|null}>(invitationPath(draftRef)+(requestId?'?requestId='+encodeURIComponent(requestId):''),{signal});
  if(!r||!(r.invitation===null||validInvitation(r.invitation)&&notificationId(r.invitation.requestId)&&(!requestId||r.invitation.requestId===requestId)))throw new Error('وضعیت دعوت قابل تأیید نیست.');return r.invitation;
 }
 export async function issueMyGroupInvitation(draftRef:string,command:{requestId:string;token:string}){
- const r=await api<{outcome:string;invitation:GroupInvitation}>(invitationPath(draftRef),{method:'POST',body:JSON.stringify(command)});
+ const r=await invitationApi<{outcome:string;invitation:GroupInvitation}>(invitationPath(draftRef),{method:'POST',body:JSON.stringify(command)});
  if(!r||!['Applied','Replayed'].includes(r.outcome)||!validInvitation(r.invitation)||r.invitation.requestId!==command.requestId)throw new Error('ساخت پیوند قابل تأیید نیست.');return r.invitation;
 }
 export async function inspectGroupInvitation(token:string,decision?:'Accepted'|'Declined'){
- const r=await api<{invitation:GroupInvitation;consentVersion:string}>('/api/v1/me/group-invitations/'+(decision?'respond':'preview'),{method:'POST',body:JSON.stringify(decision?{token,decision,consentVersion:'group-invitation-v1'}:{token})});
+ const r=await invitationApi<{invitation:GroupInvitation;consentVersion:string}>('/api/v1/me/group-invitations/'+(decision?'respond':'preview'),{method:'POST',body:JSON.stringify(decision?{token,decision,consentVersion:'group-invitation-v1'}:{token})});
  if(!r||r.consentVersion!=='group-invitation-v1'||!validInvitation(r.invitation)||(decision&&r.invitation.state!==decision))throw new Error('نتیجهٔ پاسخ به دعوت قابل تأیید نیست.');return r.invitation;
 }
