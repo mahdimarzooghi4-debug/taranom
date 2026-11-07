@@ -1,0 +1,25 @@
+import {test,expect,type Page} from '@playwright/test';
+const ref=(n:number)=>'550e8400-e29b-41d4-a716-'+n.toString().padStart(12,'0');
+const items=Array.from({length:22},(_,i)=>({invitationRef:ref(i+1),state:i%2?'Declined':'Accepted',createdAt:'2026-11-07T09:00:00Z',expiresAt:'2026-11-14T09:00:00Z',respondedAt:'2026-11-07T10:00:00Z'}));
+async function mock(page:Page){await page.addInitScript(()=>{window.taranomSession={getAccessToken:()=> 'synthetic-invitation-history'}});await page.route('**/api/v1/me/group-invitations*',r=>{expect(r.request().method()).toBe('GET');expect(r.request().headers().authorization).toBe('Bearer synthetic-invitation-history');const u=new URL(r.request().url()),id=u.searchParams.get('invitationRef');return r.fulfill({json:{invitations:id?items.filter(i=>i.invitationRef===id):u.searchParams.has('before')?items.slice(20):items.slice(0,20),nextBefore:id||u.searchParams.has('before')?null:'20'}})})}
+test('history paginates real responses and exact detail survives reload without a secret',async({page})=>{
+ await mock(page);await page.goto('/patient-app/invitation-history');await expect(page.locator('.group-draft-card')).toHaveCount(20);await expect(page.locator('.group-draft-card').first()).toContainText('دعوت پذیرفته‌شده');await expect(page.locator('.group-draft-card').nth(1)).toContainText('دعوت ردشده');await page.getByRole('button',{name:'پاسخ‌های قدیمی‌تر'}).click();await expect(page.locator('.group-draft-card')).toHaveCount(2);await page.getByRole('link',{name:'مشاهدهٔ پاسخ ثبت‌شده'}).first().click();await expect(page.locator('.group-draft-card')).toHaveCount(1);await expect(page.locator('.group-draft-card')).toContainText(ref(21));await page.reload();await expect(page.locator('.group-draft-card')).toContainText(ref(21));await expect(page.locator('.group-draft-boundary')).toContainText('وضعیت عضویت، پرداخت');await page.getByRole('link',{name:'همهٔ پاسخ‌های من'}).click();await expect(page.locator('.group-draft-card')).toHaveCount(20);expect(new URL(page.url()).hash).toBe('');
+});
+test('no host session makes no private request',async({page})=>{
+ let calls=0;page.on('request',r=>{if(r.url().includes('/api/'))calls++});await page.goto('/patient-app/invitation-history');await expect(page.getByRole('alert')).toContainText('نشست ورود');await expect(page.locator('.group-draft-card')).toHaveCount(0);expect(calls).toBe(0);
+});
+test('forbidden refresh removes all old responses',async({page})=>{
+ await mock(page);await page.goto('/patient-app/invitation-history');await expect(page.locator('.group-draft-card')).toHaveCount(20);await page.route('**/api/v1/me/group-invitations*',r=>r.fulfill({status:403,json:{}}));await page.getByRole('button',{name:'تازه‌سازی سابقهٔ دعوت‌ها'}).click();await expect(page.getByRole('alert')).toBeVisible();await expect(page.locator('.group-draft-card')).toHaveCount(0);
+});
+test('invalid state, duplicate reference or mismatched detail cannot show a successful response',async({page})=>{
+ await mock(page);
+ for(const invitations of [[{...items[0],state:'Pending',respondedAt:null}],[items[0],items[0]],[items[1]]]){
+  await page.route('**/api/v1/me/group-invitations*',r=>r.fulfill({json:{invitations,nextBefore:null}}));await page.goto('/patient-app/invitation-history?invitation='+ref(1));await expect(page.getByRole('alert')).toContainText('معتبر نیست');await expect(page.locator('.group-draft-card')).toHaveCount(0);
+ }
+});
+test('empty history and invalid reference stay honest and do not create writes',async({page})=>{
+ await mock(page);await page.route('**/api/v1/me/group-invitations*',r=>r.fulfill({json:{invitations:[],nextBefore:null}}));await page.goto('/patient-app/invitation-history');await expect(page.getByRole('status')).toContainText('هنوز پاسخی');let calls=0;page.on('request',r=>{if(r.url().includes('/api/'))calls++});await page.goto('/patient-app/invitation-history?invitation=invalid');await expect(page.getByRole('alert')).toContainText('شناسهٔ دعوت');expect(calls).toBe(0);
+});
+test('account entry reaches history and mobile shell keeps local assets without overflow',async({page})=>{
+ await mock(page);await page.route('**/api/v1/me/profile',r=>r.fulfill({json:{profile:{revision:0,fullName:'',birthDate:null,city:''}}}));await page.setViewportSize({width:390,height:844});await page.goto('/patient-app/account');await page.getByRole('link',{name:'سابقهٔ پاسخ به دعوت‌ها',exact:true}).click();await expect(page.locator('.group-draft-card')).toHaveCount(20);await page.evaluate(()=>document.fonts.ready);for(const [selector,w,h] of [['.appointments-logo',140,63],['.appointments-bell img',22,22],['.appointments-nav img',24,24]] as const)for(const image of await page.locator(selector).all()){expect(await image.evaluate(n=>(n as HTMLImageElement).complete&&(n as HTMLImageElement).naturalWidth>0)).toBe(true);const b=await image.boundingBox();expect(b!.width).toBe(w);expect(b!.height).toBe(h)}await page.screenshot({path:'/tmp/taranom-invitation-history-390.png',fullPage:false});await page.setViewportSize({width:320,height:740});expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});

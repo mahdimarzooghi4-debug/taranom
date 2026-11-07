@@ -1,0 +1,13 @@
+# TRN-TECH-286 — Recipient invitation response history
+
+Connect `/patient-app/invitation-history` and its exact-reference detail view to authenticated recipient response history. The receiver can return from account settings or the service catalog after closing the original invitation link. The accepted/declined receipt also links to its persisted detail view. No invitation secret is needed for this read.
+
+`GET /api/v1/me/group-invitations` derives the recipient exclusively from trusted JWT issuer/subject. Only invitations already answered by that actor are included. Optional `invitationRef` performs exact lookup under the same ownership boundary. `before` is a positive keyset cursor; the response is capped at twenty entries and uses a twenty-first row solely to indicate another page. A recipient/sequence index supports bounded reads. The response is no-store and includes invitation reference, state, creation/expiry and response timestamps, omitting token/hash, issuer/subject, owner's private planning label and request UUID.
+
+Unanswered previews do not appear in history. Accepted and declined decisions remain history after the inviter archives a draft; archival does not erase or rewrite a recorded response. This list does not assert current group membership, paid subscription, official identity, payer authority or any clinical/wallet/appointment access.
+
+The UI composes the existing Figma-derived AppointmentPage shell and group list cards, retaining exact local logo/bell/navigation assets, RTL, Persian dates and independent account navigation. Content uses persisted records only; empty, loading, failure and missing detail are explicit. Refresh and page transitions clear old response data before fetching; forbidden or expired sessions cannot leave prior private cards visible. Malformed, duplicate, pending, foreign detail or authoritative membership-like receipts are rejected. No write occurs in the history view.
+
+Validation covers authenticated ownership and anonymous rejection, privacy of receipt fields, retention after archive, twenty-plus-two non-overlapping PostgreSQL pages, exact older-item lookup and invalid cursors. Browser coverage includes account entry, persisted detail/reload without token, forward pagination, denied refresh cleanup, no-host-session network isolation, malformed/duplicate/mismatched responses, empty state, local shell assets and narrow viewport overflow. Existing account/catalog and invitation flows remain covered by the integration workflow.
+
+No APK rebuild, external message, deployment, merge, payment or membership activation is included.

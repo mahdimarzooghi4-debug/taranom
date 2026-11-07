@@ -19,6 +19,32 @@ internal static class MemberGroupInvitationEndpoints
     private const string Consent = "group-invitation-v1";
     internal static void MapMemberGroupInvitationEndpoints(this WebApplication app, string policy)
     {
+        app.MapGet("/api/v1/me/group-invitations", async (Guid? invitationRef, long? before,
+            HttpContext context, NpgsqlDataSource db, CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            var recipient = Owner(context);
+            if (recipient is null) return Results.Forbid();
+            if (invitationRef == Guid.Empty || before is <= 0) return Results.BadRequest();
+            await using var connection = await db.OpenConnectionAsync(ct);
+            await using var command = new NpgsqlCommand(Select + " " + """
+                 WHERE i.recipient_issuer=@issuer AND i.recipient_subject=@subject
+                   AND (@ref IS NULL OR i.invitation_ref=@ref) AND (@before IS NULL OR i.sequence_no<@before)
+                 ORDER BY i.sequence_no DESC LIMIT 21
+                """, connection);
+            Bind(command, recipient.Value);
+            command.Parameters.AddWithValue("ref", NpgsqlTypes.NpgsqlDbType.Uuid, (object?)invitationRef ?? DBNull.Value);
+            command.Parameters.AddWithValue("before", NpgsqlTypes.NpgsqlDbType.Bigint, (object?)before ?? DBNull.Value);
+            await using var r = await command.ExecuteReaderAsync(ct);
+            var invitations = new List<object>(); long last = 0; var more = false;
+            while (await r.ReadAsync(ct))
+            {
+                if (invitations.Count == 20) { more = true; break; }
+                invitations.Add(Recipient(Read(r))); last = r.GetInt64(9);
+            }
+            return Results.Ok(new { invitations, nextBefore = more ? last.ToString(System.Globalization.CultureInfo.InvariantCulture) : null });
+        }).RequireAuthorization(policy);
+
         // The raw random secret is supplied by the browser and never stored or returned by this API.
         app.MapPost("/api/v1/me/group-invitation-drafts/{draftRef:guid}/invitations", async (
             Guid draftRef, GroupInvitationIssue input, HttpContext context, NpgsqlDataSource db, CancellationToken ct) =>
@@ -152,7 +178,7 @@ internal static class MemberGroupInvitationEndpoints
         SELECT i.invitation_ref,i.request_id,
         CASE WHEN i.state='Pending' AND d.state='Withdrawn' THEN 'Revoked'
              WHEN i.state='Pending' AND i.expires_at<=clock_timestamp() THEN 'Expired' ELSE i.state END,
-        i.created_at,i.expires_at,i.responded_at,i.token_hash,i.recipient_issuer,i.recipient_subject
+        i.created_at,i.expires_at,i.responded_at,i.token_hash,i.recipient_issuer,i.recipient_subject,i.sequence_no
         FROM taranom_member_group_invitation i JOIN taranom_member_group_invite_draft d ON d.draft_ref=i.draft_ref
         """;
     private static GroupInvitationView Read(NpgsqlDataReader r) => new(r.GetGuid(0), r.GetGuid(1), r.GetString(2),

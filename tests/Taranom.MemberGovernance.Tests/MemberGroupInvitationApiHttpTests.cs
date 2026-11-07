@@ -140,4 +140,72 @@ public sealed class MemberGroupInvitationApiHttpTests
         foreach (var response in race) response.Dispose();
     }
 
+    [Fact]
+    public async Task AnsweredInvitationHistoryIsPrivateAndSurvivesDraftArchive()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("history-owner-" + Guid.NewGuid().ToString("N"));
+        using var recipient = setup.AuthenticatedIdentityClient("history-recipient-" + Guid.NewGuid().ToString("N"));
+        using var other = setup.AuthenticatedIdentityClient("history-other-" + Guid.NewGuid().ToString("N"));
+        using var anonymous = setup.Factory.CreateClient();
+        const string history = "/api/v1/me/group-invitations";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(history, ct)).StatusCode);
+        var draft = await Draft(owner, ct); var token = Token(); var requestId = Guid.NewGuid();
+        Assert.Equal("Pending", await State(await owner.PostAsJsonAsync($"{Drafts}/{draft:D}/invitations", new { requestId, token }, ct), ct));
+        using (var before = await recipient.GetFromJsonAsync<JsonDocument>(history, ct))
+            Assert.Empty(before!.RootElement.GetProperty("invitations").EnumerateArray());
+        Assert.Equal("Accepted", await State(await recipient.PostAsJsonAsync(Respond, new { token, decision = "Accepted", consentVersion = "group-invitation-v1" }, ct), ct));
+        using var response = await recipient.GetAsync(history, ct);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        var body = await response.Content.ReadAsStringAsync(ct);
+        Assert.DoesNotContain(token, body); Assert.DoesNotContain(requestId.ToString(), body);
+        Assert.DoesNotContain("Synthetic private label", body); Assert.DoesNotContain("recipientSubject", body);
+        using var page = JsonDocument.Parse(body);
+        var item = Assert.Single(page.RootElement.GetProperty("invitations").EnumerateArray());
+        var reference = item.GetProperty("invitationRef").GetGuid();
+        Assert.Equal("Accepted", item.GetProperty("state").GetString());
+        Assert.False(item.TryGetProperty("requestId", out _));
+        foreach (var client in new[] { owner, other })
+        {
+            using var cross = await client.GetFromJsonAsync<JsonDocument>($"{history}?invitationRef={reference:D}", ct);
+            Assert.Empty(cross!.RootElement.GetProperty("invitations").EnumerateArray());
+        }
+        await owner.PostAsync($"{Drafts}/{draft:D}/withdraw", null, ct);
+        using var retained = await recipient.GetFromJsonAsync<JsonDocument>($"{history}?invitationRef={reference:D}", ct);
+        var archived = Assert.Single(retained!.RootElement.GetProperty("invitations").EnumerateArray());
+        Assert.Equal(item.GetProperty("respondedAt").GetString(), archived.GetProperty("respondedAt").GetString());
+        Assert.Equal("Accepted", archived.GetProperty("state").GetString());
+    }
+    [Fact]
+    public async Task RecipientHistoryUsesBoundedNonOverlappingPagesAndExactLookup()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("history-pages-owner-" + Guid.NewGuid().ToString("N"));
+        using var recipient = setup.AuthenticatedIdentityClient("history-pages-reader-" + Guid.NewGuid().ToString("N"));
+        const string history = "/api/v1/me/group-invitations";
+        Guid oldest = Guid.Empty;
+        for (var i = 0; i < 22; i++)
+        {
+            var draft = await Draft(owner, ct); var token = Token();
+            Assert.Equal("Pending", await State(await owner.PostAsJsonAsync($"{Drafts}/{draft:D}/invitations", new { requestId = Guid.NewGuid(), token }, ct), ct));
+            using var response = await recipient.PostAsJsonAsync(Respond, new { token, decision = i % 2 == 0 ? "Accepted" : "Declined", consentVersion = "group-invitation-v1" }, ct);
+            response.EnsureSuccessStatusCode();
+            using var receipt = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
+            if (i == 0) oldest = receipt!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+        }
+        using var page1 = await recipient.GetFromJsonAsync<JsonDocument>(history, ct);
+        var first = page1!.RootElement.GetProperty("invitations").EnumerateArray().Select(v => v.GetProperty("invitationRef").GetGuid()).ToArray();
+        Assert.Equal(20, first.Length);
+        using var page2 = await recipient.GetFromJsonAsync<JsonDocument>(history + "?before=" + page1.RootElement.GetProperty("nextBefore").GetString(), ct);
+        var second = page2!.RootElement.GetProperty("invitations").EnumerateArray().Select(v => v.GetProperty("invitationRef").GetGuid()).ToArray();
+        Assert.Equal(2, second.Length); Assert.Empty(first.Intersect(second));
+        Assert.Equal(JsonValueKind.Null, page2.RootElement.GetProperty("nextBefore").ValueKind);
+        using var exact = await recipient.GetFromJsonAsync<JsonDocument>($"{history}?invitationRef={oldest:D}", ct);
+        Assert.Equal(oldest, Assert.Single(exact!.RootElement.GetProperty("invitations").EnumerateArray()).GetProperty("invitationRef").GetGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, (await recipient.GetAsync(history + "?before=0", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await recipient.GetAsync(history + "?invitationRef=" + Guid.Empty, ct)).StatusCode);
+    }
+
 }

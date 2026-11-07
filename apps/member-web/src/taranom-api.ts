@@ -148,3 +148,11 @@ export async function inspectGroupInvitation(token:string,decision?:'Accepted'|'
  const r=await invitationApi<{invitation:GroupInvitation;consentVersion:string}>('/api/v1/me/group-invitations/'+(decision?'respond':'preview'),{method:'POST',body:JSON.stringify(decision?{token,decision,consentVersion:'group-invitation-v1'}:{token})});
  if(!r||r.consentVersion!=='group-invitation-v1'||!validInvitation(r.invitation)||(decision&&r.invitation.state!==decision))throw new Error('نتیجهٔ پاسخ به دعوت قابل تأیید نیست.');return r.invitation;
 }
+
+
+export type GroupInvitationHistoryPage={invitations:GroupInvitation[];nextBefore:string|null};
+export async function getMyInvitationHistory(options:{before?:string;invitationRef?:string}={},signal?:AbortSignal):Promise<GroupInvitationHistoryPage>{
+ const query=new URLSearchParams(options),r=await invitationApi<GroupInvitationHistoryPage>('/api/v1/me/group-invitations'+(query.size?'?'+query:''),{signal});
+ if(!r||!Array.isArray(r.invitations)||r.invitations.length>20||!r.invitations.every(v=>validInvitation(v)&&['Accepted','Declined'].includes(v.state)&&v.requestId===undefined&&(!options.invitationRef||v.invitationRef===options.invitationRef))||new Set(r.invitations.map(v=>v.invitationRef)).size!==r.invitations.length||!(r.nextBefore===null||typeof r.nextBefore==='string'&&/^[1-9]\d*$/.test(r.nextBefore)))throw new Error('پاسخ سابقهٔ دعوت‌ها معتبر نیست.');
+ return r;
+}

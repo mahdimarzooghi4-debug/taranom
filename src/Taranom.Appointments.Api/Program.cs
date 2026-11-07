@@ -562,6 +562,8 @@ public sealed class AppointmentDatabaseBootstrap(
             );
             CREATE INDEX IF NOT EXISTS ix_taranom_group_invitation_draft
                 ON taranom_member_group_invitation(draft_ref,sequence_no DESC);
+            CREATE INDEX IF NOT EXISTS ix_taranom_group_invitation_recipient
+                ON taranom_member_group_invitation(recipient_issuer,recipient_subject,sequence_no DESC);
             CREATE TABLE IF NOT EXISTS taranom_member_profile (
                 issuer text NOT NULL,
                 subject text NOT NULL,
