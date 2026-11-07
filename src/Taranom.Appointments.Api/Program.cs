@@ -391,6 +391,7 @@ app.MapGet("/api/v1/me/available-appointment-centers", async (
 app.MapCenterDirectoryDraftEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberProfileEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberGroupDraftEndpoints(IdentityAppointmentScopesPolicy);
+app.MapMemberGroupInvitationEndpoints(IdentityAppointmentScopesPolicy);
 app.MapMemberSupportEndpoints(IdentityAppointmentScopesPolicy);
 app.MapSupportOperationsEndpoints();
 app.MapMemberNotificationEndpoints(IdentityAppointmentScopesPolicy);
@@ -541,6 +542,26 @@ public sealed class AppointmentDatabaseBootstrap(
             );
             CREATE INDEX IF NOT EXISTS ix_taranom_group_draft_owner
                 ON taranom_member_group_invite_draft(issuer,subject,sequence_no DESC);
+            CREATE TABLE IF NOT EXISTS taranom_member_group_invitation (
+                sequence_no bigserial PRIMARY KEY,
+                invitation_ref uuid NOT NULL UNIQUE,
+                draft_ref uuid NOT NULL REFERENCES taranom_member_group_invite_draft(draft_ref),
+                request_id uuid NOT NULL,
+                token_hash text NOT NULL UNIQUE,
+                state text NOT NULL CHECK (state IN ('Pending','Accepted','Declined','Revoked')),
+                created_at timestamptz NOT NULL DEFAULT now(),
+                expires_at timestamptz NOT NULL,
+                responded_at timestamptz NULL,
+                recipient_issuer text NULL,
+                recipient_subject text NULL,
+                consent_version text NULL,
+                UNIQUE(draft_ref,request_id),
+                CHECK (expires_at>created_at),
+                CHECK ((state IN ('Pending','Revoked') AND responded_at IS NULL AND recipient_issuer IS NULL AND recipient_subject IS NULL AND consent_version IS NULL)
+                    OR (state IN ('Accepted','Declined') AND responded_at IS NOT NULL AND recipient_issuer IS NOT NULL AND recipient_subject IS NOT NULL AND consent_version='group-invitation-v1'))
+            );
+            CREATE INDEX IF NOT EXISTS ix_taranom_group_invitation_draft
+                ON taranom_member_group_invitation(draft_ref,sequence_no DESC);
             CREATE TABLE IF NOT EXISTS taranom_member_profile (
                 issuer text NOT NULL,
                 subject text NOT NULL,
