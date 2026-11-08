@@ -134,7 +134,7 @@ function validGroupDraftListItem(d:GroupDraftListItem):boolean{
   typeof v.expiresAt==='string'&&Number.isFinite(Date.parse(v.expiresAt))&&Date.parse(v.expiresAt)>Date.parse(v.createdAt)&&
   (['Accepted','Declined'].includes(v.state)?
    typeof v.respondedAt==='string'&&Number.isFinite(Date.parse(v.respondedAt)):v.respondedAt===null)&&
-  (v.state!=='Pending'||(d.state==='Draft'&&Date.parse(v.expiresAt)>Date.now()))&&
+  (v.state!=='Pending'||d.state==='Draft')&&
   (d.state!=='Withdrawn'||v.state!=='Pending'));
 }
 export async function getMyGroupDrafts(options:{before?:string;requestId?:string;draftRef?:string}={},signal?:AbortSignal):Promise<GroupDraftPage>{
