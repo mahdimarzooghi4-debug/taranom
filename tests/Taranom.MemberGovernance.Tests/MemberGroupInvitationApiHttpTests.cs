@@ -324,6 +324,22 @@ public sealed class MemberGroupInvitationApiHttpTests
         Assert.Empty(first.Intersect(second));
         Assert.Equal(JsonValueKind.Null, secondPage.RootElement.GetProperty("nextBefore").ValueKind);
         Assert.Contains(oldest, second);
+        // Filtering is done by PostgreSQL before LIMIT, not by the first page in the browser.
+        using var draftPage1 = await owner.GetFromJsonAsync<JsonDocument>($"{activity}?draftRef={draft:D}", ct);
+        Assert.Equal(20, draftPage1!.RootElement.GetProperty("invitations").GetArrayLength());
+        var draftCursor = draftPage1.RootElement.GetProperty("nextBefore").GetString();
+        using var draftPage2 = await owner.GetFromJsonAsync<JsonDocument>(
+            $"{activity}?draftRef={draft:D}&before={draftCursor}", ct);
+        var draftSecond = draftPage2!.RootElement.GetProperty("invitations").EnumerateArray()
+            .Select(x => x.GetProperty("invitationRef").GetGuid()).ToArray();
+        Assert.Equal(2, draftSecond.Length);
+        Assert.Empty(first.Intersect(draftSecond));
+        using var pending = await owner.GetFromJsonAsync<JsonDocument>(
+            $"{activity}?draftRef={draft:D}&state=Pending", ct);
+        var pendingOne = Assert.Single(pending!.RootElement.GetProperty("invitations").EnumerateArray());
+        Assert.Equal("Pending", pendingOne.GetProperty("state").GetString());
+        Assert.Equal("Draft", pendingOne.GetProperty("draftState").GetString());
+        Assert.Equal(JsonValueKind.Null, pending.RootElement.GetProperty("nextBefore").ValueKind);
         using var exact = await owner.GetFromJsonAsync<JsonDocument>($"{activity}?invitationRef={oldest:D}", ct);
         Assert.Equal(oldest, Assert.Single(exact!.RootElement.GetProperty("invitations").EnumerateArray())
             .GetProperty("invitationRef").GetGuid());
@@ -335,6 +351,101 @@ public sealed class MemberGroupInvitationApiHttpTests
             Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(activity + query, ct)).StatusCode);
     }
 
+
+    [Fact]
+    public async Task PendingWorklistFindsOlderUnansweredLinkBehindMoreThanTwentyTerminalLinks()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("worklist-owner-" + Guid.NewGuid().ToString("N"));
+        using var recipient = setup.AuthenticatedIdentityClient("worklist-recipient-" + Guid.NewGuid().ToString("N"));
+        using var other = setup.AuthenticatedIdentityClient("worklist-foreign-" + Guid.NewGuid().ToString("N"));
+        using var anonymous = setup.Factory.CreateClient();
+        const string activity = "/api/v1/me/group-invitation-activity";
+        var olderDraft = await Draft(owner, ct);
+        var olderPath = $"{Drafts}/{olderDraft:D}/invitations";
+        var olderToken = Token();
+        using var olderIssue = await owner.PostAsJsonAsync(olderPath,
+            new { requestId = Guid.NewGuid(), token = olderToken }, ct);
+        Assert.Equal("Pending", await State(olderIssue, ct));
+        using var olderJson = await olderIssue.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var olderRef = olderJson!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+        var terminalRefs = new List<Guid>();
+
+        for (var i = 0; i < 22; i++)
+        {
+            var draft = await Draft(owner, ct);
+            var path = $"{Drafts}/{draft:D}/invitations";
+            var token = Token();
+            using var created = await owner.PostAsJsonAsync(path,
+                new { requestId = Guid.NewGuid(), token }, ct);
+            Assert.Equal("Pending", await State(created, ct));
+            using var response = await created.Content.ReadFromJsonAsync<JsonDocument>(ct);
+            var invitation = response!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+            terminalRefs.Add(invitation);
+            if (i % 2 == 0)
+                Assert.Equal("Revoked", await State(await owner.PostAsync(
+                    $"{path}/{invitation:D}/revoke", null, ct), ct));
+            else
+                Assert.Equal("Declined", await State(await recipient.PostAsJsonAsync(Respond,
+                    new { token, decision = "Declined", consentVersion = "group-invitation-v1" }, ct), ct));
+        }
+
+        using var first = await owner.GetFromJsonAsync<JsonDocument>(activity, ct);
+        var first20 = first!.RootElement.GetProperty("invitations").EnumerateArray()
+            .Select(x => x.GetProperty("invitationRef").GetGuid()).ToArray();
+        Assert.Equal(20, first20.Length);
+        Assert.DoesNotContain(olderRef, first20);
+
+        using var worklistResponse = await owner.GetAsync(activity + "?state=Pending", ct);
+        Assert.Equal("no-store", worklistResponse.Headers.CacheControl?.ToString());
+        using var worklist = await worklistResponse.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var item = Assert.Single(worklist!.RootElement.GetProperty("invitations").EnumerateArray());
+        Assert.Equal(olderRef, item.GetProperty("invitationRef").GetGuid());
+        Assert.Equal(olderDraft, item.GetProperty("draftRef").GetGuid());
+        Assert.Equal("Pending", item.GetProperty("state").GetString());
+        Assert.Equal("Draft", item.GetProperty("draftState").GetString());
+        Assert.Equal(JsonValueKind.Null, worklist.RootElement.GetProperty("nextBefore").ValueKind);
+        var body = worklist.RootElement.GetRawText();
+        Assert.DoesNotContain(olderToken, body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("recipientSubject", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("tokenHash", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("requestId", body, StringComparison.OrdinalIgnoreCase);
+
+        using var scoped = await owner.GetFromJsonAsync<JsonDocument>(
+            $"{activity}?draftRef={olderDraft:D}&state=Pending", ct);
+        Assert.Equal(olderRef, Assert.Single(scoped!.RootElement.GetProperty("invitations").EnumerateArray())
+            .GetProperty("invitationRef").GetGuid());
+        using var otherScoped = await other.GetFromJsonAsync<JsonDocument>(
+            $"{activity}?draftRef={olderDraft:D}&state=Pending", ct);
+        Assert.Empty(otherScoped!.RootElement.GetProperty("invitations").EnumerateArray());
+        using var strangerExact = await other.GetFromJsonAsync<JsonDocument>(
+            $"{activity}?invitationRef={olderRef:D}", ct);
+        Assert.Empty(strangerExact!.RootElement.GetProperty("invitations").EnumerateArray());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(activity + "?state=Pending", ct)).StatusCode);
+
+        foreach (var bad in new[] {
+            "?state=Accepted", "?state=", "?state=Pending&state=Pending",
+            "?draftRef=" + Guid.Empty, "?draftRef=", "?before=0&state=Pending",
+            "?invitationRef=" + olderRef.ToString("D") + "&state=Pending",
+            "?invitationRef=" + olderRef.ToString("D") + "&draftRef=" + olderDraft.ToString("D"),
+            "?draftRef=" + olderDraft.ToString("D") + "&draftRef=" + olderDraft.ToString("D"),
+            "?unexpected=1&state=Pending"
+        })
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(activity + bad, ct)).StatusCode);
+
+        Assert.Equal("Revoked", await State(await owner.PostAsync(
+            $"{olderPath}/{olderRef:D}/revoke", null, ct), ct));
+        using var pendingAfter = await owner.GetFromJsonAsync<JsonDocument>(activity + "?state=Pending", ct);
+        Assert.Empty(pendingAfter!.RootElement.GetProperty("invitations").EnumerateArray());
+        using var exact = await owner.GetFromJsonAsync<JsonDocument>(
+            $"{activity}?invitationRef={olderRef:D}", ct);
+        Assert.Equal("Revoked", Assert.Single(exact!.RootElement.GetProperty("invitations").EnumerateArray())
+            .GetProperty("state").GetString());
+        Assert.Equal(22, terminalRefs.Count);
+        using var scopes = await owner.GetFromJsonAsync<JsonDocument>("/api/v1/me/appointment-scopes", ct);
+        Assert.Empty(scopes!.RootElement.GetProperty("appointmentScopes").EnumerateArray());
+    }
 
     [Fact]
     public async Task OwnerCanRevokePendingTokenWithoutArchivingDraftOrExposingRecipients()
