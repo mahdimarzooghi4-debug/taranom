@@ -29,3 +29,10 @@ On an uncertain transport/ACK result, the client must hide any previously displa
 - Run existing Figma 2-job and canonical 14-job CI on exact candidate HEAD, record COMMENTED technical review, preserve stacked Draft/Open PR above #291. No merge, Stage/QA Gate, Release Approval or Production.
 
 National launch stays DENIED_BY_DEFAULT. All 17 launch domains and 19 external evidence categories remain unresolved; no approved clinical/financial/identity integration is implied.
+
+## Integration gate evidence (not release approval)
+
+- Candidate content HEAD preceding this evidence-only commit: `8ef9afc7bedabba1168d57782f28fbfad7af2a93`.
+- [Figma Appointment Integration #42490827932](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42490827932): **2/2 SUCCESS**, exact backend PostgreSQL and real Chromium browser suites.
+- The 14-job canonical regression must be repeated for the next exact SHA. PR #292 is temporarily based on `main` only to invoke this existing complete regression; restore the stacked base to #291 after the CI gate.
+- Neither this evidence nor a green synthetic CI authorizes patient records, paid membership, real identity/consent verification, Merge, Stage, QA Gate, Release Approval or Production.
