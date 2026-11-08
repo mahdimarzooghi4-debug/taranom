@@ -173,7 +173,7 @@ function validSentInvitationActivity(v:SentInvitationActivity):boolean{
  return validInvitation(v)&&notificationId(v.draftRef)&&
   typeof v.recipientLabel==='string'&&v.recipientLabel.trim().length>=2&&
   v.recipientLabel.length<=100&&v.recipientLabel===v.recipientLabel.trim()&&
-  !/[\\u0000-\\u001f\\u007f]/.test(v.recipientLabel)&&
+  !/[\u0000-\u001f\u007f]/.test(v.recipientLabel)&&
   ['Draft','Withdrawn'].includes(v.draftState);
 }
 export async function getMySentInvitationActivity(
@@ -187,7 +187,7 @@ export async function getMySentInvitationActivity(
   new Set(r.invitations.map(v=>v.invitationRef)).size!==r.invitations.length||
   (options.invitationRef&&(r.invitations.length>1||
    r.invitations.some(v=>v.invitationRef!==options.invitationRef)))||
-  !(r.nextBefore===null||typeof r.nextBefore==='string'&&/^[1-9]\\d*$/.test(r.nextBefore))||
+  !(r.nextBefore===null||typeof r.nextBefore==='string'&&/^[1-9]\d*$/.test(r.nextBefore))||
   (options.invitationRef&&r.nextBefore!==null))
   throw new Error('گزارش دعوت‌های ارسالی معتبر نیست.');
  return r;
