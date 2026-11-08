@@ -97,13 +97,28 @@ export async function getAvailableAppointmentCenters(signal?:AbortSignal):Promis
  return response.centers;
 }
 
-export type MemberNotification={notificationRef:string;sourceRequestId:string;kind:'SupportAnswered';createdAt:string;readAt:string|null};
+export type MemberNotification=
+ | {notificationRef:string;sourceRequestId:string;kind:'SupportAnswered';createdAt:string;readAt:string|null}
+ | {notificationRef:string;sourceInvitationRef:string;kind:'GroupInvitationResponded';responseState:'Accepted'|'Declined';createdAt:string;readAt:string|null};
 export type NotificationPage={notifications:MemberNotification[];unreadCount:number;nextBefore:string|null};
 const notificationId=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
-const validNotification=(n:MemberNotification)=>n&&notificationId(n.notificationRef)&&notificationId(n.sourceRequestId)&&n.kind==='SupportAnswered'&&typeof n.createdAt==='string'&&Number.isFinite(Date.parse(n.createdAt))&&(n.readAt===null||typeof n.readAt==='string'&&Number.isFinite(Date.parse(n.readAt)));
+const validNotification=(n:MemberNotification):boolean=>{
+ if(!n||!notificationId(n.notificationRef)||typeof n.createdAt!=='string'||
+  !Number.isFinite(Date.parse(n.createdAt))||!(n.readAt===null||
+  typeof n.readAt==='string'&&Number.isFinite(Date.parse(n.readAt))))return false;
+ const keys=Object.keys(n);
+ if(n.kind==='SupportAnswered')return keys.length===5&&
+  ['notificationRef','sourceRequestId','kind','createdAt','readAt'].every(k=>keys.includes(k))&&
+  notificationId(n.sourceRequestId);
+ if(n.kind==='GroupInvitationResponded')return keys.length===6&&
+  ['notificationRef','sourceInvitationRef','kind','responseState','createdAt','readAt'].every(k=>keys.includes(k))&&
+  notificationId(n.sourceInvitationRef)&&n.sourceInvitationRef===n.notificationRef&&
+  (n.responseState==='Accepted'||n.responseState==='Declined');
+ return false;
+};
 export async function getMyNotifications(options:{before?:string;notificationRef?:string}={},signal?:AbortSignal):Promise<NotificationPage>{
  const query=new URLSearchParams(options),result=await api<NotificationPage>('/api/v1/me/notifications'+(query.size?'?'+query:''),{signal});
- if(!result||!Array.isArray(result.notifications)||!result.notifications.every(validNotification)||new Set(result.notifications.map(n=>n.notificationRef)).size!==result.notifications.length||!Number.isSafeInteger(result.unreadCount)||result.unreadCount<0||!(result.nextBefore===null||typeof result.nextBefore==='string'&&/^[1-9]\d*$/.test(result.nextBefore)))throw new Error('پاسخ اعلان‌ها معتبر نیست.');
+ if(!result||!Array.isArray(result.notifications)||result.notifications.length>20||!result.notifications.every(validNotification)||new Set(result.notifications.map(n=>n.notificationRef)).size!==result.notifications.length||!Number.isSafeInteger(result.unreadCount)||result.unreadCount<0||!(result.nextBefore===null||typeof result.nextBefore==='string'&&/^[1-9]\d*$/.test(result.nextBefore)))throw new Error('پاسخ اعلان‌ها معتبر نیست.');
  return result;
 }
 export async function markMyNotificationRead(notificationRef:string){
