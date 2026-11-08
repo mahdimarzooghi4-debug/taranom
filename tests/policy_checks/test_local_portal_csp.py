@@ -21,6 +21,19 @@ class Tests(unittest.TestCase):
             self.assertNotIn("connect-src 'none'",updated)
             self.assertIn("base-uri 'none'",updated)
             self.assertIn("form-action 'none'",updated)
+    def test_connected_same_origin_source_remains_same_origin(self):
+        for prefix in ("/member-portal", "/center-portal"):
+            already_connected = sample(prefix).replace(
+                "connect-src 'none'", "connect-src 'self'")
+            self.assertEqual(csp.authorize(already_connected, prefix),
+                             already_connected)
+            for suffix in ("; connect-src https://outside.invalid",
+                           "; connect-src *", "; connect-src 'none'"):
+                bad = already_connected.replace(
+                    "connect-src 'self'", "connect-src 'self'" + suffix)
+                with self.assertRaises(csp.AdmissionError):
+                    csp.authorize(bad, prefix)
+
     def test_wrong_base_malformed_and_repeated_csp_denied(self):
         for bad,prefix in (
             (sample("/member-portal"),"/center-portal"),
