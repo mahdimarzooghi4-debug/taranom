@@ -62,7 +62,7 @@ internal static class MemberGroupInvitationEndpoints
                     p.Key is not ("invitationRef" or "before")))
                 return Results.BadRequest();
             await using var connection = await db.OpenConnectionAsync(ct);
-            await using var command = new NpgsqlCommand(Select + """
+            await using var command = new NpgsqlCommand(Select + " " + """
                 WHERE d.issuer=@issuer AND d.subject=@subject
                   AND (@ref IS NULL OR i.invitation_ref=@ref)
                   AND (@before IS NULL OR i.sequence_no<@before)
