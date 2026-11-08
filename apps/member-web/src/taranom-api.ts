@@ -114,11 +114,32 @@ export async function markMyNotificationRead(notificationRef:string){
 export type GroupDraftMethod='NewRegistration'|'ExistingMember';
 export type GroupDraftCommand={requestId:string;method:GroupDraftMethod;recipientLabel:string};
 export type GroupDraft=GroupDraftCommand&{draftRef:string;state:'Draft'|'Withdrawn';createdAt:string;withdrawnAt:string|null};
-export type GroupDraftPage={drafts:GroupDraft[];nextBefore:string|null};
+export type GroupDraftInvitationSummary={
+ invitationRef:string;state:GroupInvitationState;createdAt:string;expiresAt:string;respondedAt:string|null
+};
+export type GroupDraftListItem=GroupDraft&{latestInvitation:GroupDraftInvitationSummary|null};
+export type GroupDraftPage={drafts:GroupDraftListItem[];nextBefore:string|null};
 const validGroupDraft=(d:GroupDraft)=>d&&notificationId(d.draftRef)&&notificationId(d.requestId)&&['NewRegistration','ExistingMember'].includes(d.method)&&typeof d.recipientLabel==='string'&&d.recipientLabel.trim().length>=2&&typeof d.createdAt==='string'&&Number.isFinite(Date.parse(d.createdAt))&&((d.state==='Draft'&&d.withdrawnAt===null)||(d.state==='Withdrawn'&&typeof d.withdrawnAt==='string'&&Number.isFinite(Date.parse(d.withdrawnAt))));
+const groupDraftKeys=['draftRef','requestId','method','recipientLabel','state','createdAt','withdrawnAt','latestInvitation'] as const;
+const invitationSummaryKeys=['invitationRef','state','createdAt','expiresAt','respondedAt'] as const;
+function validGroupDraftListItem(d:GroupDraftListItem):boolean{
+ if(!d||typeof d!=='object'||Object.keys(d).length!==groupDraftKeys.length||
+  Object.keys(d).some(k=>!(groupDraftKeys as readonly string[]).includes(k))||!validGroupDraft(d))return false;
+ const v=d.latestInvitation;
+ if(v===null)return true;
+ return Boolean(v&&typeof v==='object'&&Object.keys(v).length===invitationSummaryKeys.length&&
+  Object.keys(v).every(k=>(invitationSummaryKeys as readonly string[]).includes(k))&&
+  notificationId(v.invitationRef)&&['Pending','Accepted','Declined','Revoked','Expired'].includes(v.state)&&
+  typeof v.createdAt==='string'&&Number.isFinite(Date.parse(v.createdAt))&&
+  typeof v.expiresAt==='string'&&Number.isFinite(Date.parse(v.expiresAt))&&Date.parse(v.expiresAt)>Date.parse(v.createdAt)&&
+  (['Accepted','Declined'].includes(v.state)?
+   typeof v.respondedAt==='string'&&Number.isFinite(Date.parse(v.respondedAt)):v.respondedAt===null)&&
+  (v.state!=='Pending'||(d.state==='Draft'&&Date.parse(v.expiresAt)>Date.now()))&&
+  (d.state!=='Withdrawn'||v.state!=='Pending'));
+}
 export async function getMyGroupDrafts(options:{before?:string;requestId?:string;draftRef?:string}={},signal?:AbortSignal):Promise<GroupDraftPage>{
  const query=new URLSearchParams(options),result=await api<GroupDraftPage>('/api/v1/me/group-invitation-drafts'+(query.size?'?'+query:''),{signal});
- if(!result||!Array.isArray(result.drafts)||!result.drafts.every(validGroupDraft)||!(result.nextBefore===null||typeof result.nextBefore==='string'&&/^[1-9]\d*$/.test(result.nextBefore)))throw new Error('پاسخ پیش‌نویس‌های دعوت معتبر نیست.');return result;
+ if(!result||!Array.isArray(result.drafts)||!result.drafts.every(validGroupDraftListItem)||!(result.nextBefore===null||typeof result.nextBefore==='string'&&/^[1-9]\d*$/.test(result.nextBefore)))throw new Error('پاسخ پیش‌نویس‌های دعوت معتبر نیست.');return result;
 }
 export async function createMyGroupDraft(command:GroupDraftCommand){
  const result=await api<{outcome:string;draft:GroupDraft}>('/api/v1/me/group-invitation-drafts',{method:'POST',body:JSON.stringify(command)});
