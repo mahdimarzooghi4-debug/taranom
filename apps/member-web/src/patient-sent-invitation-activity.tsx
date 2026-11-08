@@ -15,27 +15,37 @@ export function PatientSentInvitationActivity(){
  const [data,setData]=useState<SentInvitationActivityPage|null>(null);
  const [error,setError]=useState(''),[loading,setLoading]=useState(true);
  const [before,setBefore]=useState<string|undefined>(),[reload,setReload]=useState(0);
+ const [pendingOnly,setPendingOnly]=useState(false);
  const [confirm,setConfirm]=useState<SentInvitationActivity|null>(null);
  const [pendingRevoke,setPendingRevoke]=useState<{draftRef:string;invitationRef:string}|null>(null);
  const [revokeUnknown,setRevokeUnknown]=useState(false),[retryable,setRetryable]=useState(false);
  const [revoking,setRevoking]=useState(false),[revocationNotice,setRevocationNotice]=useState('');
  const [ref]=useState(()=>new URLSearchParams(location.search).get('invitation'));
- const valid=ref===null||/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(ref);
+ const [draftFilter]=useState(()=>new URLSearchParams(location.search).get('draft'));
+ const validRef=(v:string)=>/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
+ const valid=!(ref!==null&&draftFilter!==null)&&
+  (ref===null||validRef(ref))&&(draftFilter===null||validRef(draftFilter));
  useEffect(()=>{document.title='ترنم | پیگیری دعوت‌های ارسالی'},[]);
  useEffect(()=>{
   const c=new AbortController();setData(null);setError('');setLoading(true);
   if(!valid){
-   setError('شناسهٔ دعوت معتبر نیست.');setLoading(false);return()=>c.abort();
+   setError(ref!==null&&!validRef(ref)&&draftFilter===null?'شناسهٔ دعوت معتبر نیست.':'شناسهٔ دعوت یا پیش‌نویس معتبر نیست.');setLoading(false);return()=>c.abort();
   }
   getMySentInvitationActivity({
-   ...(before?{before}:{}),...(ref?{invitationRef:ref}:{})
+   ...(before?{before}:{}),...(ref?{invitationRef:ref}:{}),
+   ...(draftFilter?{draftRef:draftFilter}:{}),
+   ...(pendingOnly&&!ref?{state:'Pending' as const}:{})
   },c.signal).then(result=>{if(!c.signal.aborted)setData(result)})
    .catch((e:unknown)=>{if(!c.signal.aborted)setError(
     e instanceof Error?e.message:'دریافت وضعیت دعوت‌ها ناموفق بود.')})
    .finally(()=>{if(!c.signal.aborted)setLoading(false)});
   return()=>c.abort();
- },[before,reload,ref,valid]);
+ },[before,reload,ref,draftFilter,pendingOnly,valid]);
 
+ function selectFilter(next:boolean){
+  if(loading||revoking||revokeUnknown||ref||pendingOnly===next)return;
+  setConfirm(null);setData(null);setBefore(undefined);setPendingOnly(next);
+ }
  const definite=(e:unknown)=>e instanceof AppointmentApiError&&e.status>=400&&e.status<500;
  async function revoke(mode:'start'|'check'|'retry',candidate?:SentInvitationActivity){
   if(revoking)return;
@@ -79,9 +89,16 @@ export function PatientSentInvitationActivity(){
    }
   }finally{setRevoking(false)}
  }
- return <AppointmentPage title={ref?'جزئیات دعوت ارسالی':'دعوت‌های ارسالی من'}
+ return <AppointmentPage title={ref?'جزئیات دعوت ارسالی':draftFilter?'دعوت‌های این پیش‌نویس':'دعوت‌های ارسالی من'}
   subtitle="پیگیری پاسخ‌های ثبت‌شده، نه عضویت فعال" activeSection="account">
   <section className="patient-group-drafts group-invitation-history owner-invitation-activity" aria-busy={loading}>
+   {!ref&&<div className="owner-invitation-filters" role="group" aria-label="فیلتر دعوت‌های ارسالی">
+    <button type="button" aria-pressed={!pendingOnly} disabled={loading||revoking||revokeUnknown}
+     onClick={()=>selectFilter(false)}>همه دعوت‌ها</button>
+    <button type="button" aria-pressed={pendingOnly} disabled={loading||revoking||revokeUnknown}
+     onClick={()=>selectFilter(true)}>در انتظار پاسخ</button>
+   </div>}
+   {draftFilter&&<p className="owner-invitation-draft-note">تاریخچهٔ پیوندهای همین پیش‌نویس: <bdi>{draftFilter}</bdi></p>}
    {loading&&<p role="status">در حال دریافت وضعیت دعوت‌ها…</p>}
    {error&&<p role="alert" className="group-draft-error">{error}</p>}
    {revocationNotice&&<p role="status" className="group-draft-notice">{revocationNotice}</p>}
@@ -114,7 +131,9 @@ export function PatientSentInvitationActivity(){
 
     </article>)}
     {data&&!data.invitations.length&&<p role="status">{ref?
-     'این دعوت در حساب شما ثبت نشده است.':'هنوز پیوند دعوتی از این حساب صادر نشده است.'}</p>}
+     'این دعوت در حساب شما ثبت نشده است.':pendingOnly?
+     'در این بخش پیوندی در انتظار پاسخ وجود ندارد.':draftFilter?
+     'برای این پیش‌نویس پیوند دعوتی ثبت نشده است.':'هنوز پیوند دعوتی از این حساب صادر نشده است.'}</p>}
    </div>
    <p className="group-draft-boundary">
     نام نمایشی، فقط متن پیش‌نویس شماست و هویت گیرنده را تأیید نمی‌کند.
@@ -128,7 +147,7 @@ export function PatientSentInvitationActivity(){
      دعوت‌های قدیمی‌تر
     </button>}
    </div>
-   {ref&&<a className="invitation-history-back" href="/patient-app/invitations-sent">همهٔ دعوت‌های ارسالی</a>}
+   {(ref||draftFilter)&&<a className="invitation-history-back" href="/patient-app/invitations-sent">همهٔ دعوت‌های ارسالی</a>}
    <a className="invitation-history-back" href="/patient-app/group-members">پیش‌نویس‌های گروه من</a>
   </section>
  </AppointmentPage>;

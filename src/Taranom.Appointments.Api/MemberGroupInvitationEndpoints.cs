@@ -49,28 +49,39 @@ internal static class MemberGroupInvitationEndpoints
         // Owner's entire issuance ledger. Unlike recipient response history this
         // reads through the draft's trusted issuer/subject, never the bearer token.
         // Exact foreign refs are indistinguishable from unknown refs.
-        app.MapGet("/api/v1/me/group-invitation-activity", async (Guid? invitationRef, long? before,
+        app.MapGet("/api/v1/me/group-invitation-activity", async (
+            Guid? invitationRef, Guid? draftRef, string? state, long? before,
             HttpContext context, NpgsqlDataSource db, CancellationToken ct) =>
         {
             context.Response.Headers.CacheControl = "no-store";
             var owner = Owner(context);
             if (owner is null) return Results.Forbid();
             var query = context.Request.Query;
-            if (invitationRef == Guid.Empty || before is <= 0 ||
-                (invitationRef.HasValue && before.HasValue) ||
-                query.Any(p => p.Value.Count != 1 ||
-                    p.Key is not ("invitationRef" or "before")))
+            // Exact-reference reconciliation must not be accidentally scoped away
+            // by a screen filter. Reject blank or repeated selectors instead of
+            // treating them as omitted and returning other private records.
+            if (invitationRef == Guid.Empty || draftRef == Guid.Empty || before is <= 0 ||
+                (state is not null && state != "Pending") ||
+                (invitationRef.HasValue && (before.HasValue || draftRef.HasValue || state is not null)) ||
+                query.Any(p => p.Value.Count != 1 || string.IsNullOrEmpty(p.Value[0]) ||
+                    p.Key is not ("invitationRef" or "draftRef" or "state" or "before")))
                 return Results.BadRequest();
             await using var connection = await db.OpenConnectionAsync(ct);
             await using var command = new NpgsqlCommand(Select + " " + """
                 WHERE d.issuer=@issuer AND d.subject=@subject
                   AND (@ref IS NULL OR i.invitation_ref=@ref)
+                  AND (@draft IS NULL OR i.draft_ref=@draft)
+                  AND (@pending=false OR (i.state='Pending' AND d.state='Draft'
+                       AND i.expires_at>clock_timestamp()))
                   AND (@before IS NULL OR i.sequence_no<@before)
                 ORDER BY i.sequence_no DESC LIMIT 21
                 """, connection);
             Bind(command, owner.Value);
             command.Parameters.AddWithValue("ref", NpgsqlTypes.NpgsqlDbType.Uuid,
                 (object?)invitationRef ?? DBNull.Value);
+            command.Parameters.AddWithValue("draft", NpgsqlTypes.NpgsqlDbType.Uuid,
+                (object?)draftRef ?? DBNull.Value);
+            command.Parameters.AddWithValue("pending", state == "Pending");
             command.Parameters.AddWithValue("before", NpgsqlTypes.NpgsqlDbType.Bigint,
                 (object?)before ?? DBNull.Value);
             await using var r = await command.ExecuteReaderAsync(ct);
