@@ -221,11 +221,12 @@ jobs:
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
           npm run build
-      - name: Verify compiled member bundle integrity and active local resources
+      - name: Verify connected member bundle integrity, local resources and same-origin CSP
         run: |
           PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_disconnected_bundle.py' -v
-          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface member --dist dist --output TestResults/fullci-member-bundle.json
-          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface member --dist dist --verify TestResults/fullci-member-bundle.json
+          PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_connected_panel_bundle.py' -v
+          python3 ../../tools/artifact_checks/check_connected_panel_bundle.py --surface member --dist dist --output TestResults/fullci-member-bundle.json
+          python3 ../../tools/artifact_checks/check_connected_panel_bundle.py --surface member --dist dist --verify TestResults/fullci-member-bundle.json
           test -s TestResults/fullci-member-bundle.json
       - name: Verify member API clients are host-authenticated and no fake state exists
         run: |
@@ -342,11 +343,12 @@ jobs:
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
           npm run build
-      - name: Verify compiled center bundle integrity and active local resources
+      - name: Verify connected center bundle integrity, local resources and same-origin CSP
         run: |
           PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_disconnected_bundle.py' -v
-          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface center --dist dist --output TestResults/fullci-center-bundle.json
-          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface center --dist dist --verify TestResults/fullci-center-bundle.json
+          PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_connected_panel_bundle.py' -v
+          python3 ../../tools/artifact_checks/check_connected_panel_bundle.py --surface center --dist dist --output TestResults/fullci-center-bundle.json
+          python3 ../../tools/artifact_checks/check_connected_panel_bundle.py --surface center --dist dist --verify TestResults/fullci-center-bundle.json
           test -s TestResults/fullci-center-bundle.json
       - name: Check no real provider credentials, routes, network administration or mutable preview store
         run: |
