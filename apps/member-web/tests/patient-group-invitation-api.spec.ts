@@ -51,3 +51,39 @@ test('uncommitted issue and response can retry the exact command after a read co
  await page.route('**/api/v1/me/group-invitations/*',r=>{const c=r.request().postDataJSON();if(r.request().url().endsWith('/respond')){responses++;expect(c.decision).toBe('Accepted');if(responses===1)return r.abort();responded=true}return r.fulfill({json:{invitation:{...base,state:responded?'Accepted':'Pending',respondedAt:responded?'2026-11-07T10:00:00Z':null},consentVersion:'group-invitation-v1'}})});
  await page.goto('/patient-app/join-group#'+secret);await page.getByRole('button',{name:'بررسی دعوت',exact:true}).click();await page.getByRole('checkbox').check();await page.getByRole('button',{name:'پذیرش دعوت',exact:true}).click();await page.getByRole('button',{name:'بررسی نتیجهٔ دعوت'}).click();await page.getByRole('button',{name:'تلاش مجدد همان درخواست'}).click();await expect(page.getByRole('region',{name:'وضعیت دعوت'})).toContainText('دعوت پذیرفته شد');expect(responses).toBe(2);
 });
+
+test('owner copies only the current invitation link after an explicit click',async({page})=>{
+ const api=await owner(page);let requests=0;page.on('request',r=>{if(r.url().includes('/api/'))requests++});
+ await page.addInitScript(()=>{const writes:string[]=[];Object.defineProperty(window,'__taranomClipboardWrites',{value:writes});Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(value:string)=>{writes.push(value)}}})});
+ await page.goto('/patient-app/group-invitation?draft='+draftRef);
+ await page.getByRole('button',{name:'ساخت پیوند دعوت',exact:true}).click();
+ const field=page.locator('.group-invitation-link textarea'),copy=page.getByRole('button',{name:'کپی پیوند',exact:true});
+ await expect(copy).toBeVisible();const first=await field.inputValue();
+ expect(await page.evaluate(()=>((window as Window & {__taranomClipboardWrites?:string[]}).__taranomClipboardWrites??[]))).toEqual([]);
+ const beforeCopy=requests;await copy.click();
+ await expect(page.getByRole('status')).toContainText('پیوند در کلیپ‌بورد کپی شد');
+ expect(await page.evaluate(()=>((window as Window & {__taranomClipboardWrites?:string[]}).__taranomClipboardWrites??[]))).toEqual([first]);
+ expect(requests).toBe(beforeCopy);expect(api.count()).toBe(1);
+ expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+ await page.getByRole('button',{name:'ساخت پیوند جایگزین',exact:true}).click();
+ await expect(page.getByRole('status')).toHaveCount(0);
+ const second=await field.inputValue();expect(second).not.toBe(first);
+ expect(second).toContain(api.token());
+ await copy.click();await expect(page.getByRole('status')).toContainText('پیوند در کلیپ‌بورد کپی شد');
+ expect(await page.evaluate(()=>((window as Window & {__taranomClipboardWrites?:string[]}).__taranomClipboardWrites??[]))).toEqual([first,second]);
+ expect(api.count()).toBe(2);
+});
+test('clipboard denial selects the complete invitation URL for manual copy without claiming success',async({page})=>{
+ await page.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new DOMException('denied','NotAllowedError')}}})});
+ const api=await owner(page);let requests=0;page.on('request',r=>{if(r.url().includes('/api/'))requests++});
+ await page.goto('/patient-app/group-invitation?draft='+draftRef);
+ await page.getByRole('button',{name:'ساخت پیوند دعوت',exact:true}).click();
+ const field=page.locator('.group-invitation-link textarea'),copy=page.getByRole('button',{name:'کپی پیوند',exact:true});
+ await expect(copy).toBeVisible();const value=await field.inputValue(),beforeCopy=requests;
+ await copy.click();
+ await expect(page.getByRole('status')).toContainText('کپی خودکار در دسترس نیست');
+ const selection=await field.evaluate(el=>({focused:document.activeElement===el,start:(el as HTMLTextAreaElement).selectionStart,end:(el as HTMLTextAreaElement).selectionEnd,value:(el as HTMLTextAreaElement).value}));
+ expect(selection).toEqual({focused:true,start:0,end:value.length,value});
+ expect(requests).toBe(beforeCopy);expect(api.count()).toBe(1);
+ expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+});
