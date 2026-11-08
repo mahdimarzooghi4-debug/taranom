@@ -697,6 +697,10 @@ jobs:
           test "$ai_ready" = "1"
           cd apps/ops-web
           CI=true npm run test:e2e
+          # All three protected Admin/Support suites run separately against
+          # the Vite portal preview at 4319, NOT the old local ops host 4318.
+          # These tests remain mandatory in the canonical 14-job regression.
+          CI=true npm run test:e2e -- --config playwright.support.config.ts
       - name: Upload local-only HTTP/browser QA records
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
