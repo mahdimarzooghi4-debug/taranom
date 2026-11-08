@@ -21,3 +21,11 @@ No actual group membership activation, guardian/dependent management, subscripti
 ## Admission
 
 Keep Draft/Open/Unmerged on the intended stacked base #295. No Ready for Review, merge, Stage, formal QA Gate, release or Production without explicit owner approval. An isolated mainline gate may require temporarily retargeting this Draft PR to main and restoring its stacked base after exact-SHA green CI; no main commit or deployment occurs.
+
+## Exact-head integration checkpoint (not approval)
+
+- The final implemented feature and negative-regression candidate before this evidence-only commit is `c70730d37decaa326515f746b53e28401606512e`.
+- [Figma Appointment Integration #42502567194](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42502567194): **SUCCESS 2/2**, including real PostgreSQL HTTP notification/consent/backfill tests and Chromium member/center/admin suites.
+- Earlier candidate `022befe032bba29095a38ae5b84126f4b92ee1e4` exposed an SQL string-boundary error in the owner notification feed; it was fixed directly in `959b8888f82c2a528edd84764e3ba8140b41ad01`. Then an additional revoked/expired/invalid response negative test was committed and the full 2-job integration passed.
+- This evidence-only commit changes the SHA. The new exact head must again pass both the Figma integration and the canonical **14/14** mainline regression before technical Code Review.
+- PR #296 is temporarily retargeted from stacked base #295 to `main` solely to invoke the existing canonical full regression, then must return to #295. No direct change to main, Stage, QA Gate, Release or Production.
