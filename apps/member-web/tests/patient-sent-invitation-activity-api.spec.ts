@@ -115,5 +115,5 @@ test('account navigation opens private sent-invitations view, not recipient hist
  await page.goto('/patient-app/account');
  await page.getByRole('link',{name:'پیگیری دعوت‌های ارسالی'}).click();
  await expect(page.locator('.owner-invitation-activity .group-draft-card')).toHaveCount(20);
- await expect(page.locator('.owner-invitation-activity')).toContainText('پیگیری پاسخ‌های ثبت‌شده');
+ await expect(page.getByText('پیگیری پاسخ‌های ثبت‌شده، نه عضویت فعال')).toBeVisible();
 });
