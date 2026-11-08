@@ -176,7 +176,7 @@ test('WEB-12: no synthetic member identity provider can be enabled by query flag
   await expect(page.getByRole('button', { name: /خروج از حساب/ })).toHaveCount(0);
 });
 
-test('MEMBER-CSP-01: disconnected built preview keeps policy and renders', async ({ page }) => {
+test('MEMBER-CSP-01: same-origin protected preview keeps policy and renders', async ({ page }) => {
   await page.goto('/member');
   const p = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
   expect(p).toContain("default-src 'none'");
@@ -204,7 +204,7 @@ test('MEMBER-CSP-02: policy permits same-origin API fetches and rejects external
   });
   expect(results).toEqual([true, true]);
   expect(outgoing).toHaveLength(1);
-}
+});
 test('MEMBER-CSP-03: injected inline script is rejected without breaking the preview', async ({ page }) => {
   await page.goto('/member');
   await page.evaluate(() => {
