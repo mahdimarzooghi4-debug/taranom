@@ -12,6 +12,7 @@ export const patientServices={
  profile:{title:'اطلاعات فردی',description:'مشخصات اعلامی شما',href:'/patient-app/personal-info'},
  notifications:{title:'اعلان‌ها',description:'اعلان‌های ثبت‌شدهٔ حساب',href:'/patient-app/notifications'},
  invitationHistory:{title:'سابقهٔ پاسخ به دعوت‌ها',description:'دعوت‌های پذیرفته یا ردشدهٔ حساب',href:'/patient-app/invitation-history'},
+ sentInvitations:{title:'دعوت‌های ارسالی من',description:'وضعیت دعوت‌های صادرشده از این حساب',href:'/patient-app/invitations-sent'},
  groupDrafts:{title:'پیش‌نویس‌های دعوت',description:'اطلاعات اولیهٔ دعوت؛ بدون ارسال',href:'/patient-app/group-members'},
  support:{title:'پشتیبانی',description:'ثبت درخواست و مشاهدهٔ پاسخ',href:'/patient-app/support'},
 } as const;
