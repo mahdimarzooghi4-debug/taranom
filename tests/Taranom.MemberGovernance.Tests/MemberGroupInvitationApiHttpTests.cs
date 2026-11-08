@@ -575,4 +575,94 @@ public sealed class MemberGroupInvitationApiHttpTests
             $"{expiredPath}/{expiredId:D}/revoke", null, ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task OwnerDraftListProjectsLatestEffectiveInvitationWithoutLeakingRecipientOrSecret()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("draft-summary-owner-" + Guid.NewGuid().ToString("N"));
+        using var recipient = setup.AuthenticatedIdentityClient("draft-summary-recipient-" + Guid.NewGuid().ToString("N"));
+        using var other = setup.AuthenticatedIdentityClient("draft-summary-foreign-" + Guid.NewGuid().ToString("N"));
+
+        async Task<JsonElement> Latest(Guid draftRef)
+        {
+            using var response = await owner.GetAsync($"{Drafts}?draftRef={draftRef:D}", ct);
+            Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            var row = Assert.Single(json.RootElement.GetProperty("drafts").EnumerateArray());
+            Assert.Equal(draftRef, row.GetProperty("draftRef").GetGuid());
+            return row.GetProperty("latestInvitation").Clone();
+        }
+
+        async Task<(Guid InvitationRef, string Token)> Issue(Guid draftRef)
+        {
+            var token = Token();
+            using var response = await owner.PostAsJsonAsync($"{Drafts}/{draftRef:D}/invitations",
+                new { requestId = Guid.NewGuid(), token }, ct);
+            Assert.Equal("Pending", await State(response, ct));
+            using var json = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
+            return (json!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid(), token);
+        }
+
+        var noLinkDraft = await Draft(owner, ct);
+        Assert.Equal(JsonValueKind.Null, (await Latest(noLinkDraft)).ValueKind);
+
+        // A replacement is selected by immutable invitation sequence, and the
+        // later Declined terminal state is not hidden by an older link.
+        var replacedDraft = await Draft(owner, ct);
+        var first = await Issue(replacedDraft);
+        var latest = await Issue(replacedDraft);
+        Assert.Equal("Revoked", await State(await recipient.PostAsJsonAsync(Preview,
+            new { token = first.Token }, ct), ct));
+        Assert.Equal("Declined", await State(await recipient.PostAsJsonAsync(Respond,
+            new { token = latest.Token, decision = "Declined", consentVersion = "group-invitation-v1" }, ct), ct));
+        var declined = await Latest(replacedDraft);
+        Assert.Equal(latest.InvitationRef, declined.GetProperty("invitationRef").GetGuid());
+        Assert.Equal("Declined", declined.GetProperty("state").GetString());
+        Assert.NotEqual(JsonValueKind.Null, declined.GetProperty("respondedAt").ValueKind);
+        Assert.Equal(new[] { "createdAt", "expiresAt", "invitationRef", "respondedAt", "state" },
+            declined.EnumerateObject().Select(x => x.Name).OrderBy(x => x, StringComparer.Ordinal).ToArray());
+
+        var withdrawnDraft = await Draft(owner, ct);
+        var withdrawn = await Issue(withdrawnDraft);
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsync($"{Drafts}/{withdrawnDraft:D}/withdraw", null, ct)).StatusCode);
+        var revoked = await Latest(withdrawnDraft);
+        Assert.Equal(withdrawn.InvitationRef, revoked.GetProperty("invitationRef").GetGuid());
+        Assert.Equal("Revoked", revoked.GetProperty("state").GetString());
+        Assert.Equal(JsonValueKind.Null, revoked.GetProperty("respondedAt").ValueKind);
+
+        var expiredDraft = await Draft(owner, ct);
+        var expired = await Issue(expiredDraft);
+        await using (var db = NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!))
+        await using (var expire = db.CreateCommand("""
+            UPDATE taranom_member_group_invitation
+            SET created_at=now()-interval '8 days',expires_at=now()-interval '1 day'
+            WHERE invitation_ref=$1
+            """))
+        {
+            expire.Parameters.AddWithValue(expired.InvitationRef);
+            Assert.Equal(1, await expire.ExecuteNonQueryAsync(ct));
+        }
+        var expiredSummary = await Latest(expiredDraft);
+        Assert.Equal(expired.InvitationRef, expiredSummary.GetProperty("invitationRef").GetGuid());
+        Assert.Equal("Expired", expiredSummary.GetProperty("state").GetString());
+
+        var acceptedDraft = await Draft(owner, ct);
+        var accepted = await Issue(acceptedDraft);
+        Assert.Equal("Accepted", await State(await recipient.PostAsJsonAsync(Respond,
+            new { token = accepted.Token, decision = "Accepted", consentVersion = "group-invitation-v1" }, ct), ct));
+        var acceptedSummary = await Latest(acceptedDraft);
+        Assert.Equal(accepted.InvitationRef, acceptedSummary.GetProperty("invitationRef").GetGuid());
+        Assert.Equal("Accepted", acceptedSummary.GetProperty("state").GetString());
+        Assert.NotEqual(JsonValueKind.Null, acceptedSummary.GetProperty("respondedAt").ValueKind);
+
+        using var foreign = await other.GetFromJsonAsync<JsonDocument>(
+            $"{Drafts}?draftRef={acceptedDraft:D}", ct);
+        Assert.Empty(foreign!.RootElement.GetProperty("drafts").EnumerateArray());
+        var body = (await owner.GetStringAsync($"{Drafts}?draftRef={acceptedDraft:D}", ct));
+        Assert.DoesNotContain(accepted.Token, body, StringComparison.OrdinalIgnoreCase);
+        foreach (var forbidden in new[] { "tokenHash", "token_hash", "recipientSubject", "recipientIssuer", "consentVersion" })
+            Assert.DoesNotContain(forbidden, body, StringComparison.OrdinalIgnoreCase);
+    }
+
 }

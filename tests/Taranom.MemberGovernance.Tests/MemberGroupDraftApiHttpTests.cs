@@ -97,9 +97,13 @@ public sealed class MemberGroupDraftApiHttpTests
         using var page1 = await owner.GetFromJsonAsync<JsonDocument>(Path, ct);
         var first = page1!.RootElement.GetProperty("drafts").EnumerateArray().Select(d => d.GetProperty("draftRef").GetGuid()).ToArray();
         Assert.Equal(20, first.Length);
+        Assert.All(page1.RootElement.GetProperty("drafts").EnumerateArray(),
+            d => Assert.Equal(JsonValueKind.Null, d.GetProperty("latestInvitation").ValueKind));
         using var page2 = await owner.GetFromJsonAsync<JsonDocument>(Path + "?before=" + page1.RootElement.GetProperty("nextBefore").GetString(), ct);
         var second = page2!.RootElement.GetProperty("drafts").EnumerateArray().Select(d => d.GetProperty("draftRef").GetGuid()).ToArray();
         Assert.Equal(2, second.Length);
+        Assert.All(page2.RootElement.GetProperty("drafts").EnumerateArray(),
+            d => Assert.Equal(JsonValueKind.Null, d.GetProperty("latestInvitation").ValueKind));
         Assert.Empty(first.Intersect(second));
         using var exact = await owner.GetFromJsonAsync<JsonDocument>($"{Path}?requestId={firstId:D}", ct);
         Assert.Single(exact!.RootElement.GetProperty("drafts").EnumerateArray());

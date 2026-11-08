@@ -8,3 +8,8 @@
 .owner-invitation-filters button:disabled{cursor:default;opacity:.6}
 .owner-invitation-draft-note{font-size:11px;line-height:24px;color:#64748b;overflow-wrap:anywhere;margin:0 0 12px}
 .owner-invitation-draft-note bdi{display:block;overflow-wrap:anywhere}
+
+.group-draft-invitation-summary{margin:12px 0;padding:12px;border:1px solid #dbe4ed;border-radius:12px;background:#f8fafc}
+.group-draft-invitation-summary strong{display:block;color:#013365;font-size:13px;line-height:24px}
+.group-draft-invitation-summary p,.group-draft-no-invitation{margin:4px 0;color:#475569;font-size:12px;line-height:22px;overflow-wrap:anywhere}
+.group-draft-invitation-summary .group-draft-invitation-boundary{color:#64748b;font-size:11px}
