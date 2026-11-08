@@ -44,7 +44,7 @@ test('server Pending filter exposes older actionable link hidden below twenty te
  const calls:URL[]=[];await mock(page,u=>calls.push(u));
  await page.goto('/patient-app/invitations-sent');
  await expect(page.locator('.owner-invitation-activity .group-draft-card')).toHaveCount(20);
- await expect(page.locator('.owner-invitation-activity')).not.toContainText('دعوت آزمایشی 1');
+ await expect(page.getByRole('heading',{name:'دعوت آزمایشی 1',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'در انتظار پاسخ'}).click();
  await expect(page.getByRole('button',{name:'در انتظار پاسخ'})).toHaveAttribute('aria-pressed','true');
  await expect(page.locator('.owner-invitation-activity .group-draft-card')).toHaveCount(1);
