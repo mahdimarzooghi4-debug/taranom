@@ -1,14 +1,14 @@
 import {test,expect,type Page} from '@playwright/test';
 const ref='550e8400-e29b-41d4-a716-446655440000';
 const label='پیش‌نویس آزمایشی خانواده';
-type Draft={draftRef:string;requestId:string;method:string;recipientLabel:string;state:string;createdAt:string;withdrawnAt:string|null};
+type Draft={draftRef:string;requestId:string;method:string;recipientLabel:string;state:string;createdAt:string;withdrawnAt:string|null;latestInvitation:null};
 async function mock(page:Page,mode:'ok'|'lostCreate'|'lostWithdraw'='ok'){
  const drafts:Draft[]=[];let creates=0,withdraws=0;
  await page.addInitScript(()=>{window.taranomSession={getAccessToken:()=> 'synthetic-group-token'}});
  await page.route('**/api/v1/me/group-invitation-drafts**',route=>{
   const req=route.request(),u=new URL(req.url());expect(req.headers().authorization).toBe('Bearer synthetic-group-token');
   if(req.method()==='POST'&&u.pathname.endsWith('/withdraw')){withdraws++;drafts[0]={...drafts[0],state:'Withdrawn',withdrawnAt:'2026-11-07T10:00:00Z'};if(mode==='lostWithdraw')return route.abort();return route.fulfill({json:{draft:drafts[0]}})}
-  if(req.method()==='POST'){creates++;const c=req.postDataJSON();expect(Object.keys(c).sort()).toEqual(['method','recipientLabel','requestId']);const item={...c,draftRef:ref,state:'Draft',createdAt:'2026-11-07T09:00:00Z',withdrawnAt:null};drafts.push(item);if(mode==='lostCreate')return route.abort();return route.fulfill({json:{outcome:'Applied',draft:item}})}
+  if(req.method()==='POST'){creates++;const c=req.postDataJSON();expect(Object.keys(c).sort()).toEqual(['method','recipientLabel','requestId']);const item={...c,draftRef:ref,state:'Draft',createdAt:'2026-11-07T09:00:00Z',withdrawnAt:null};drafts.push({...item,latestInvitation:null});if(mode==='lostCreate')return route.abort();return route.fulfill({json:{outcome:'Applied',draft:item}})}
   const id=u.searchParams.get('requestId');return route.fulfill({json:{drafts:id?drafts.filter(d=>d.requestId===id):drafts,nextBefore:null}});
  });return {creates:()=>creates,withdraws:()=>withdraws};
 }
