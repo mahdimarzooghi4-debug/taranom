@@ -30,3 +30,11 @@ No recipient directory, account lookup, targeted verification, phone/email/SMS, 
 ## Acceptance / handoff
 
 PR remains Draft/Open and stacked above #293. Fix CI failures before adding unrelated work. Do not mark Ready, merge, run Stage/formal QA Gate, Release Approval, or Production without explicit owner instruction. National release remains DENIED_BY_DEFAULT; all 17 launch domains and 19 external evidence categories remain blocked/unverified.
+
+## Verification checkpoint (not a release claim)
+
+- Candidate implementation SHA before this record: `278a4dae980adfccde4ea15f7cabb090cf86f365`.
+- Figma Appointment Integration [run 42494991585](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42494991585): **SUCCESS 2/2**, including real PostgreSQL HTTP and Chromium member/center/admin coverage.
+- This evidence-record commit intentionally changes the exact candidate SHA. Both Figma integration (2/2) and the full canonical mainline regression (14/14) must pass again on this commit before Code Review.
+- The intended stacked base is PR #293. PR #294 is temporarily based on `main` only to invoke the existing 14-job regression, then must be restored to #293.
+- No CI result authorizes merge, Stage, QA Gate, Release, real membership activation, financial/clinical authority or Production.
