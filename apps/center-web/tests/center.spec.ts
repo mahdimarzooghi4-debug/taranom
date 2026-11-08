@@ -253,13 +253,13 @@ test('CENTER-18: mobile modal closes previously open menu and keeps keyboard foc
   await expect(page.getByRole('button', { name: '+ معرفی پزشک' })).toBeFocused();
 });
 
-test('CENTER-CSP-01: disconnected built preview keeps policy and renders', async ({ page }) => {
+test('CENTER-CSP-01: same-origin protected preview keeps policy and renders', async ({ page }) => {
   await page.goto('/center');
   const p = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
   expect(p).toContain("default-src 'none'");
   expect(p).toContain("script-src 'self'");
   expect(p).toContain("style-src 'self'");
-  expect(p).toContain("connect-src 'none'");
+  expect(p).toContain("connect-src 'self'");
   expect(p).toContain("form-action 'none'");
   expect(p).toContain("base-uri 'none'");
   await expect(page.locator('meta[name="referrer"]')).toHaveAttribute('content', 'no-referrer');
@@ -267,26 +267,21 @@ test('CENTER-CSP-01: disconnected built preview keeps policy and renders', async
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });
 
-test('CENTER-CSP-02: policy blocks same-origin private API and remote connections before request', async ({ page }) => {
+test('CENTER-CSP-02: policy permits same-origin API fetches and rejects external origins', async ({ page }) => {
   const outgoing: string[] = [];
-  page.on('request', request => {
-    if (request.url().includes('blocked-csp-')) outgoing.push(request.url());
+  await page.route('**/api/blocked-csp-local', async route => {
+    outgoing.push(route.request().url());
+    await route.fulfill({ status: 401, body: 'synthetic unauthenticated response' });
   });
   await page.goto('/center');
-  const blocked = await page.evaluate(async () => {
-    const attempt = async (url: string): Promise<boolean> => {
-      try { await fetch(url, { method: 'GET' }); return false; }
-      catch { return true; }
-    };
-    return [
-      await attempt('/api/blocked-csp-local'),
-      await attempt('https://example.com/blocked-csp-external'),
-    ];
+  const results = await page.evaluate(async () => {
+    const local = await fetch('/api/blocked-csp-local').then(r => r.status === 401).catch(() => false);
+    const remote = await fetch('https://example.com/blocked-csp-external').then(() => false).catch(() => true);
+    return [local, remote];
   });
-  expect(blocked).toEqual([true, true]);
-  expect(outgoing).toEqual([]);
+  expect(results).toEqual([true, true]);
+  expect(outgoing).toHaveLength(1);
 });
-
 test('CENTER-CSP-03: injected inline script is rejected without breaking the preview', async ({ page }) => {
   await page.goto('/center');
   await page.evaluate(() => {
@@ -310,7 +305,7 @@ test('CENTER-HTTP-01: real built-preview HTML response supplies frame protection
   const policy = headers['content-security-policy'];
   expect(policy).toContain("default-src 'none'");
   expect(policy).toContain("frame-ancestors 'none'");
-  expect(policy).toContain("connect-src 'none'");
+  expect(policy).toContain("connect-src 'self'");
   expect(policy).toContain("script-src 'self'");
   expect(policy).toContain("style-src 'self'");
   expect(policy).toContain("form-action 'none'");
@@ -337,7 +332,7 @@ test('CENTER-HTTP-02: built JS asset also gets no-sniff and no-store response he
   expect(response.headers()['content-type']).toContain('javascript');
   expect(response.headers()['x-content-type-options']).toBe('nosniff');
   expect(response.headers()['cache-control']).toContain('no-store');
-  expect(response.headers()['content-security-policy']).toContain("connect-src 'none'");
+  expect(response.headers()['content-security-policy']).toContain("connect-src 'self'");
 });
 
 test('CENTER-HTTP-03: Chromium cannot render an iframe of the built preview', async ({ page }) => {

@@ -1,0 +1,26 @@
+.manager-application{max-width:900px;margin:0 auto;padding:32px 20px 70px;
+ font:inherit;display:grid;gap:20px;color:#1e3851}
+.manager-application-head{display:flex;justify-content:space-between;align-items:center;gap:20px}
+.manager-application-head img{width:130px;max-height:65px;object-fit:contain}
+.manager-application-head a{color:#17629b}
+.manager-application h1{font-size:28px;margin:0}
+.manager-application p{line-height:1.9}
+.manager-application-warning{border:1px solid #cedee8;background:#eef5f9;padding:20px;border-radius:14px}
+.manager-application-card{background:#fff;border:1px solid #d6e0e7;border-radius:14px;
+ padding:22px;display:grid;gap:16px}
+.manager-application h2{font-size:18px;margin:0}
+.manager-application-card label{display:grid;gap:8px;font-weight:600;font-size:14px}
+.manager-application input,.manager-application textarea{font:inherit;border:1px solid #adc3d4;
+ border-radius:10px;padding:12px;box-sizing:border-box;width:100%;background:#fff}
+.manager-application button{font:inherit;border:1px solid #17629b;border-radius:10px;
+ padding:10px 16px;background:#eaf4fb;color:#163b59;cursor:pointer}
+.manager-application button:disabled{opacity:.5;cursor:not-allowed}
+.manager-application-error{color:#a02626;border:1px solid #e3b4b4;padding:12px}
+.manager-application-success{color:#155d3b;padding:12px}
+.manager-application-row{display:flex;gap:18px;align-items:center;justify-content:space-between}
+.manager-application-history{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.manager-application-history li{border-bottom:1px solid #e1e9ef;padding:12px 4px;
+ display:flex;flex-direction:column;gap:7px;overflow-wrap:anywhere}
+.manager-application-history small{color:#506779}
+@media(max-width:650px){.manager-application{padding:16px 12px 40px}
+ .manager-application h1{font-size:22px}.manager-application-card{padding:16px}}

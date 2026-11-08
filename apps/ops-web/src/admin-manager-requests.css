@@ -1,0 +1,24 @@
+.manager-admin{display:grid;gap:18px;color:#193b58}
+.manager-admin h2{font-size:18px;margin:0}
+.manager-admin-alert{background:#eff6fa;border:1px solid #c9dce8}
+.manager-admin-alert p{line-height:2}
+.manager-admin button{font:inherit;border:1px solid #809eb5;background:#f7fbff;
+ border-radius:9px;padding:9px 13px;cursor:pointer}
+.manager-admin button:disabled{opacity:.5;cursor:not-allowed}
+.manager-admin .figma-table-wrap{max-width:100%;overflow-x:auto}
+.manager-admin table{border-collapse:collapse;width:100%;min-width:780px}
+.manager-admin th,.manager-admin td{font-size:12px;border-bottom:1px solid #e2eaf0;
+ padding:12px;text-align:right;vertical-align:top;overflow-wrap:anywhere}
+.manager-admin td small{display:block;color:#667889;word-break:break-all}
+.manager-admin-error{color:#a22c2c;padding:10px;border:1px solid #e5c2c2}
+.manager-admin-note{color:#156343;padding:10px}
+.manager-admin-review{display:grid;gap:16px}
+.manager-admin-review p{overflow-wrap:anywhere}
+.manager-admin-review label{display:grid;gap:7px}
+.manager-admin-review textarea,.manager-admin-review select{width:100%;box-sizing:border-box;
+ padding:10px;border:1px solid #b5c9d8;border-radius:9px;font:inherit;background:#fff}
+
+.manager-admin-workspace{display:grid;gap:10px}
+.manager-admin-workspace p{line-height:1.85;margin:0;overflow-wrap:anywhere}
+.manager-admin-workspace .manager-admin-no-proof{
+ border:1px solid #d4c5a2;background:#fff8e9;padding:12px;border-radius:10px}

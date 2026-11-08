@@ -131,7 +131,8 @@
       "capability": "Provider network evidence gate (synthetic)",
       "decision_refs": [
         "TRN-BIZ-043",
-        "TRN-BIZ-044"
+        "TRN-BIZ-044",
+        "TRN-BIZ-055"
       ],
       "implementation_ref": "src/Taranom.ClinicalCenterGovernance/SyntheticProviderNetworkEvidenceGate.cs",
       "test_ref": "tests/Taranom.ClinicalCenterGovernance.Tests/SyntheticProviderNetworkEvidenceGateTests.cs",
@@ -144,7 +145,8 @@
       "capability": "Internal center authority boundary (test only)",
       "decision_refs": [
         "TRN-BIZ-043",
-        "TRN-BIZ-044"
+        "TRN-BIZ-044",
+        "TRN-BIZ-055"
       ],
       "implementation_ref": "src/Taranom.CenterAuthorityBoundary/CenterAuthorityGate.cs",
       "test_ref": "tests/Taranom.CenterAuthorityBoundary.Tests/CenterAuthorityGateTests.cs",
@@ -157,7 +159,8 @@
       "capability": "Real licensed contracted provider registry and verified nationwide coverage",
       "decision_refs": [
         "TRN-BIZ-043",
-        "TRN-BIZ-044"
+        "TRN-BIZ-044",
+        "TRN-BIZ-055"
       ],
       "implementation_ref": null,
       "test_ref": null,

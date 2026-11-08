@@ -4,6 +4,8 @@
 
 Five routes within **one center panel**: `/center`, `/center/departments`, `/center/doctors`, `/center/qualifications`, `/center/audit`.
 
+The separately routed `/center-portal` preview now follows the medical-center pages in the Taranom Figma file (20 screens). It uses explicitly synthetic center, doctor, appointment, prescription, insurer, financial and schedule values. It is frontend-only: no actions persist, insurance is never calculated by Taranom, and the hospital-system connection is not active. The original `/center` protected shell remains unchanged.
+
 - This shell uses React + TypeScript + Vite, Persian RTL, keyboard/accessible browser routing, responsive sidebar and a non-mutating workflow-information dialog.
 - The UI **never** authenticates a center, fetches actual doctors/departments, shows patient data, grants licenses or writes real/placeholder doctors. Action controls open information-only locked dialogs; their submit buttons are disabled. No browser local/session storage, fake active-doctor profiles, REST URLs, external CDN/fonts, or live authorization fallback is present.
 - Empty/unavailable lists **must not** mean a real center has zero doctors or departments.
@@ -16,3 +18,8 @@ This source is strictly internal Code/Code Review and not Stage, formal QA, Rele
 ## Sprint 25 — disconnected browser egress defense
 
 The Center Web built preview uses the same restrictive HTML meta CSP and no-referrer/noindex metadata as Member Web. Three built-browser tests exercise policy presence, blocked local `/api/` + off-site `fetch`, and blocked inline script insertion. Existing disabled/nonmutating center actions and the server DENY-ONLY protected-data gate stay unchanged. Meta CSP is defense in depth for an **offline disconnected preview**, not center-management authorization, professional licensing, a legal medical data right or real hosting/anti-clickjacking policy. Future Production hosting would need approved HTTP headers and independent identity/consent/rights controls; HMR may be restricted.
+
+
+#### Real appointment API slice (Draft)
+
+The Figma center portal routes for dashboard, appointments, reception and schedules use the same-origin appointment API adapter. They require a host-provided authenticated session bridge at `window.taranomSession.getAccessToken()` and a same-origin reverse proxy for `/api/v1`. Tokens are requested in memory and are never written to browser storage. No browser OIDC login or production API host is configured by this preview. Center data is shown only when the API grants `CenterAppointmentsManage`; schedule changes carry the current revision and an idempotent request ID. The provider directory, credentials, hospital information-system connection, insurer API, financial pages and remaining panel workflows are not connected.

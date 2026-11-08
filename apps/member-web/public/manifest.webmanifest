@@ -1,0 +1,22 @@
+{
+  "id": "/patient-app/",
+  "name": "ترنم | اکوسیستم سلامت",
+  "short_name": "ترنم",
+  "description": "حساب، نوبت‌ها و پشتیبانی ترنم",
+  "lang": "fa-IR",
+  "dir": "rtl",
+  "start_url": "/patient-app/account",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f9fb",
+  "theme_color": "#013365",
+  "prefer_related_applications": false,
+  "icons": [
+    {"src": "/assets/install/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/assets/install/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}
+  ],
+  "shortcuts": [
+    {"name": "نوبت‌های من", "url": "/patient-app/appointments"},
+    {"name": "پشتیبانی", "url": "/patient-app/support"}
+  ]
+}
