@@ -28,7 +28,7 @@ test('Figma admin center screen creates only a server-issued unverified referenc
  await page.getByLabel('نام اعلامی مرکز').fill('مرکز تست شمال');
  await page.getByLabel('شهر اعلامی مرکز').fill('رشت');
  await page.getByRole('button',{name:'ایجاد مرکز با شناسه مرجع'}).click();
- await expect(page.getByText('center-'+ 'a'.repeat(32))).toBeVisible();
+ await expect(page.getByRole('cell', {name:'center-'+ 'a'.repeat(32), exact:true})).toBeVisible();
  await expect(page.getByRole('cell',{name:'تعریف‌شده؛ تأییدنشده'})).toBeVisible();
  await expect(page.getByRole('cell',{name:'تخصیص داده نشده'})).toBeVisible();
  expect(posts).toBe(1);
