@@ -12,6 +12,11 @@ namespace Taranom.Appointments.Api;
 public sealed record MemberGroupDraftCommand(Guid RequestId, string Method, string RecipientLabel);
 public sealed record MemberGroupDraftView(Guid DraftRef, Guid RequestId, string Method, string RecipientLabel,
     string State, DateTimeOffset CreatedAt, DateTimeOffset? WithdrawnAt);
+public sealed record MemberGroupDraftInvitationSummary(Guid InvitationRef, string State,
+    DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, DateTimeOffset? RespondedAt);
+public sealed record MemberGroupDraftListItem(Guid DraftRef, Guid RequestId, string Method, string RecipientLabel,
+    string State, DateTimeOffset CreatedAt, DateTimeOffset? WithdrawnAt,
+    MemberGroupDraftInvitationSummary? LatestInvitation);
 
 internal static class MemberGroupDraftEndpoints
 {
@@ -26,26 +31,49 @@ internal static class MemberGroupDraftEndpoints
             if (requestId == Guid.Empty || draftRef == Guid.Empty || before is <= 0) return Results.BadRequest();
             await using var connection = await db.OpenConnectionAsync(ct);
             await using var command = new NpgsqlCommand("""
-                SELECT sequence_no,draft_ref,request_id,method,recipient_label,state,created_at,withdrawn_at
-                FROM taranom_member_group_invite_draft
-                WHERE issuer=@issuer AND subject=@subject
-                  AND (@id IS NULL OR request_id=@id) AND (@ref IS NULL OR draft_ref=@ref)
-                  AND (@before IS NULL OR sequence_no<@before)
-                ORDER BY sequence_no DESC LIMIT 21
+                SELECT d.sequence_no,d.draft_ref,d.request_id,d.method,d.recipient_label,
+                       d.state,d.created_at,d.withdrawn_at,
+                       latest.invitation_ref,latest.effective_state,
+                       latest.created_at,latest.expires_at,latest.responded_at
+                FROM taranom_member_group_invite_draft d
+                LEFT JOIN LATERAL (
+                    SELECT i.invitation_ref,
+                           CASE WHEN i.state='Pending' AND d.state='Withdrawn' THEN 'Revoked'
+                                WHEN i.state='Pending' AND i.expires_at<=clock_timestamp() THEN 'Expired'
+                                ELSE i.state END AS effective_state,
+                           i.created_at,i.expires_at,i.responded_at
+                    FROM taranom_member_group_invitation i
+                    WHERE i.draft_ref=d.draft_ref
+                    ORDER BY i.sequence_no DESC
+                    LIMIT 1
+                ) latest ON true
+                WHERE d.issuer=@issuer AND d.subject=@subject
+                  AND (@id IS NULL OR d.request_id=@id) AND (@ref IS NULL OR d.draft_ref=@ref)
+                  AND (@before IS NULL OR d.sequence_no<@before)
+                ORDER BY d.sequence_no DESC LIMIT 21
                 """, connection);
             Bind(command, owner.Value);
             command.Parameters.AddWithValue("id", NpgsqlDbType.Uuid, (object?)requestId ?? DBNull.Value);
             command.Parameters.AddWithValue("ref", NpgsqlDbType.Uuid, (object?)draftRef ?? DBNull.Value);
             command.Parameters.AddWithValue("before", NpgsqlDbType.Bigint, (object?)before ?? DBNull.Value);
             await using var reader = await command.ExecuteReaderAsync(ct);
-            var drafts = new List<MemberGroupDraftView>();
+            var drafts = new List<MemberGroupDraftListItem>();
             long last = 0;
             var more = false;
             while (await reader.ReadAsync(ct))
             {
                 if (drafts.Count == 20) { more = true; break; }
                 last = reader.GetInt64(0);
-                drafts.Add(Read(reader, 1));
+                var draft = Read(reader, 1);
+                MemberGroupDraftInvitationSummary? latest = reader.IsDBNull(8) ? null :
+                    new MemberGroupDraftInvitationSummary(
+                        reader.GetGuid(8), reader.GetString(9),
+                        reader.GetFieldValue<DateTimeOffset>(10),
+                        reader.GetFieldValue<DateTimeOffset>(11),
+                        reader.IsDBNull(12) ? null : reader.GetFieldValue<DateTimeOffset>(12));
+                drafts.Add(new MemberGroupDraftListItem(
+                    draft.DraftRef,draft.RequestId,draft.Method,draft.RecipientLabel,
+                    draft.State,draft.CreatedAt,draft.WithdrawnAt,latest));
             }
             return Results.Ok(new { drafts, nextBefore = more ? last.ToString(CultureInfo.InvariantCulture) : null });
         }).RequireAuthorization(policy);
