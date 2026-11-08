@@ -277,4 +277,61 @@ public sealed class MemberNotificationApiHttpTests
             $"/api/v1/me/notifications?notificationRef={invitation:D}", ct);
         Assert.Empty(wrongOwner!.RootElement.GetProperty("notifications").EnumerateArray());
     }
+
+    [Fact]
+    public async Task PreviewRevocationExpiryAndRejectedDecisionNeverCreateOwnerNotification()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("notice-nonfinal-owner-" + Guid.NewGuid().ToString("N"));
+        using var recipient = setup.AuthenticatedIdentityClient("notice-nonfinal-recipient-" + Guid.NewGuid().ToString("N"));
+        using var draftPost = await owner.PostAsJsonAsync("/api/v1/me/group-invitation-drafts",
+            new { requestId = Guid.NewGuid(), method = "ExistingMember", recipientLabel = "Unverified private label" }, ct);
+        Assert.Equal(HttpStatusCode.OK, draftPost.StatusCode);
+        using var draftJson = await draftPost.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var draft = draftJson!.RootElement.GetProperty("draft").GetProperty("draftRef").GetGuid();
+        var issuePath = $"/api/v1/me/group-invitation-drafts/{draft:D}/invitations";
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        using var issued = await owner.PostAsJsonAsync(issuePath, new { requestId = Guid.NewGuid(), token }, ct);
+        using var issuedJson = await issued.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var invitation = issuedJson!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+
+        Assert.Equal(HttpStatusCode.OK, (await recipient.PostAsJsonAsync(
+            "/api/v1/me/group-invitations/preview", new { token }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await recipient.PostAsJsonAsync(
+            "/api/v1/me/group-invitations/respond",
+            new { token, decision = "Accepted", consentVersion = "unsupported" }, ct)).StatusCode);
+        using (var page = await owner.GetFromJsonAsync<JsonDocument>("/api/v1/me/notifications", ct))
+            Assert.Empty(page!.RootElement.GetProperty("notifications").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsync(
+            $"{issuePath}/{invitation:D}/revoke", null, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await recipient.PostAsJsonAsync(
+            "/api/v1/me/group-invitations/respond",
+            new { token, decision = "Accepted", consentVersion = "group-invitation-v1" }, ct)).StatusCode);
+        using (var page = await owner.GetFromJsonAsync<JsonDocument>("/api/v1/me/notifications", ct))
+            Assert.Empty(page!.RootElement.GetProperty("notifications").EnumerateArray());
+
+        token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        using var replacement = await owner.PostAsJsonAsync(issuePath,
+            new { requestId = Guid.NewGuid(), token }, ct);
+        using var replacementJson = await replacement.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var newer = replacementJson!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+        await using var db = NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!);
+        await using (var expire = db.CreateCommand("""
+            UPDATE taranom_member_group_invitation
+            SET created_at=now()-interval '8 days',expires_at=now()-interval '1 day'
+            WHERE invitation_ref=@ref
+            """))
+        {
+            expire.Parameters.AddWithValue("ref", newer);
+            Assert.Equal(1, await expire.ExecuteNonQueryAsync(ct));
+        }
+        Assert.Equal(HttpStatusCode.Conflict, (await recipient.PostAsJsonAsync(
+            "/api/v1/me/group-invitations/respond",
+            new { token, decision = "Declined", consentVersion = "group-invitation-v1" }, ct)).StatusCode);
+        using var last = await owner.GetFromJsonAsync<JsonDocument>("/api/v1/me/notifications", ct);
+        Assert.Empty(last!.RootElement.GetProperty("notifications").EnumerateArray());
+        Assert.Equal(0L, last.RootElement.GetProperty("unreadCount").GetInt64());
+    }
 }
