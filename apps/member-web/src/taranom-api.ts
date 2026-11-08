@@ -144,6 +144,21 @@ export async function issueMyGroupInvitation(draftRef:string,command:{requestId:
  const r=await invitationApi<{outcome:string;invitation:GroupInvitation}>(invitationPath(draftRef),{method:'POST',body:JSON.stringify(command)});
  if(!r||!['Applied','Replayed'].includes(r.outcome)||!validInvitation(r.invitation)||r.invitation.requestId!==command.requestId)throw new Error('ساخت پیوند قابل تأیید نیست.');return r.invitation;
 }
+// Exactly one owner-issued pending invitation can be revoked. Retrying the
+// same operation is monotonic and cannot rewrite recipient consent.
+export async function revokeMyGroupInvitation(draftRef:string,invitationRef:string){
+ const result=await invitationApi<{outcome:string;invitation:GroupInvitation}>(
+  invitationPath(draftRef)+'/'+encodeURIComponent(invitationRef)+'/revoke',{method:'POST'});
+ const v=result?.invitation;
+ const allowed=['invitationRef','requestId','state','createdAt','expiresAt','respondedAt'];
+ if(!result||Object.keys(result).length!==2||!['Applied','Replayed'].includes(result.outcome)||
+  !v||!validInvitation(v)||!notificationId(v.requestId)||
+  Object.keys(v).length!==allowed.length||Object.keys(v).some(k=>!allowed.includes(k))||
+  v.invitationRef!==invitationRef||v.state!=='Revoked')
+  throw new Error('لغو پیوند دعوت هنوز قابل تأیید نیست.');
+ return v;
+}
+
 export async function inspectGroupInvitation(token:string,decision?:'Accepted'|'Declined'){
  const r=await invitationApi<{invitation:GroupInvitation;consentVersion:string}>('/api/v1/me/group-invitations/'+(decision?'respond':'preview'),{method:'POST',body:JSON.stringify(decision?{token,decision,consentVersion:'group-invitation-v1'}:{token})});
  if(!r||r.consentVersion!=='group-invitation-v1'||!validInvitation(r.invitation)||(decision&&r.invitation.state!==decision))throw new Error('نتیجهٔ پاسخ به دعوت قابل تأیید نیست.');return r.invitation;

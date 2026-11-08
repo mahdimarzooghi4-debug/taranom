@@ -335,4 +335,133 @@ public sealed class MemberGroupInvitationApiHttpTests
             Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(activity + query, ct)).StatusCode);
     }
 
+
+    [Fact]
+    public async Task OwnerCanRevokePendingTokenWithoutArchivingDraftOrExposingRecipients()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("revoke-owner-" + Guid.NewGuid().ToString("N"));
+        using var outsider = setup.AuthenticatedIdentityClient("revoke-foreign-" + Guid.NewGuid().ToString("N"));
+        using var recipient = setup.AuthenticatedIdentityClient("revoke-recipient-" + Guid.NewGuid().ToString("N"));
+        using var anonymous = setup.Factory.CreateClient();
+        var draft = await Draft(owner, ct); var token = Token(); var requestId = Guid.NewGuid();
+        var invitationPath = $"{Drafts}/{draft:D}/invitations";
+        using var issue = await owner.PostAsJsonAsync(invitationPath, new { requestId, token }, ct);
+        Assert.Equal("Pending", await State(issue, ct));
+        using var issued = await issue.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var invitationRef = issued!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+        var revokePath = $"{invitationPath}/{invitationRef:D}/revoke";
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsync(revokePath, null, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await outsider.PostAsync(revokePath, null, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.PostAsync(
+            $"{invitationPath}/{Guid.NewGuid():D}/revoke", null, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(revokePath,
+            new { recipientSubject = "forged", state = "Accepted" }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsync(
+            $"{invitationPath}/{Guid.Empty:D}/revoke", null, ct)).StatusCode);
+
+        using var revoke = await owner.PostAsync(revokePath, null, ct);
+        Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+        Assert.Equal("no-store", revoke.Headers.CacheControl?.ToString());
+        var result = await revoke.Content.ReadAsStringAsync(ct);
+        using var parsed = JsonDocument.Parse(result);
+        Assert.Equal("Applied", parsed.RootElement.GetProperty("outcome").GetString());
+        Assert.Equal(invitationRef, parsed.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid());
+        Assert.Equal("Revoked", parsed.RootElement.GetProperty("invitation").GetProperty("state").GetString());
+        Assert.DoesNotContain(token, result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("recipientIssuer", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("tokenHash", result, StringComparison.OrdinalIgnoreCase);
+        using var replay = await owner.PostAsync(revokePath, null, ct);
+        Assert.Equal("Revoked", await State(replay, ct));
+        using var replayBody = await replay.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        Assert.Equal("Replayed", replayBody!.RootElement.GetProperty("outcome").GetString());
+        Assert.Equal("Revoked", await State(await recipient.PostAsJsonAsync(
+            Preview, new { token }, ct), ct));
+        Assert.Equal(HttpStatusCode.Conflict, (await recipient.PostAsJsonAsync(Respond,
+            new { token, decision = "Accepted", consentVersion = "group-invitation-v1" }, ct)).StatusCode);
+        Assert.Equal("Revoked", await State(await owner.PostAsJsonAsync(
+            invitationPath, new { requestId, token }, ct), ct));
+
+        using var draftReceipt = await owner.GetFromJsonAsync<JsonDocument>(
+            $"{Drafts}?draftRef={draft:D}", ct);
+        Assert.Equal("Draft", Assert.Single(draftReceipt!.RootElement.GetProperty("drafts").EnumerateArray())
+            .GetProperty("state").GetString());
+        using var activity = await owner.GetFromJsonAsync<JsonDocument>(
+            $"/api/v1/me/group-invitation-activity?invitationRef={invitationRef:D}", ct);
+        Assert.Equal("Revoked", Assert.Single(activity!.RootElement.GetProperty("invitations").EnumerateArray())
+            .GetProperty("state").GetString());
+        using var scopes = await owner.GetFromJsonAsync<JsonDocument>("/api/v1/me/appointment-scopes", ct);
+        Assert.Empty(scopes!.RootElement.GetProperty("appointmentScopes").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task RevocationSerializesWithConsentAndDoesNotAlterFinalOrExpiredStates()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("revoke-race-owner-" + Guid.NewGuid().ToString("N"));
+        using var recipient = setup.AuthenticatedIdentityClient("revoke-race-recipient-" + Guid.NewGuid().ToString("N"));
+        var draft = await Draft(owner, ct);
+        var path = $"{Drafts}/{draft:D}/invitations";
+        var token = Token();
+        using var issue = await owner.PostAsJsonAsync(path,
+            new { requestId = Guid.NewGuid(), token }, ct);
+        Assert.Equal("Pending", await State(issue, ct));
+        using var issued = await issue.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var id = issued!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+        var revokePath = $"{path}/{id:D}/revoke";
+        var two = await Task.WhenAll(
+            owner.PostAsync(revokePath, null, ct),
+            recipient.PostAsJsonAsync(Respond,
+                new { token, decision = "Accepted", consentVersion = "group-invitation-v1" }, ct));
+        Assert.Equal(1, two.Count(x => x.StatusCode == HttpStatusCode.OK));
+        Assert.Equal(1, two.Count(x => x.StatusCode == HttpStatusCode.Conflict));
+        using var latest = await owner.GetFromJsonAsync<JsonDocument>(path, ct);
+        var last = latest!.RootElement.GetProperty("invitation").GetProperty("state").GetString();
+        Assert.Contains(last, new[] { "Accepted", "Revoked" });
+        if (last == "Accepted")
+            Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsync(revokePath, null, ct)).StatusCode);
+        else
+            Assert.Equal("Revoked", await State(await owner.PostAsync(revokePath, null, ct), ct));
+        foreach (var response in two) response.Dispose();
+
+        var declinedDraft = await Draft(owner, ct); var declinedToken = Token();
+        var declinedPath = $"{Drafts}/{declinedDraft:D}/invitations";
+        using var declinedIssue = await owner.PostAsJsonAsync(declinedPath,
+            new { requestId = Guid.NewGuid(), token = declinedToken }, ct);
+        using var declinedData = await declinedIssue.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var declinedId = declinedData!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+        Assert.Equal("Declined", await State(await recipient.PostAsJsonAsync(Respond,
+            new { token = declinedToken, decision = "Declined", consentVersion = "group-invitation-v1" }, ct), ct));
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsync(
+            $"{declinedPath}/{declinedId:D}/revoke", null, ct)).StatusCode);
+
+        var expiredDraft = await Draft(owner, ct); var expiredToken = Token();
+        var expiredPath = $"{Drafts}/{expiredDraft:D}/invitations";
+        using var expiredIssue = await owner.PostAsJsonAsync(expiredPath,
+            new { requestId = Guid.NewGuid(), token = expiredToken }, ct);
+        using var expiredData = await expiredIssue.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var expiredId = expiredData!.RootElement.GetProperty("invitation").GetProperty("invitationRef").GetGuid();
+        await using (var db = NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("TARANOM_TEST_PG")!))
+        await using (var expire = db.CreateCommand("""
+            UPDATE taranom_member_group_invitation
+            SET created_at=now()-interval '8 days', expires_at=now()-interval '1 day'
+            WHERE invitation_ref=$1
+            """))
+        {
+            expire.Parameters.AddWithValue(expiredId);
+            Assert.Equal(1, await expire.ExecuteNonQueryAsync(ct));
+        }
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsync(
+            $"{expiredPath}/{expiredId:D}/revoke", null, ct)).StatusCode);
+        Assert.Equal("Expired", await State(await recipient.PostAsJsonAsync(
+            Preview, new { token = expiredToken }, ct), ct));
+        Assert.Equal(HttpStatusCode.OK,
+            (await owner.PostAsync($"{Drafts}/{expiredDraft:D}/withdraw", null, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsync(
+            $"{expiredPath}/{expiredId:D}/revoke", null, ct)).StatusCode);
+    }
+
 }

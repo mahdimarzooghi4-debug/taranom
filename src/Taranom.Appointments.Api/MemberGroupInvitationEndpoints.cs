@@ -96,6 +96,68 @@ internal static class MemberGroupInvitationEndpoints
             });
         }).RequireAuthorization(policy);
 
+        // Owner-only, one-link revocation. Does not cancel an independent final
+        // consent decision, archive the draft or create a membership grant.
+        // All write paths serialize on the same draft row before invitation.
+        app.MapPost("/api/v1/me/group-invitation-drafts/{draftRef:guid}/invitations/{invitationRef:guid}/revoke",
+            async (Guid draftRef, Guid invitationRef, HttpContext context, NpgsqlDataSource db, CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            var owner = Owner(context);
+            if (owner is null) return Results.Forbid();
+            if (draftRef == Guid.Empty || invitationRef == Guid.Empty ||
+                context.Request.ContentLength is > 0 ||
+                context.Request.Headers.ContainsKey("Transfer-Encoding"))
+                return Results.BadRequest();
+
+            await using var connection = await db.OpenConnectionAsync(ct);
+            await using var tx = await connection.BeginTransactionAsync(ct);
+            await using (var draft = new NpgsqlCommand("""
+                SELECT state FROM taranom_member_group_invite_draft
+                WHERE draft_ref=@draft AND issuer=@issuer AND subject=@subject FOR UPDATE
+                """, connection, tx))
+            {
+                Bind(draft, owner.Value);
+                draft.Parameters.AddWithValue("draft", draftRef);
+                var draftState = await draft.ExecuteScalarAsync(ct) as string;
+                if (draftState is null) return Results.NotFound();
+                // A withdrawn draft has already disabled all unanswered links.
+                if (draftState != "Draft") return Results.Conflict();
+            }
+
+            GroupInvitationView view;
+            await using (var read = new NpgsqlCommand(Select + " " + """
+                 WHERE i.draft_ref=@draft AND i.invitation_ref=@id FOR UPDATE OF i
+                """, connection, tx))
+            {
+                read.Parameters.AddWithValue("draft", draftRef);
+                read.Parameters.AddWithValue("id", invitationRef);
+                await using var result = await read.ExecuteReaderAsync(ct);
+                if (!await result.ReadAsync(ct)) return Results.NotFound();
+                view = Read(result);
+            }
+            if (view.State == "Revoked")
+                return Results.Ok(new { outcome = "Replayed", invitation = view });
+            if (view.State != "Pending") return Results.Conflict();
+
+            await using (var command = new NpgsqlCommand("""
+                UPDATE taranom_member_group_invitation
+                SET state='Revoked'
+                WHERE draft_ref=@draft AND invitation_ref=@id AND state='Pending'
+                """, connection, tx))
+            {
+                command.Parameters.AddWithValue("draft", draftRef);
+                command.Parameters.AddWithValue("id", invitationRef);
+                if (await command.ExecuteNonQueryAsync(ct) != 1) return Results.Conflict();
+            }
+            await tx.CommitAsync(ct);
+            return Results.Ok(new
+            {
+                outcome = "Applied",
+                invitation = view with { State = "Revoked" }
+            });
+        }).RequireAuthorization(policy);
+
         // The raw random secret is supplied by the browser and never stored or returned by this API.
         app.MapPost("/api/v1/me/group-invitation-drafts/{draftRef:guid}/invitations", async (
             Guid draftRef, GroupInvitationIssue input, HttpContext context, NpgsqlDataSource db, CancellationToken ct) =>
