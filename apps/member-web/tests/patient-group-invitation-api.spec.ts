@@ -9,7 +9,7 @@ async function owner(page:Page,lost=false){let count=0,requestId='',savedToken='
   if(req.method()==='POST'){const c=req.postDataJSON();expect(Object.keys(c).sort()).toEqual(['requestId','token']);expect(c.token).toMatch(/^[a-f0-9]{64}$/);count++;requestId=c.requestId;savedToken=c.token;if(lost)return r.abort();return r.fulfill({json:{outcome:'Applied',invitation:{...base,requestId}}})}
   return r.fulfill({json:{invitation:requestId?{...base,requestId}:null}});
  }
- return r.fulfill({json:{drafts:[{draftRef,requestId:draftRef,method:'NewRegistration',recipientLabel:'پیش‌نویس آزمایشی',state:'Draft',createdAt,withdrawnAt:null}],nextBefore:null}});
+ return r.fulfill({json:{drafts:[{draftRef,requestId:draftRef,method:'NewRegistration',recipientLabel:'پیش‌نویس آزمایشی',state:'Draft',createdAt,withdrawnAt:null,latestInvitation:null}],nextBefore:null}});
  });return {count:()=>count,token:()=>savedToken};}
 async function receiver(page:Page,mode:'ok'|'lost'|'decline'|'revoked'|'malformed'='ok'){
  await session(page);let writes=0,state=mode==='revoked'?'Revoked':'Pending';
@@ -45,7 +45,7 @@ test('invitation extension renders RTL and fits narrow screens',async({page})=>{
 
 test('uncommitted issue and response can retry the exact command after a read confirms it is still absent',async({page})=>{
  await session(page);let issued:Record<string,string>|null=null,issueCalls=0;
- await page.route('**/api/v1/me/group-invitation-drafts**',r=>{const req=r.request();if(new URL(req.url()).pathname.endsWith('/invitations')){if(req.method()==='POST'){issueCalls++;const c=req.postDataJSON();if(!issued){issued=c;return r.abort()}expect(c).toEqual(issued);return r.fulfill({json:{outcome:'Replayed',invitation:{...base,requestId:c.requestId}}})}return r.fulfill({json:{invitation:null}})}return r.fulfill({json:{drafts:[{draftRef,requestId:draftRef,method:'ExistingMember',recipientLabel:'پیش‌نویس آزمایشی',state:'Draft',createdAt,withdrawnAt:null}],nextBefore:null}})});
+ await page.route('**/api/v1/me/group-invitation-drafts**',r=>{const req=r.request();if(new URL(req.url()).pathname.endsWith('/invitations')){if(req.method()==='POST'){issueCalls++;const c=req.postDataJSON();if(!issued){issued=c;return r.abort()}expect(c).toEqual(issued);return r.fulfill({json:{outcome:'Replayed',invitation:{...base,requestId:c.requestId}}})}return r.fulfill({json:{invitation:null}})}return r.fulfill({json:{drafts:[{draftRef,requestId:draftRef,method:'ExistingMember',recipientLabel:'پیش‌نویس آزمایشی',state:'Draft',createdAt,withdrawnAt:null,latestInvitation:null}],nextBefore:null}})});
  await page.goto('/patient-app/group-invitation?draft='+draftRef);await page.getByRole('button',{name:'ساخت پیوند دعوت',exact:true}).click();await page.getByRole('button',{name:'بررسی نتیجهٔ دعوت'}).click();await page.getByRole('button',{name:'تلاش مجدد همان درخواست'}).click();await expect(page.locator('.group-invitation-link textarea')).toBeVisible();expect(issueCalls).toBe(2);
  await page.goto('/patient-app/account');let responses=0,responded=false;
  await page.route('**/api/v1/me/group-invitations/*',r=>{const c=r.request().postDataJSON();if(r.request().url().endsWith('/respond')){responses++;expect(c.decision).toBe('Accepted');if(responses===1)return r.abort();responded=true}return r.fulfill({json:{invitation:{...base,state:responded?'Accepted':'Pending',respondedAt:responded?'2026-11-07T10:00:00Z':null},consentVersion:'group-invitation-v1'}})});
