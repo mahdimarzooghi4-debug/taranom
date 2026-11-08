@@ -23,3 +23,10 @@ Each result contains only `invitationRef`, `draftRef`, `recipientLabel` (private
 Real PostgreSQL HTTP tests exercise owner isolation, anonymous/cross-owner denial, history after archive, replaced/expired/declined/accepted status, 22-record nonoverlapping pagination, exact private lookup and malformed requests. Chromium tests cover the same read-only UI, 390/320px layout, no-session no traffic, denied refresh clearing and malformed receipts. Run Figma integration plus the 14-job regression at exact head, then record technical COMMENTED review. Keep this work stacked Draft/Open above PR #290; do not merge or deploy.
 
 National release still DENIED_BY_DEFAULT: 17 release domains blocked; 19 outside evidence categories unverified. No Stage or Product Release acceptance follows from CI.
+
+## Exact-head CI evidence (integration only; not release)
+
+- Source HEAD before this evidence-only commit: `b0cc21d9e205b48ab102488a644f8400a28bd035`.
+- `Figma Appointment Integration` run [42488297303](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42488297303): **2/2 SUCCESS** (real PostgreSQL contract tests and actual Chromium browser suites).
+- An isolated 14-job canonical PR regression remains mandatory for the **new** exact head of this evidence commit. The PR is temporarily based on `main` solely to invoke that existing gate, after which its intended stacked base is PR #290.
+- No CI result, this document or a review may authorize Production, clinical activity, formal identity, membership or launch.
