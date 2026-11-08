@@ -253,7 +253,7 @@ test('CENTER-18: mobile modal closes previously open menu and keeps keyboard foc
   await expect(page.getByRole('button', { name: '+ معرفی پزشک' })).toBeFocused();
 });
 
-test('CENTER-CSP-01: disconnected built preview keeps policy and renders', async ({ page }) => {
+test('CENTER-CSP-01: same-origin protected preview keeps policy and renders', async ({ page }) => {
   await page.goto('/center');
   const p = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
   expect(p).toContain("default-src 'none'");
@@ -281,7 +281,7 @@ test('CENTER-CSP-02: policy permits same-origin API fetches and rejects external
   });
   expect(results).toEqual([true, true]);
   expect(outgoing).toHaveLength(1);
-}
+});
 test('CENTER-CSP-03: injected inline script is rejected without breaking the preview', async ({ page }) => {
   await page.goto('/center');
   await page.evaluate(() => {
