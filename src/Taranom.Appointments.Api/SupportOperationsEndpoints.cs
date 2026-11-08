@@ -118,6 +118,21 @@ internal static class SupportOperationsEndpoints
                 notification.Parameters.AddWithValue("issuer", issuer);
                 await notification.ExecuteNonQueryAsync(ct);
             }
+            // The canonical inbox is updated in the same transaction as the
+            // support answer and its original legacy notification record.
+            await using (var inbox = new NpgsqlCommand("""
+                INSERT INTO taranom_member_notification_journal
+                    (notification_ref,kind,source_ref,created_at)
+                SELECT request_ref,'SupportAnswered',request_ref,replied_at
+                FROM taranom_member_support_request
+                WHERE request_ref=@ref AND issuer=@issuer AND state='Answered'
+                ON CONFLICT (kind,source_ref) DO NOTHING
+                """, connection, transaction))
+            {
+                inbox.Parameters.AddWithValue("ref", requestRef);
+                inbox.Parameters.AddWithValue("issuer", issuer);
+                await inbox.ExecuteNonQueryAsync(ct);
+            }
             await using (var audit = new NpgsqlCommand("""
                 INSERT INTO taranom_support_reply_receipt(issuer,subject,request_id,request_ref,fingerprint)
                 VALUES (@issuer,@subject,@id,@ref,@fingerprint)
