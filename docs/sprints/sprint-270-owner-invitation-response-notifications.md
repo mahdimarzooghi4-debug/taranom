@@ -1,0 +1,37 @@
+# Sprint 270 — Owner receives private in-app invitation response notification
+
+Status: Draft / implementation candidate, stacked on PR #295. Based on TRN-TECH-292 and existing owner invitation consent and notification contracts.
+
+## Outcome
+
+An owner sees a durable, account-private in-app notification when an independent recipient has accepted or declined a previously issued group invitation; the notification opens that exact owner-scoped historical invitation. Existing support-answer notifications remain functional and present in the same paginated inbox.
+
+## Implementation
+
+1. Persist a canonical notification journal and idempotent startup backfill from existing support notifications and final invitation responses. Preserve existing support notification semantics and the global bounded keyset.
+2. Atomically record a unique source notification only after an independent authenticated response first becomes final. No read or preview side effects. Preserve first response time and no duplicates on replay/concurrency.
+3. Project both kinds through the existing authenticated notification read/read-ack endpoints, with source-derived owner checks, strict per-kind allowlists and one snapshot-consistent unread count.
+4. Update typed member client and Persian RTL Figma notification cards; link only to exact owner invitation history, never expose respondent identity or label.
+5. Verify with real PostgreSQL HTTP tests and Chromium positive/negative cases; run exact-head 2-job Figma and 14-job full regression and COMMENTED technical review.
+
+## Non-goals / safety
+
+No actual group membership activation, guardian/dependent management, subscriptions or wallet transfers, verified recipient identity, automatic invite sending, external email/SMS/push, medical/clinical authority, provider/insurer integration, new accepted Business rule or Production deployment. A response says only that the holder of a secret independently accepted/declined. No artificial member balance or entitlement is created. Retain national DENIED_BY_DEFAULT and all external gates.
+
+## Admission
+
+Keep Draft/Open/Unmerged on the intended stacked base #295. No Ready for Review, merge, Stage, formal QA Gate, release or Production without explicit owner approval. An isolated mainline gate may require temporarily retargeting this Draft PR to main and restoring its stacked base after exact-SHA green CI; no main commit or deployment occurs.
+
+## Exact-head integration checkpoint (not approval)
+
+- The final implemented feature and negative-regression candidate before this evidence-only commit is `c70730d37decaa326515f746b53e28401606512e`.
+- [Figma Appointment Integration #42502567194](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42502567194): **SUCCESS 2/2**, including real PostgreSQL HTTP notification/consent/backfill tests and Chromium member/center/admin suites.
+- Earlier candidate `022befe032bba29095a38ae5b84126f4b92ee1e4` exposed an SQL string-boundary error in the owner notification feed; it was fixed directly in `959b8888f82c2a528edd84764e3ba8140b41ad01`. Then an additional revoked/expired/invalid response negative test was committed and the full 2-job integration passed.
+- This evidence-only commit changes the SHA. The new exact head must again pass both the Figma integration and the canonical **14/14** mainline regression before technical Code Review.
+- PR #296 is temporarily retargeted from stacked base #295 to `main` solely to invoke the existing canonical full regression, then must return to #295. No direct change to main, Stage, QA Gate, Release or Production.
+
+## Canonical full-matrix dispatch checkpoint
+
+- Before this documentation-only commit, the exact head `54d1a342aa6a3a0105d02df2dda7fd2369a7eae3` passed [Figma Appointment Integration #42502873701](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42502873701): **2/2 SUCCESS**.
+- GitHub's retarget-to-main event did not initiate the canonical 14-job regression. This new commit is intentionally recorded while PR #296 is Draft/Open and based on `main` to trigger the existing mandatory `Taranom Mainline Full Regression` for its **new exact SHA**. Do not reuse a previous SHA's success.
+- After both 2/2 and 14/14 are green on that new SHA, restore PR #296's stacked base to #295 and add a COMMENTED technical review; do not merge or deploy.

@@ -25,7 +25,7 @@ public sealed class PanelAccessEndpointConventionTests
     public async Task HttpEndpointsEnforceTheExactCapabilityFromTheCentralCatalog()
     {
         var definitions = PanelAccessPolicyNames.All;
-        Assert.Equal(6, definitions.Count);
+        Assert.Equal(10, definitions.Count);
 
         foreach (var authenticatedCapability in definitions.Select(item => item.Capability))
         {
@@ -104,12 +104,8 @@ public sealed class PanelAccessEndpointConventionTests
             })
             .AddScheme<SyntheticAuthenticationOptions, SyntheticAuthenticationHandler>(
                 "synthetic-test",
-                options =>
-                {
-                    options.Capability = authenticatedCapability;
-                    options.Authenticated = authenticated;
-                });
-        builder.Services.AddSingleton<IPanelAccessEvidenceSource, SyntheticEvidenceSource>();
+                options => options.Authenticated = authenticated);
+        builder.Services.AddSingleton<IPanelAccessEvidenceSource>(new SyntheticEvidenceSource(authenticatedCapability));
         builder.Services.Configure<PanelAccessOptions>(
             options => options.TrustedIssuer = Issuer);
         builder.Services.AddTaranomPanelAuthorization();
@@ -155,7 +151,6 @@ public sealed class PanelAccessEndpointConventionTests
 
     private sealed class SyntheticAuthenticationOptions : AuthenticationSchemeOptions
     {
-        internal PanelCapability Capability { get; set; }
         internal bool Authenticated { get; set; } = true;
     }
 
@@ -170,25 +165,24 @@ public sealed class PanelAccessEndpointConventionTests
             if (!Options.Authenticated)
                 return Task.FromResult(AuthenticateResult.NoResult());
 
-            var token = PanelAccessPolicy.GetCapabilityToken(Options.Capability)!;
-            var claim = new Claim(
-                PanelAccessPolicy.GrantClaimType,
-                $"v1|{Scope.Length}|{Scope}|{token}",
-                ClaimValueTypes.String,
-                Issuer);
-            var identity = new ClaimsIdentity([claim], Scheme.Name);
+            var identity = new ClaimsIdentity(
+                [new Claim("iss", Issuer), new Claim("sub", "opaque-synthetic-subject")],
+                Scheme.Name);
             var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name);
             return Task.FromResult(AuthenticateResult.Success(ticket));
         }
     }
 
-    private sealed class SyntheticEvidenceSource : IPanelAccessEvidenceSource
+    private sealed class SyntheticEvidenceSource(
+        PanelCapability capabilityWithEvidence) : IPanelAccessEvidenceSource
     {
         public ValueTask<PanelAccessEvidence?> ResolveAsync(
             ClaimsPrincipal principal,
             PanelCapability capability,
             object? authorizationResource)
         {
+            if (capability != capabilityWithEvidence)
+                return ValueTask.FromResult<PanelAccessEvidence?>(null);
             var freshness = new PanelAccessFreshness(
                 PanelEvidenceState.Confirmed,
                 PanelEvidenceState.Confirmed,

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { MemberAppointments } from './member-appointments';
+import type { AppointmentAccess } from './appointment-client';
 import {ReleaseSourcePanel} from './release-source-panel';
 import {SyntheticCostWorkbench} from './synthetic-cost-workbench';
 
@@ -403,7 +405,7 @@ function InterruptionNotice({ detail }: { detail: string }) {
   );
 }
 
-export function MemberApp() {
+export function MemberApp({ appointmentAccess }: { appointmentAccess?: AppointmentAccess } = {}) {
   const [page, setPage] = useState<MemberPage | undefined>(currentPage);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -973,7 +975,8 @@ export function MemberApp() {
                   </p>
                 </section>
               ) : null}
-              {page.key === 'appointments' ? (
+              {page.key === 'appointments' && appointmentAccess ? <MemberAppointments access={appointmentAccess}/> : null}
+              {page.key === 'appointments' && !appointmentAccess ? (
                 <section aria-labelledby="member-appointments-title">
                   <div className="section-header">
                     <div>

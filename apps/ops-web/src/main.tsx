@@ -5,10 +5,14 @@ import { MarketEntryApp } from './market-entry-app';
 import { EpicProgressApp } from './epic-progress-app';
 import { ReleaseDependenciesApp } from './release-dependencies-app';
 import { OfflineAiQaApp } from './ai-registry-qa';
+import { FigmaPortal } from './figma-portals';
 import './styles.css';
+import './figma-portals.css';
 const el = document.getElementById('root');
 if (!el) throw Error('Missing root');
-createRoot(el).render(<StrictMode>{window.location.pathname === '/operations/ai-lab'
+createRoot(el).render(<StrictMode>{window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/')
+ ? <FigmaPortal kind="admin" /> : window.location.pathname === '/support-institution' || window.location.pathname.startsWith('/support-institution/')
+ ? <FigmaPortal kind="institution" /> : window.location.pathname === '/operations/ai-lab'
  ? <OfflineAiQaApp /> : window.location.pathname === '/operations/progress'
  ? <EpicProgressApp /> : window.location.pathname === '/operations/dependencies'
  ? <ReleaseDependenciesApp /> : new Set(['/markets','/markets/individuals','/markets/support','/markets/corporate']).has(window.location.pathname)

@@ -50,9 +50,9 @@ class DependencyWorklistTests(unittest.TestCase):
         result=work.inspect(ROOT)
         self.assertEqual(work.STATUS,result["status"])
         self.assertEqual(17,result["blocked_domains"])
-        self.assertEqual(18,len(result["work_items"]))
+        self.assertEqual(19,len(result["work_items"]))
         self.assertEqual(39,result["candidate_capabilities"])
-        self.assertEqual(18,result["required_owners_unassigned"])
+        self.assertEqual(19,result["required_owners_unassigned"])
         self.assertEqual({"TRN-EP-"+str(i).zfill(2) for i in range(1,14)}|
                          {"MARKET-PUBLIC","MARKET-SUPPORT","MARKET-CORPORATE",
                           "NATIONAL-COVERAGE"},
@@ -79,7 +79,7 @@ class DependencyWorklistTests(unittest.TestCase):
         self.assertIn("TRN-EP-11",m)
         self.assertNotIn("READY_FOR_PRODUCTION",m)
         rows=list(csv.DictReader(io.StringIO(work.csv_report(r))))
-        self.assertEqual(18,len(rows))
+        self.assertEqual(19,len(rows))
         self.assertTrue(all(x["national_release_allowed"]=="false" for x in rows))
         self.assertNotIn("secret",m.lower())
 

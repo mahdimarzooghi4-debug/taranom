@@ -23,7 +23,7 @@ internal static class ReleaseDependencyHttp
 {
     private const string Contract="TRN-TECH-165";
     private static readonly string[] Required = [
-        "ALL_3_MARKET_OPERATIONS","AUTHENTIC_MEMBERSHIP_AND_ACTIVATION",
+        "ADMIN_DEFINED_CENTER_REGISTRY","ALL_3_MARKET_OPERATIONS","AUTHENTIC_MEMBERSHIP_AND_ACTIVATION",
         "CLINICAL_SAFETY_AND_RESPONSIBILITY","COMPLAINTS_LEGAL_AUTHORITY_AND_PROCESS",
         "CONSENTED_AI_DATASET_AND_INDEPENDENT_EVALUATION","DATA_RIGHTS_AND_CONSENT",
         "EMERGENCY_PROTOCOL_AND_CAPACITY","FINANCIAL_LICENSE_BACKING_AND_AUDIT",
@@ -51,7 +51,7 @@ internal static class ReleaseDependencyHttp
             contract=Contract,status="DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST",
             releaseAdmission="DENIED_BY_DEFAULT",formalApprovalObserved=false,
             productionReady=false,nationalReleaseAllowed=false,
-            blockedDomains=17,candidateCapabilities=39,requiredOwnersUnassigned=18,
+            blockedDomains=17,candidateCapabilities=39,requiredOwnersUnassigned=19,
             sourceFingerprint=source.Value.Fingerprint,workItems=source.Value.Rows,
             engineeringCandidates=source.Value.Candidates,
             technicalReferencesPresent=26,technicalReferencesMissing=13
@@ -182,7 +182,7 @@ internal static class ReleaseDependencyHttp
                 rows.Add(new ReleaseDependencyRow(category,ids,epics,markets,refs,
                     linked,"NOT_ASSIGNED","BLOCKED_UNVERIFIED","NOT_OBSERVED",false));
             }
-            if(rows.Count!=18 || rows.Sum(x=>x.BlockedDomainIds.Length)<17)return null;
+            if(rows.Count!=19 || rows.Sum(x=>x.BlockedDomainIds.Length)<17)return null;
             var candidates=new List<EngineeringCandidate>();
             foreach(var epic in inventory.Epics.OrderBy(x=>x.Id,StringComparer.Ordinal))
             {

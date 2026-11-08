@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><OutputType>Exe</OutputType><IsPackable>false</IsPackable></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Taranom.AppointmentScheduling.Postgres/Taranom.AppointmentScheduling.Postgres.csproj" />
+    <ProjectReference Include="../Taranom.PanelAccess.AspNetCore/Taranom.PanelAccess.AspNetCore.csproj" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+</Project>

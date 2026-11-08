@@ -10,6 +10,22 @@ jobs:
   internal-contract-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_appointment_tests;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_appointment_tests
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_appointment_tests"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -30,7 +46,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_release_dependency_worklist.py' -v
           python3 tools/policy_checks/build_release_dependency_worklist.py --root . --report-json TestResults/fullci-release-dependency-worklist.json --report-md TestResults/fullci-release-dependency-worklist.md --report-csv TestResults/fullci-release-dependency-worklist.csv
-          python3 -c "import json; r=json.load(open('TestResults/fullci-release-dependency-worklist.json')); assert r['status']=='DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST' and r['blocked_domains']==17 and r['required_owners_unassigned'] == 18 and len(r['work_items'])==18 and r['candidate_capabilities']==39 and r['formal_approval_observed'] is False and r['production_ready'] is False and r['national_release_allowed'] is False"
+          python3 -c "import json; r=json.load(open('TestResults/fullci-release-dependency-worklist.json')); assert r['status']=='DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST' and r['blocked_domains']==17 and r['required_owners_unassigned'] == 19 and len(r['work_items'])==19 and r['candidate_capabilities']==39 and r['formal_approval_observed'] is False and r['production_ready'] is False and r['national_release_allowed'] is False"
           test -s TestResults/fullci-release-dependency-worklist.md
           test -s TestResults/fullci-release-dependency-worklist.csv
       - name: Build and security-test offline Epic delivery console and CSV
@@ -49,6 +65,8 @@ jobs:
           python3 -m unittest discover -s tests/policy_checks -p 'test_public_ci_workflow_trust.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_shared_full_ci.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_mainline_full_ci.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_ops_browser_partition.py' -v
+          python3 -m unittest discover -s tests/policy_checks -p 'test_member_web_api_boundary.py' -v
           python3 -m unittest discover -s tests/policy_checks -p 'test_full_ci_test_census.py' -v
           python3 tools/policy_checks/check_full_ci_test_census.py --root . --report-json TestResults/fullci-test-census.json
           test -s TestResults/fullci-test-census.json
@@ -204,21 +222,16 @@ jobs:
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
           npm run build
-      - name: Verify compiled member bundle integrity and active local resources
+      - name: Verify connected member bundle integrity, local resources and same-origin CSP
         run: |
           PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_disconnected_bundle.py' -v
-          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface member --dist dist --output TestResults/fullci-member-bundle.json
-          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface member --dist dist --verify TestResults/fullci-member-bundle.json
+          PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_connected_panel_bundle.py' -v
+          python3 ../../tools/artifact_checks/check_connected_panel_bundle.py --surface member --dist dist --output TestResults/fullci-member-bundle.json
+          python3 ../../tools/artifact_checks/check_connected_panel_bundle.py --surface member --dist dist --verify TestResults/fullci-member-bundle.json
           test -s TestResults/fullci-member-bundle.json
-      - name: Verify shell still contains no fake member/identity backend
+      - name: Verify member API clients are host-authenticated and no fake state exists
         run: |
-          test ! -e src/fixtures
-          test ! -e src/mocks
-          test ! -e src/auth-provider.ts
-          if grep -R -E -i 'localStorage\.setItem|sessionStorage\.setItem|/api/v1/|Bearer |fake(balance|login|token)' src; then
-            echo 'Forbidden member-state adapter found' >&2
-            exit 1
-          fi
+          python3 ../../tools/policy_checks/check_member_web_api_boundary.py --source-root src
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run browser tests against the built Vite bundle
@@ -331,11 +344,12 @@ jobs:
           npm ci --no-audit --no-fund --ignore-scripts
           npm run typecheck
           npm run build
-      - name: Verify compiled center bundle integrity and active local resources
+      - name: Verify connected center bundle integrity, local resources and same-origin CSP
         run: |
           PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_disconnected_bundle.py' -v
-          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface center --dist dist --output TestResults/fullci-center-bundle.json
-          python3 ../../tools/artifact_checks/check_disconnected_bundle.py --surface center --dist dist --verify TestResults/fullci-center-bundle.json
+          PYTHONPATH=../.. python3 -m unittest discover -s ../../tests/artifact_checks -p 'test_connected_panel_bundle.py' -v
+          python3 ../../tools/artifact_checks/check_connected_panel_bundle.py --surface center --dist dist --output TestResults/fullci-center-bundle.json
+          python3 ../../tools/artifact_checks/check_connected_panel_bundle.py --surface center --dist dist --verify TestResults/fullci-center-bundle.json
           test -s TestResults/fullci-center-bundle.json
       - name: Check no real provider credentials, routes, network administration or mutable preview store
         run: |
@@ -684,6 +698,10 @@ jobs:
           test "$ai_ready" = "1"
           cd apps/ops-web
           CI=true npm run test:e2e
+          # All three protected Admin/Support suites run separately against
+          # the Vite portal preview at 4319, NOT the old local ops host 4318.
+          # These tests remain mandatory in the canonical 14-job regression.
+          CI=true npm run test:e2e -- --config playwright.support.config.ts
       - name: Upload local-only HTTP/browser QA records
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

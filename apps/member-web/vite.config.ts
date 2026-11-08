@@ -4,6 +4,7 @@ import { disconnectedPreviewSecurityHeaders } from '../../tools/preview_security
 export default defineConfig({
   base: '/',
   server: { host: '127.0.0.1', port: 4173, strictPort: true },
-  preview: { host: '127.0.0.1', port: 4174, strictPort: true, headers: disconnectedPreviewSecurityHeaders },
+  preview: { host: '127.0.0.1', port: 4174, strictPort: true, headers: {...disconnectedPreviewSecurityHeaders,
+    'Content-Security-Policy': disconnectedPreviewSecurityHeaders['Content-Security-Policy'] + "; manifest-src 'self'"} },
   build: { target: 'es2022', sourcemap: false },
 });

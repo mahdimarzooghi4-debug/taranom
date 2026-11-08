@@ -1,6 +1,6 @@
 import {expect,test} from '@playwright/test';
 
-test('DEPENDENCIES156-01 real localhost .NET projects 17 domains and 18 unapproved requirements',async({request})=>{
+test('DEPENDENCIES156-01 real localhost .NET projects 17 domains and 19 unapproved requirements',async({request})=>{
  const r=await request.get('/internal/ops/v1/dependencies');
  expect(r.status()).toBe(200);
  expect(r.headers()['cache-control']).toBe('no-store');
@@ -9,10 +9,10 @@ test('DEPENDENCIES156-01 real localhost .NET projects 17 domains and 18 unapprov
  expect(x.contract).toBe('TRN-TECH-165');
  expect(x.status).toBe('DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST');
  expect(x.releaseAdmission).toBe('DENIED_BY_DEFAULT');
- expect(x.workItems).toHaveLength(18);
+ expect(x.workItems).toHaveLength(19);
  expect(x.blockedDomains).toBe(17);
  expect(x.candidateCapabilities).toBe(39);
- expect(x.requiredOwnersUnassigned).toBe(18);
+ expect(x.requiredOwnersUnassigned).toBe(19);
  expect(x.sourceFingerprint).toMatch(/^[0-9a-f]{64}$/);
  expect(x.formalApprovalObserved).toBe(false);
  expect(x.productionReady).toBe(false);
@@ -31,7 +31,7 @@ test('DEPENDENCIES156-02 browser renders all source-backed items and filters by 
  await page.goto('/operations/dependencies');
  await expect(page.getByRole('heading',{name:'صف وابستگی‌های تکمیل محصول ترنم'})).toBeVisible();
  await expect(page.getByTestId('dependencies-status')).toContainText('هیچ موردی تأیید نشده');
- await expect(page.locator('[data-dependency]')).toHaveCount(18);
+ await expect(page.locator('[data-dependency]')).toHaveCount(19);
  await expect(page.getByRole('note')).toContainText('DENIED_BY_DEFAULT');
  await page.getByLabel('جست‌وجوی مدرک، حوزه یا تصمیم').fill('LEGAL_OPERATOR_IDENTITY');
  await expect(page.locator('[data-dependency]')).toHaveCount(1);
@@ -55,7 +55,7 @@ test('DEPENDENCIES156-03 forged approved row or release status cannot populate p
 
 test('DEPENDENCIES156-04 after initial valid display, transport loss clears stale items',async({page})=>{
  await page.goto('/operations/dependencies');
- await expect(page.locator('[data-dependency]')).toHaveCount(18);
+ await expect(page.locator('[data-dependency]')).toHaveCount(19);
  await page.route('**/internal/ops/v1/dependencies',route=>route.abort());
  await page.getByRole('button',{name:'بازخوانی وابستگی‌ها'}).click();
  await expect(page.getByTestId('dependencies-status')).toContainText('قابل تأیید نیست');
@@ -73,7 +73,7 @@ test('DEPENDENCIES156-05 hostile Host, forwarded authority and unknown routes fa
  expect((await request.get('/internal/ops/v1/dependencies/verified')).status()).toBe(404);
 });
 
-test('ENGINEERING157-01 real .NET joins 39 proposals and 18 outside dependencies without approval',async({request})=>{
+test('ENGINEERING157-01 real .NET joins 39 proposals and 19 outside dependencies without approval',async({request})=>{
  const r=await request.get('/internal/ops/v1/dependencies');
  expect(r.status()).toBe(200);
  const x=await r.json();

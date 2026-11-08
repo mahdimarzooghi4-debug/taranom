@@ -1,0 +1,92 @@
+name: Figma Appointment Integration
+on:
+  pull_request:
+    paths:
+      - 'apps/member-web/**'
+      - 'apps/center-web/**'
+      - 'apps/ops-web/**'
+      - 'src/Taranom.MemberGovernance/PanelAccessPolicy.cs'
+      - 'src/Taranom.PanelAccess.AspNetCore/**'
+      - 'src/Taranom.Appointments.Api/**'
+      - 'src/Taranom.AppointmentScheduling*/**'
+      - 'tests/Taranom.MemberGovernance.Tests/Appointment*'
+      - 'tests/Taranom.MemberGovernance.Tests/MemberProfile*'
+      - 'tests/Taranom.MemberGovernance.Tests/MemberSupport*'
+      - 'tests/Taranom.MemberGovernance.Tests/MemberNotification*'
+      - 'tests/Taranom.MemberGovernance.Tests/MemberGroupDraft*'
+      - 'tests/Taranom.MemberGovernance.Tests/MemberGroupInvitation*'
+      - 'tests/Taranom.MemberGovernance.Tests/CenterDirectoryDraft*'
+      - 'tests/Taranom.MemberGovernance.Tests/AdminCenterRegistry*'
+      - 'tests/Taranom.MemberGovernance.Tests/CenterManagerRequest*'
+      - 'tests/Taranom.MemberGovernance.Tests/CenterManagerCaseWorkspace*'
+      - '.github/workflows/figma-appointment-integration.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: npm ci --prefix apps/member-web --no-audit --no-fund
+      - run: npm ci --prefix apps/center-web --no-audit --no-fund
+      - run: npm ci --prefix apps/ops-web --no-audit --no-fund
+      - run: npm run check --prefix apps/ops-web
+      - run: npm run test:appointments --prefix apps/member-web
+      - run: npm run check --prefix apps/member-web
+      - run: npm run check --prefix apps/center-web
+      - run: npx --prefix apps/member-web playwright install --with-deps chromium
+      - run: npm run test:e2e --prefix apps/member-web -- patient-appointment-api.spec.ts figma-appointment-flow.spec.ts figma-booking-flow.spec.ts patient-web-appointment-api.spec.ts patient-profile-api.spec.ts patient-support-api.spec.ts patient-account-api.spec.ts patient-install.spec.ts patient-notifications-api.spec.ts patient-home-api.spec.ts patient-all-services.spec.ts patient-group-drafts-api.spec.ts patient-group-invitation-api.spec.ts patient-invitation-history-api.spec.ts patient-sent-invitation-activity-api.spec.ts patient-owner-invitation-revoke-api.spec.ts patient-pending-invitation-worklist-api.spec.ts patient-discovery-api.spec.ts
+      - run: npm run test:e2e --prefix apps/center-web -- figma-appointment-api.spec.ts center-directory-draft-api.spec.ts center-manager-request-api.spec.ts
+      - run: npm run test:e2e --prefix apps/ops-web -- --config playwright.support.config.ts
+  backend-postgres-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TARANOM_TEST_PG: Host=localhost;Port=5432;Database=taranom_appointment_tests;Username=postgres;Password=only_synthetic_ci;Pooling=false
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: only_synthetic_ci
+          POSTGRES_DB: taranom_appointment_tests
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taranom_appointment_tests"
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.401'
+      - name: Build appointment API and contract tests
+        run: dotnet build tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj --configuration Release
+      - name: Exercise real PostgreSQL store and HTTP boundaries
+        run: >-
+          dotnet run --project tests/Taranom.MemberGovernance.Tests/Taranom.MemberGovernance.Tests.csproj
+          --no-build --configuration Release --
+          -class Taranom.MemberGovernance.Tests.AppointmentApiHttpTests
+          -class Taranom.MemberGovernance.Tests.AppointmentPostgresStoreTests
+          -class Taranom.MemberGovernance.Tests.AppointmentSchedulingTests
+          -class Taranom.MemberGovernance.Tests.MemberProfileApiHttpTests
+          -class Taranom.MemberGovernance.Tests.MemberSupportApiHttpTests
+          -class Taranom.MemberGovernance.Tests.MemberNotificationApiHttpTests
+          -class Taranom.MemberGovernance.Tests.MemberGroupDraftApiHttpTests
+          -class Taranom.MemberGovernance.Tests.MemberGroupInvitationApiHttpTests
+          -class Taranom.MemberGovernance.Tests.CenterDirectoryDraftApiHttpTests
+          -class Taranom.MemberGovernance.Tests.AdminCenterRegistryApiHttpTests
+          -class Taranom.MemberGovernance.Tests.CenterManagerRequestApiHttpTests
+          -class Taranom.MemberGovernance.Tests.CenterManagerCaseWorkspaceApiHttpTests
+          -class Taranom.MemberGovernance.Tests.PanelAccessPolicyTests
+          -class Taranom.MemberGovernance.Tests.PanelAccessEndpointConventionTests
+          -class Taranom.MemberGovernance.Tests.PanelAccessAuthorizationHandlerTests

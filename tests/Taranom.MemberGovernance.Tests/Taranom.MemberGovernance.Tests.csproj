@@ -5,8 +5,13 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../src/Taranom.AppointmentScheduling/Taranom.AppointmentScheduling.csproj" />
+    <ProjectReference Include="../../src/Taranom.AppointmentScheduling.Postgres/Taranom.AppointmentScheduling.Postgres.csproj" />
+    <ProjectReference Include="../../src/Taranom.Appointments.Api/Taranom.Appointments.Api.csproj" />
     <ProjectReference Include="../../src/Taranom.MemberGovernance/Taranom.MemberGovernance.csproj" />
     <ProjectReference Include="../../src/Taranom.PanelAccess.AspNetCore/Taranom.PanelAccess.AspNetCore.csproj" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.3" />
     <PackageReference Include="xunit.v3" Version="4.0.1" />
   </ItemGroup>
 </Project>
