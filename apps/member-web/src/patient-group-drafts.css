@@ -17,3 +17,11 @@
 .group-invitation-link>label{font-size:12px;line-height:22px;color:#013365}
 .group-invitation-link [role=status]{font-size:11px;line-height:22px;color:#013365;overflow-wrap:anywhere}
 .group-invitation-link .group-invitation-secondary{justify-self:start;min-width:112px;padding:8px 14px}
+
+.group-draft-search{display:grid;gap:8px;margin:12px 0 16px;padding:12px;border:1px solid #d5e2ee;background:#f8fafc;border-radius:12px}
+.group-draft-search label{font-size:12px;color:#013365;line-height:24px}
+.group-draft-search input{width:100%;min-width:0;min-height:42px;border:1px solid #d5e2ee;border-radius:9px;background:#fff;color:#013365;padding:8px 12px;font:inherit;font-size:13px}
+.group-draft-search>div{display:flex;gap:8px;flex-wrap:wrap}
+.group-draft-search button{min-height:38px;padding:6px 12px;border:1px solid #013365;border-radius:9px;background:#fff;color:#013365;font:inherit;font-size:12px}
+.group-draft-search button:disabled{opacity:.5;cursor:default}
+.group-draft-search p{margin:0;line-height:22px;font-size:11px;color:#475569;overflow-wrap:anywhere}
