@@ -192,13 +192,20 @@ function validSentInvitationActivity(v:SentInvitationActivity):boolean{
   ['Draft','Withdrawn'].includes(v.draftState);
 }
 export async function getMySentInvitationActivity(
- options:{before?:string;invitationRef?:string}={},signal?:AbortSignal
+ options:{before?:string;invitationRef?:string;draftRef?:string;state?:'Pending'}={},signal?:AbortSignal
 ):Promise<SentInvitationActivityPage>{
+ if((options.invitationRef&&(options.before||options.draftRef||options.state))||
+  (options.draftRef&&!notificationId(options.draftRef))||
+  (options.invitationRef&&!notificationId(options.invitationRef))||
+  (options.state&&options.state!=='Pending'))
+  throw new Error('فیلتر گزارش دعوت‌ها معتبر نیست.');
  const query=new URLSearchParams(options);
  const r=await invitationApi<SentInvitationActivityPage>(
   '/api/v1/me/group-invitation-activity'+(query.size?'?'+query:''),{signal});
  if(!r||!Array.isArray(r.invitations)||r.invitations.length>20||
-  !r.invitations.every(validSentInvitationActivity)||
+  !r.invitations.every(v=>validSentInvitationActivity(v)&&
+   (!options.draftRef||v.draftRef===options.draftRef)&&
+   (!options.state||(v.state==='Pending'&&v.draftState==='Draft')))||
   new Set(r.invitations.map(v=>v.invitationRef)).size!==r.invitations.length||
   (options.invitationRef&&(r.invitations.length>1||
    r.invitations.some(v=>v.invitationRef!==options.invitationRef)))||
