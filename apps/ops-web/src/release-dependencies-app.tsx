@@ -19,7 +19,7 @@ type Source={
  contract:'TRN-TECH-165';status:'DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST';
  releaseAdmission:'DENIED_BY_DEFAULT';formalApprovalObserved:false;
  productionReady:false;nationalReleaseAllowed:false;
- blockedDomains:17;candidateCapabilities:39;requiredOwnersUnassigned:18;
+ blockedDomains:17;candidateCapabilities:39;requiredOwnersUnassigned:19;
  sourceFingerprint:string;workItems:Requirement[];
  engineeringCandidates:EngineeringCandidate[];
  technicalReferencesPresent:26;technicalReferencesMissing:13;
@@ -38,7 +38,7 @@ type State={kind:'LOADING'|'UNAVAILABLE'}|{kind:'READY';snapshot:Source};
 const domains=[...Array.from({length:13},(_,i)=>'TRN-EP-'+String(i+1).padStart(2,'0')),
  'MARKET-PUBLIC','MARKET-SUPPORT','MARKET-CORPORATE','NATIONAL-COVERAGE'];
 const required=[
- 'ALL_3_MARKET_OPERATIONS','AUTHENTIC_MEMBERSHIP_AND_ACTIVATION',
+ 'ADMIN_DEFINED_CENTER_REGISTRY','ALL_3_MARKET_OPERATIONS','AUTHENTIC_MEMBERSHIP_AND_ACTIVATION',
  'CLINICAL_SAFETY_AND_RESPONSIBILITY','COMPLAINTS_LEGAL_AUTHORITY_AND_PROCESS',
  'CONSENTED_AI_DATASET_AND_INDEPENDENT_EVALUATION','DATA_RIGHTS_AND_CONSENT',
  'EMERGENCY_PROTOCOL_AND_CAPACITY','FINANCIAL_LICENSE_BACKING_AND_AUDIT',
@@ -54,9 +54,9 @@ function valid(x:unknown):x is Source{
  a.releaseAdmission!=='DENIED_BY_DEFAULT'||a.formalApprovalObserved!==false||
  a.productionReady!==false||a.nationalReleaseAllowed!==false||
  a.blockedDomains!==17||a.candidateCapabilities!==39||
- a.requiredOwnersUnassigned!==18||
+ a.requiredOwnersUnassigned!==19||
  typeof a.sourceFingerprint!=='string'||!/^[a-f0-9]{64}$/.test(a.sourceFingerprint)||
- !Array.isArray(a.workItems)||a.workItems.length!==18||
+ !Array.isArray(a.workItems)||a.workItems.length!==19||
  a.technicalReferencesPresent!==26||a.technicalReferencesMissing!==13||
  !Array.isArray(a.engineeringCandidates)||a.engineeringCandidates.length!==39)
  return false;
@@ -84,7 +84,7 @@ function valid(x:unknown):x is Source{
    item.affectedMarketOrNationalIds.some(v=>!ids.has(v)||v.startsWith('TRN-EP-')))
    return false;
  }
- if(seen.size!==18||covered.size!==17)return false;
+ if(seen.size!==19||covered.size!==17)return false;
  const candidates=new Set<string>();const epicCounts=new Map<string,number>();
  let nonProduction=0,missing=0;
  const evidenceClasses=['SYNTHETIC_INTERNAL','DISCONNECTED_UI_ONLY',
