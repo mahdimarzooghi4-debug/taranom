@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {AppointmentPage} from './figma-booking';
-import {getMySentInvitationActivity,type SentInvitationActivityPage,type GroupInvitationState} from './taranom-api';
+import {AppointmentApiError,getMySentInvitationActivity,revokeMyGroupInvitation,type SentInvitationActivity,type SentInvitationActivityPage,type GroupInvitationState} from './taranom-api';
 import './patient-group-drafts.css';
 
 const status:Record<GroupInvitationState,string>={
@@ -15,6 +15,10 @@ export function PatientSentInvitationActivity(){
  const [data,setData]=useState<SentInvitationActivityPage|null>(null);
  const [error,setError]=useState(''),[loading,setLoading]=useState(true);
  const [before,setBefore]=useState<string|undefined>(),[reload,setReload]=useState(0);
+ const [confirm,setConfirm]=useState<SentInvitationActivity|null>(null);
+ const [pendingRevoke,setPendingRevoke]=useState<{draftRef:string;invitationRef:string}|null>(null);
+ const [revokeUnknown,setRevokeUnknown]=useState(false),[retryable,setRetryable]=useState(false);
+ const [revoking,setRevoking]=useState(false),[revocationNotice,setRevocationNotice]=useState('');
  const [ref]=useState(()=>new URLSearchParams(location.search).get('invitation'));
  const valid=ref===null||/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(ref);
  useEffect(()=>{document.title='ترنم | پیگیری دعوت‌های ارسالی'},[]);
@@ -31,11 +35,62 @@ export function PatientSentInvitationActivity(){
    .finally(()=>{if(!c.signal.aborted)setLoading(false)});
   return()=>c.abort();
  },[before,reload,ref,valid]);
+
+ const definite=(e:unknown)=>e instanceof AppointmentApiError&&e.status>=400&&e.status<500;
+ async function revoke(mode:'start'|'check'|'retry',candidate?:SentInvitationActivity){
+  if(revoking)return;
+  const target=mode==='start'&&candidate?{
+   draftRef:candidate.draftRef,invitationRef:candidate.invitationRef
+  }:pendingRevoke;
+  if(!target)return;
+  if(mode==='start'&&(candidate?.draftState!=='Draft'||candidate.state!=='Pending'))return;
+  if(mode==='retry'&&(!revokeUnknown||!retryable))return;
+  setRevoking(true);setData(null);setError('');setConfirm(null);
+  setRevocationNotice('');setPendingRevoke(target);setRetryable(false);
+  try{
+   if(mode==='check'){
+    const page=await getMySentInvitationActivity({invitationRef:target.invitationRef});
+    const item=page.invitations[0];
+    if(!item||item.draftRef!==target.draftRef)
+     throw new Error('رسید لغو با حساب و پیش‌نویس شما تطبیق ندارد.');
+    if(item.state==='Revoked'){
+     setRevocationNotice('غیرفعال‌شدن پیوند دعوت تأیید شد.');
+     setPendingRevoke(null);setRevokeUnknown(false);setReload(n=>n+1);
+    }else if(item.state==='Pending'&&item.draftState==='Draft'){
+     setRevokeUnknown(true);setRetryable(true);
+     setError('لغو هنوز ثبت نشده است؛ می‌توانید همان درخواست لغو را دوباره بفرستید.');
+    }else{
+     setPendingRevoke(null);setRevokeUnknown(false);
+     setError('وضعیت دعوت تغییر کرده است و دیگر نمی‌توان آن را لغو کرد.');
+     setReload(n=>n+1);
+    }
+   }else{
+    const result=await revokeMyGroupInvitation(target.draftRef,target.invitationRef);
+    if(result.state!=='Revoked')throw new Error('لغو پیوند هنوز قابل تأیید نیست.');
+    setRevocationNotice('لغو پیوند دعوت ثبت و تأیید شد.');
+    setPendingRevoke(null);setRevokeUnknown(false);setReload(n=>n+1);
+   }
+  }catch(e){
+   setError(e instanceof Error?e.message:'نتیجهٔ لغو نامشخص است.');
+   if(definite(e)){
+    setPendingRevoke(null);setRevokeUnknown(false);
+   }else{
+    setRevokeUnknown(true);
+   }
+  }finally{setRevoking(false)}
+ }
  return <AppointmentPage title={ref?'جزئیات دعوت ارسالی':'دعوت‌های ارسالی من'}
   subtitle="پیگیری پاسخ‌های ثبت‌شده، نه عضویت فعال" activeSection="account">
   <section className="patient-group-drafts group-invitation-history owner-invitation-activity" aria-busy={loading}>
    {loading&&<p role="status">در حال دریافت وضعیت دعوت‌ها…</p>}
    {error&&<p role="alert" className="group-draft-error">{error}</p>}
+   {revocationNotice&&<p role="status" className="group-draft-notice">{revocationNotice}</p>}
+   {revokeUnknown&&<section className="group-revoke-recovery" aria-label="بازیابی نتیجه لغو">
+    <p>نتیجهٔ لغو پیوند هنوز قطعی نیست. تا تأیید نتیجه، پیوند قبلی نمایش داده نمی‌شود.</p>
+    <button disabled={revoking} onClick={()=>void revoke('check')}>بررسی نتیجهٔ لغو</button>
+    {retryable&&<button disabled={revoking} onClick={()=>void revoke('retry')}>تلاش مجدد همان لغو</button>}
+   </section>}
+
    <div className="group-drafts-history">
     {data?.invitations.map(i=><article className="group-draft-card" key={i.invitationRef}>
      <h2>{i.recipientLabel}</h2>
@@ -47,6 +102,16 @@ export function PatientSentInvitationActivity(){
      <p className="invitation-history-reference">شناسهٔ دعوت: <bdi>{i.invitationRef}</bdi></p>
      {ref===null?<a href={'/patient-app/invitations-sent?invitation='+encodeURIComponent(i.invitationRef)}>جزئیات دعوت ثبت‌شده</a>:null}
      {i.draftState==='Draft'&&<a href={'/patient-app/group-invitation?draft='+encodeURIComponent(i.draftRef)}>مدیریت پیوند همان پیش‌نویس</a>}
+     {i.draftState==='Draft'&&i.state==='Pending'&&!revokeUnknown&&(
+      confirm?.invitationRef===i.invitationRef?
+       <div className="group-archive-confirm" aria-label="تأیید لغو پیوند">
+        <p>این پیوند در انتظار غیرفعال شود؟ پاسخ پذیرفته‌شده یا ردشده تغییر نمی‌کند.</p>
+        <button disabled={revoking} onClick={()=>void revoke('start',i)}>تأیید لغو همین پیوند</button>
+        <button disabled={revoking} onClick={()=>setConfirm(null)}>انصراف از لغو</button>
+       </div>:
+       <button disabled={revoking} onClick={()=>setConfirm(i)}>لغو پیوند در انتظار</button>
+     )}
+
     </article>)}
     {data&&!data.invitations.length&&<p role="status">{ref?
      'این دعوت در حساب شما ثبت نشده است.':'هنوز پیوند دعوتی از این حساب صادر نشده است.'}</p>}
@@ -56,10 +121,10 @@ export function PatientSentInvitationActivity(){
     پذیرش دعوت به‌معنای فعال‌سازی عضویت، پرداخت، انتقال کیف پول یا دسترسی درمانی نیست.
    </p>
    <div className="group-draft-pagination">
-    <button disabled={loading||!valid} onClick={()=>{
+    <button disabled={loading||!valid||revoking||revokeUnknown} onClick={()=>{
      setBefore(undefined);setReload(n=>n+1);
     }}>تازه‌سازی وضعیت دعوت‌ها</button>
-    {data?.nextBefore&&!ref&&<button disabled={loading} onClick={()=>setBefore(data.nextBefore!)}>
+    {data?.nextBefore&&!ref&&<button disabled={loading||revoking||revokeUnknown} onClick={()=>setBefore(data.nextBefore!)}>
      دعوت‌های قدیمی‌تر
     </button>}
    </div>
