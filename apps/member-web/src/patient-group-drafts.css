@@ -13,3 +13,7 @@
 .group-draft-invitation-summary strong{display:block;color:#013365;font-size:13px;line-height:24px}
 .group-draft-invitation-summary p,.group-draft-no-invitation{margin:4px 0;color:#475569;font-size:12px;line-height:22px;overflow-wrap:anywhere}
 .group-draft-invitation-summary .group-draft-invitation-boundary{color:#64748b;font-size:11px}
+
+.group-invitation-link>label{font-size:12px;line-height:22px;color:#013365}
+.group-invitation-link [role=status]{font-size:11px;line-height:22px;color:#013365;overflow-wrap:anywhere}
+.group-invitation-link .group-invitation-secondary{justify-self:start;min-width:112px;padding:8px 14px}
