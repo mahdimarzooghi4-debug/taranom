@@ -52,8 +52,8 @@ def verify_release_dependencies():
     assert body["formalApprovalObserved"] is False
     assert body["blockedDomains"] == 17
     assert body["candidateCapabilities"] == 39
-    assert body["requiredOwnersUnassigned"] == 18
-    assert len(body["workItems"]) == 18
+    assert body["requiredOwnersUnassigned"] == 19
+    assert len(body["workItems"]) == 19
     assert len(body["engineeringCandidates"]) == 39
     assert body["technicalReferencesPresent"] == 26
     assert body["technicalReferencesMissing"] == 13
@@ -63,7 +63,7 @@ def verify_release_dependencies():
                and x["formalAcceptanceObserved"] is False
                and x["relatedUnverifiedRequirements"] for x in body["engineeringCandidates"])
     assert len({x["id"] for x in body["engineeringCandidates"]}) == 39
-    assert len({x["requirement"] for x in body["workItems"]}) == 18
+    assert len({x["requirement"] for x in body["workItems"]}) == 19
     assert len(body["sourceFingerprint"]) == 64
     assert all(x["decisionOwner"] == "NOT_ASSIGNED"
                and x["evidenceStatus"] == "BLOCKED_UNVERIFIED"
@@ -80,7 +80,7 @@ def verify_release_dependencies():
     assert call("/operations/dependencies")[0] == 200
     assert call("/operations/dependencies", "POST")[0] == 405
     assert call("/operations/dependencies/approve")[0] == 404
-    print("PASS: real .NET 17-domain/18-requirement read-only unapproved dependency worklist")
+    print("PASS: real .NET 17-domain/19-requirement read-only unapproved dependency worklist")
 
 
 def verify_epic_progress():
