@@ -29,6 +29,17 @@ internal static class MemberGroupDraftEndpoints
             var owner = Owner(context);
             if (owner is null) return Results.Forbid();
             if (requestId == Guid.Empty || draftRef == Guid.Empty || before is <= 0) return Results.BadRequest();
+            // The label is the owner's own unverified planning note, never a recipient lookup.
+            var supplied = context.Request.Query.TryGetValue("q", out var queryValues);
+            string? search = null;
+            if (supplied)
+            {
+                if (queryValues.Count != 1 || requestId.HasValue || draftRef.HasValue)
+                    return Results.BadRequest();
+                search = queryValues[0]?.Trim();
+                if (search is null || search.Length < 2 || search.Length > 100 || search.Any(char.IsControl))
+                    return Results.BadRequest();
+            }
             await using var connection = await db.OpenConnectionAsync(ct);
             await using var command = new NpgsqlCommand("""
                 SELECT d.sequence_no,d.draft_ref,d.request_id,d.method,d.recipient_label,
@@ -50,12 +61,14 @@ internal static class MemberGroupDraftEndpoints
                 WHERE d.issuer=@issuer AND d.subject=@subject
                   AND (@id IS NULL OR d.request_id=@id) AND (@ref IS NULL OR d.draft_ref=@ref)
                   AND (@before IS NULL OR d.sequence_no<@before)
+                  AND (@q IS NULL OR strpos(lower(d.recipient_label),lower(@q))>0)
                 ORDER BY d.sequence_no DESC LIMIT 21
                 """, connection);
             Bind(command, owner.Value);
             command.Parameters.AddWithValue("id", NpgsqlDbType.Uuid, (object?)requestId ?? DBNull.Value);
             command.Parameters.AddWithValue("ref", NpgsqlDbType.Uuid, (object?)draftRef ?? DBNull.Value);
             command.Parameters.AddWithValue("before", NpgsqlDbType.Bigint, (object?)before ?? DBNull.Value);
+            command.Parameters.AddWithValue("q", NpgsqlDbType.Text, (object?)search ?? DBNull.Value);
             await using var reader = await command.ExecuteReaderAsync(ct);
             var drafts = new List<MemberGroupDraftListItem>();
             long last = 0;
