@@ -156,3 +156,39 @@ export async function getMyInvitationHistory(options:{before?:string;invitationR
  if(!r||!Array.isArray(r.invitations)||r.invitations.length>20||!r.invitations.every(v=>validInvitation(v)&&['Accepted','Declined'].includes(v.state)&&v.requestId===undefined&&(!options.invitationRef||v.invitationRef===options.invitationRef))||new Set(r.invitations.map(v=>v.invitationRef)).size!==r.invitations.length||!(r.nextBefore===null||typeof r.nextBefore==='string'&&/^[1-9]\d*$/.test(r.nextBefore)))throw new Error('پاسخ سابقهٔ دعوت‌ها معتبر نیست.');
  return r;
 }
+
+
+// Read-only owner ledger: unrelated to the recipient's consent history and
+// never proof of membership, verified identity or financial/clinical authority.
+export type SentInvitationActivity={
+ invitationRef:string;draftRef:string;recipientLabel:string;draftState:'Draft'|'Withdrawn';
+ state:GroupInvitationState;createdAt:string;expiresAt:string;respondedAt:string|null;
+};
+export type SentInvitationActivityPage={invitations:SentInvitationActivity[];nextBefore:string|null};
+const ownerActivityKeys=['invitationRef','draftRef','recipientLabel','draftState',
+ 'state','createdAt','expiresAt','respondedAt'] as const;
+function validSentInvitationActivity(v:SentInvitationActivity):boolean{
+ if(!v||typeof v!=='object'||Object.keys(v).length!==ownerActivityKeys.length||
+  Object.keys(v).some(k=>!(ownerActivityKeys as readonly string[]).includes(k)))return false;
+ return validInvitation(v)&&notificationId(v.draftRef)&&
+  typeof v.recipientLabel==='string'&&v.recipientLabel.trim().length>=2&&
+  v.recipientLabel.length<=100&&v.recipientLabel===v.recipientLabel.trim()&&
+  !/[\\u0000-\\u001f\\u007f]/.test(v.recipientLabel)&&
+  ['Draft','Withdrawn'].includes(v.draftState);
+}
+export async function getMySentInvitationActivity(
+ options:{before?:string;invitationRef?:string}={},signal?:AbortSignal
+):Promise<SentInvitationActivityPage>{
+ const query=new URLSearchParams(options);
+ const r=await invitationApi<SentInvitationActivityPage>(
+  '/api/v1/me/group-invitation-activity'+(query.size?'?'+query:''),{signal});
+ if(!r||!Array.isArray(r.invitations)||r.invitations.length>20||
+  !r.invitations.every(validSentInvitationActivity)||
+  new Set(r.invitations.map(v=>v.invitationRef)).size!==r.invitations.length||
+  (options.invitationRef&&(r.invitations.length>1||
+   r.invitations.some(v=>v.invitationRef!==options.invitationRef)))||
+  !(r.nextBefore===null||typeof r.nextBefore==='string'&&/^[1-9]\\d*$/.test(r.nextBefore))||
+  (options.invitationRef&&r.nextBefore!==null))
+  throw new Error('گزارش دعوت‌های ارسالی معتبر نیست.');
+ return r;
+}
