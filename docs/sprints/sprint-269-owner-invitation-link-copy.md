@@ -28,3 +28,11 @@ No new invitation lifecycle/state, membership activation, guardian/minor policy,
 ## Acceptance / handoff
 
 PR remains Draft/Open/Unmerged and stacked on #294. Fix CI failures before feature work. No Ready for Review, merge, Stage/formal QA Gate, Release Approval or Production without explicit owner instruction. National launch remains DENIED_BY_DEFAULT; all 17 domains and 19 external evidence categories remain blocked/unverified.
+
+## Exact-head verification checkpoint (not release approval)
+
+- Candidate implementation SHA before this evidence-only commit: `683609481b28575e7cb9e6258b036842b34653ba`.
+- Figma Appointment Integration [run 42496607576](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42496607576): **SUCCESS 2/2**, including member Chromium suites and real PostgreSQL HTTP contract suites.
+- This checkpoint changes the candidate SHA; the canonical 14-job full regression must pass on the resulting exact HEAD before technical review.
+- PR #295 is temporarily based on `main` solely to trigger the canonical `Taranom Mainline Full Regression`; after the exact-head 14/14 result it must be restored to its intended stacked base `feat/owner-group-draft-latest-invitation-summary` (#294).
+- This CI evidence is not a Stage, formal QA Gate, Release Approval, Production, external messaging, or membership activation.
