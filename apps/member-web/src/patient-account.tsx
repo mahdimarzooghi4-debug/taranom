@@ -24,7 +24,7 @@ export function PatientAccount(){
   {error&&<p className="account-error" role="alert">{error}</p>}
   {profile&&!profile.fullName.trim()&&<p className="account-empty" role="status">برای تکمیل نام، وارد اطلاعات فردی شوید.</p>}
   <section className="account-membership"><h2>عضویت و پرداخت</h2><p>حق عضویت بر اساس سن عضو است؛ پرداخت می‌تواند توسط خود عضو یا فرد دیگری انجام شود.</p><span>وضعیت عضویت: در انتظار اتصال</span></section>
-  <section className="account-group"><h2>اعضای مجموعهٔ من</h2><p>دعوت خانواده یا هر فرد دلخواه؛ هر شخص ثبت‌نام مستقل دارد.</p><a href="/patient-app/group-members">مدیریت پیش‌نویس‌های دعوت</a><a href="/patient-app/invitation-history">سابقهٔ پاسخ به دعوت‌ها</a></section>
+  <section className="account-group"><h2>اعضای مجموعهٔ من</h2><p>دعوت خانواده یا هر فرد دلخواه؛ هر شخص ثبت‌نام مستقل دارد.</p><a href="/patient-app/group-members">مدیریت پیش‌نویس‌های دعوت</a><a href="/patient-app/invitations-sent">پیگیری دعوت‌های ارسالی</a><a href="/patient-app/invitation-history">سابقهٔ پاسخ به دعوت‌ها</a></section>
   <h2 className="account-settings-title">تنظیمات حساب</h2>
   <div className="account-settings">
    <a href="/patient-app/personal-info"><span>اطلاعات فردی</span><span aria-hidden="true">‹</span></a>
