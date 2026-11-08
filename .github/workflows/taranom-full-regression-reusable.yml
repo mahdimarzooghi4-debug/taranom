@@ -46,7 +46,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/policy_checks -p 'test_release_dependency_worklist.py' -v
           python3 tools/policy_checks/build_release_dependency_worklist.py --root . --report-json TestResults/fullci-release-dependency-worklist.json --report-md TestResults/fullci-release-dependency-worklist.md --report-csv TestResults/fullci-release-dependency-worklist.csv
-          python3 -c "import json; r=json.load(open('TestResults/fullci-release-dependency-worklist.json')); assert r['status']=='DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST' and r['blocked_domains']==17 and r['required_owners_unassigned'] == 18 and len(r['work_items'])==18 and r['candidate_capabilities']==39 and r['formal_approval_observed'] is False and r['production_ready'] is False and r['national_release_allowed'] is False"
+          python3 -c "import json; r=json.load(open('TestResults/fullci-release-dependency-worklist.json')); assert r['status']=='DRAFT_UNVERIFIED_DEPENDENCY_WORKLIST' and r['blocked_domains']==17 and r['required_owners_unassigned'] == 19 and len(r['work_items'])==19 and r['candidate_capabilities']==39 and r['formal_approval_observed'] is False and r['production_ready'] is False and r['national_release_allowed'] is False"
           test -s TestResults/fullci-release-dependency-worklist.md
           test -s TestResults/fullci-release-dependency-worklist.csv
       - name: Build and security-test offline Epic delivery console and CSV
