@@ -19,3 +19,7 @@ No new lifecycle, recipient verification, payment, paid membership, guardian aut
 - [Figma Appointment Integration #42504761950](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42504761950): **SUCCESS 2/2**, including real PostgreSQL HTTP search/privacy/pagination tests and real Chromium search/clear/navigation cases.
 - This record changes the exact SHA; both Figma Integration and canonical 14-job mainline regression must be rerun and pass on the resulting exact HEAD before Code Review.
 - PR #297 is temporarily retargeted to `main` solely to invoke the canonical mainline regression, then restored to its actual stacked base PR #295. No merge, Stage, QA Gate, Release or Production.
+
+### Mainline regression dispatch checkpoint
+
+The exact-head canonical 14-job regression requires a commit on this temporarily main-targeted Draft PR. This note is a non-runtime change to trigger both required workflows; their results must be verified for the resulting SHA, not inherited from any prior commit. Restore the stacked PR base only after success, and keep national release DENIED_BY_DEFAULT.
