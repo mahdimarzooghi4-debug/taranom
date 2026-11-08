@@ -564,6 +564,33 @@ public sealed class AppointmentDatabaseBootstrap(
                 ON taranom_member_group_invitation(draft_ref,sequence_no DESC);
             CREATE INDEX IF NOT EXISTS ix_taranom_group_invitation_recipient
                 ON taranom_member_group_invitation(recipient_issuer,recipient_subject,sequence_no DESC);
+            -- Canonical mixed in-app notification journal. Preserve the legacy
+            -- support-only table as a backfill/compatibility source; do not
+            -- infer issuer/subject from the notification payload itself.
+            CREATE TABLE IF NOT EXISTS taranom_member_notification_journal (
+                sequence_no bigserial PRIMARY KEY,
+                notification_ref uuid NOT NULL UNIQUE,
+                kind text NOT NULL CHECK (kind IN ('SupportAnswered','GroupInvitationResponded')),
+                source_ref uuid NOT NULL,
+                created_at timestamptz NOT NULL,
+                read_at timestamptz NULL,
+                UNIQUE (kind,source_ref)
+            );
+            INSERT INTO taranom_member_notification_journal
+                (notification_ref,kind,source_ref,created_at,read_at)
+                SELECT n.request_ref,'SupportAnswered',n.request_ref,n.created_at,n.read_at
+                FROM taranom_member_support_notification n
+                JOIN taranom_member_support_request s ON s.request_ref=n.request_ref
+                WHERE s.state='Answered'
+                ORDER BY n.sequence_no
+                ON CONFLICT (kind,source_ref) DO NOTHING;
+            INSERT INTO taranom_member_notification_journal
+                (notification_ref,kind,source_ref,created_at)
+                SELECT i.invitation_ref,'GroupInvitationResponded',i.invitation_ref,i.responded_at
+                FROM taranom_member_group_invitation i
+                WHERE i.state IN ('Accepted','Declined') AND i.responded_at IS NOT NULL
+                ORDER BY i.responded_at,i.invitation_ref
+                ON CONFLICT (kind,source_ref) DO NOTHING;
             CREATE TABLE IF NOT EXISTS taranom_member_profile (
                 issuer text NOT NULL,
                 subject text NOT NULL,
