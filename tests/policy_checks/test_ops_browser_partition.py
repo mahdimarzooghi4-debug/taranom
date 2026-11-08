@@ -17,12 +17,12 @@ CONNECTED = frozenset({
 
 
 def _list_literal(source: str, key: str) -> frozenset[str]:
-    pattern = r"\\b" + re.escape(key) + r":\\[([^\\]]+)\\]"
+    pattern = r"\b" + re.escape(key) + r":\[([^\]]+)\]"
     matches = re.findall(pattern, source)
     if len(matches) != 1:
         raise AssertionError("Expected exactly one browser partition: " + key)
     body = matches[0]
-    values = re.findall(r"'([a-z-]+\\.spec\\.ts)'", body)
+    values = re.findall(r"'([a-z-]+\.spec\.ts)'", body)
     if not values or body.count("'") != len(values) * 2:
         raise AssertionError("Unexpected browser filename list")
     return frozenset(values)
@@ -44,7 +44,7 @@ class TestOpsBrowserPartition(unittest.TestCase):
         path = ROOT / ".github/workflows/taranom-full-regression-reusable.yml"
         workflow = path.read_text()
         self.assertIn(
-            "cd apps/ops-web\\n          CI=true npm run test:e2e\\n",
+            "cd apps/ops-web\n          CI=true npm run test:e2e\n",
             workflow,
         )
         self.assertIn(
