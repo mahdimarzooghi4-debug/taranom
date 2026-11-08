@@ -29,7 +29,7 @@ export function PatientSentInvitationActivity(){
  useEffect(()=>{
   const c=new AbortController();setData(null);setError('');setLoading(true);
   if(!valid){
-   setError('شناسهٔ دعوت یا پیش‌نویس معتبر نیست.');setLoading(false);return()=>c.abort();
+   setError(ref!==null&&!validRef(ref)&&draftFilter===null?'شناسهٔ دعوت معتبر نیست.':'شناسهٔ دعوت یا پیش‌نویس معتبر نیست.');setLoading(false);return()=>c.abort();
   }
   getMySentInvitationActivity({
    ...(before?{before}:{}),...(ref?{invitationRef:ref}:{}),
