@@ -293,6 +293,21 @@ internal static class MemberGroupInvitationEndpoints
             var at = (DateTime)(await update.ExecuteScalarAsync(ct))!;
             view = view with { State = decision, RespondedAt = new DateTimeOffset(at) };
         }
+        // A final independent recipient response is the only producer of this
+        // owner's in-app invitation notification. It commits atomically with
+        // the response and never includes the recipient's identity or secret.
+        await using (var notification = new NpgsqlCommand("""
+            INSERT INTO taranom_member_notification_journal
+                (notification_ref,kind,source_ref,created_at)
+            SELECT invitation_ref,'GroupInvitationResponded',invitation_ref,responded_at
+            FROM taranom_member_group_invitation
+            WHERE invitation_ref=@ref AND state IN ('Accepted','Declined')
+            ON CONFLICT (kind,source_ref) DO NOTHING
+            """, connection, tx))
+        {
+            notification.Parameters.AddWithValue("ref", view.InvitationRef);
+            await notification.ExecuteNonQueryAsync(ct);
+        }
         await tx.CommitAsync(ct);
         return Results.Ok(new { invitation = Recipient(view), consentVersion = Consent });
     }
