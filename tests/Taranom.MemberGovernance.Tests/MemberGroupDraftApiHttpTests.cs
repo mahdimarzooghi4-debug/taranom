@@ -110,4 +110,86 @@ public sealed class MemberGroupDraftApiHttpTests
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(Path+"?before=0", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsync($"{Path}/{Guid.Empty:D}/withdraw", null, ct)).StatusCode);
     }
+
+    [Fact]
+    public async Task SearchPrivateDraftLabelsFiltersInPostgresBeforePageLimitAndKeepsOwnerScope()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("group-search-owner-" + Guid.NewGuid().ToString("N"));
+        using var other = setup.AuthenticatedIdentityClient("group-search-other-" + Guid.NewGuid().ToString("N"));
+        using var anonymous = setup.Factory.CreateClient();
+
+        var buried = Guid.NewGuid();
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(Path,
+            new { requestId = buried, method = "NewRegistration", recipientLabel = "KeYwOrD oldest private" }, ct)).StatusCode);
+        for (var i = 0; i < 26; i++)
+            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(Path,
+                new { requestId = Guid.NewGuid(), method = "NewRegistration", recipientLabel = "unrelated draft " + i }, ct)).StatusCode);
+        // A filtered page must not be produced by filtering the first 20 unfiltered rows.
+        using var buriedPage = await owner.GetFromJsonAsync<JsonDocument>(Path + "?q=keyword", ct);
+        Assert.Equal(buried, Assert.Single(buriedPage!.RootElement.GetProperty("drafts").EnumerateArray())
+            .GetProperty("requestId").GetGuid());
+        Assert.Equal(JsonValueKind.Null, buriedPage.RootElement.GetProperty("nextBefore").ValueKind);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(Path + "?q=keyword", ct)).StatusCode);
+        using var foreign = await other.GetFromJsonAsync<JsonDocument>(Path + "?q=keyword", ct);
+        Assert.Empty(foreign!.RootElement.GetProperty("drafts").EnumerateArray());
+
+        for (var i = 0; i < 22; i++)
+            Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(Path,
+                new { requestId = Guid.NewGuid(), method = "ExistingMember", recipientLabel = "Keyword draft " + i }, ct)).StatusCode);
+        using var page1Response = await owner.GetAsync(Path + "?q=KEYWORD", ct);
+        Assert.Equal("no-store", page1Response.Headers.CacheControl?.ToString());
+        using var page1 = await page1Response.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var first = page1!.RootElement.GetProperty("drafts").EnumerateArray()
+            .Select(x => x.GetProperty("draftRef").GetGuid()).ToArray();
+        Assert.Equal(20, first.Length);
+        var cursor = page1.RootElement.GetProperty("nextBefore").GetString();
+        Assert.False(string.IsNullOrEmpty(cursor));
+        using var page2 = await owner.GetFromJsonAsync<JsonDocument>(
+            Path + "?q=keyword&before=" + cursor, ct);
+        var second = page2!.RootElement.GetProperty("drafts").EnumerateArray()
+            .Select(x => x.GetProperty("draftRef").GetGuid()).ToArray();
+        Assert.Equal(3, second.Length);
+        Assert.Empty(first.Intersect(second));
+        Assert.Equal(JsonValueKind.Null, page2.RootElement.GetProperty("nextBefore").ValueKind);
+        Assert.All(page2.RootElement.GetProperty("drafts").EnumerateArray(),
+            d => Assert.Equal(JsonValueKind.Null, d.GetProperty("latestInvitation").ValueKind));
+        using var exact = await owner.GetFromJsonAsync<JsonDocument>(
+            Path + "?requestId=" + buried.ToString("D"), ct);
+        Assert.Equal(buried, Assert.Single(exact!.RootElement.GetProperty("drafts").EnumerateArray())
+            .GetProperty("requestId").GetGuid());
+    }
+
+    [Fact]
+    public async Task SearchIsLiteralAndRejectsAmbiguousOrMalformedSelectors()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var setup = new AppointmentApiFixture(ct);
+        using var owner = setup.AuthenticatedIdentityClient("group-search-literal-" + Guid.NewGuid().ToString("N"));
+        var id = Guid.NewGuid();
+        using var receipt = await owner.PostAsJsonAsync(Path,
+            new { requestId = id, method = "NewRegistration", recipientLabel = "Literal %_ label" }, ct);
+        Assert.Equal(HttpStatusCode.OK, receipt.StatusCode);
+        using var exact = await receipt.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        var draftRef = exact!.RootElement.GetProperty("draft").GetProperty("draftRef").GetGuid();
+        foreach (var term in new[] { "%_", "literal %_", "LITERAL %_" })
+        {
+            using var result = await owner.GetFromJsonAsync<JsonDocument>(
+                Path + "?q=" + Uri.EscapeDataString(term), ct);
+            Assert.Equal(id, Assert.Single(result!.RootElement.GetProperty("drafts").EnumerateArray())
+                .GetProperty("requestId").GetGuid());
+        }
+        using var noWildcard = await owner.GetFromJsonAsync<JsonDocument>(Path + "?q=%25z", ct);
+        Assert.Empty(noWildcard!.RootElement.GetProperty("drafts").EnumerateArray());
+        foreach (var suffix in new[]
+        {
+            "?q=", "?q=%20%20", "?q=x", "?q=" + Uri.EscapeDataString(new string('x',101)),
+            "?q=%0Ahi", "?q=hello&q=world", "?q=hello&requestId=" + id.ToString("D"),
+            "?q=hello&draftRef=" + draftRef.ToString("D")
+        })
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync(Path + suffix, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync(Path + "?draftRef=" + draftRef.ToString("D"), ct)).StatusCode);
+    }
+
 }

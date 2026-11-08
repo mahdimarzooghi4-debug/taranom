@@ -136,7 +136,7 @@ function validGroupDraftListItem(d:GroupDraftListItem):boolean{
    typeof v.respondedAt==='string'&&Number.isFinite(Date.parse(v.respondedAt)):v.respondedAt===null)&&
   (!['Pending','Expired'].includes(v.state)||d.state==='Draft'));
 }
-export async function getMyGroupDrafts(options:{before?:string;requestId?:string;draftRef?:string}={},signal?:AbortSignal):Promise<GroupDraftPage>{
+export async function getMyGroupDrafts(options:{before?:string;requestId?:string;draftRef?:string;q?:string}={},signal?:AbortSignal):Promise<GroupDraftPage>{
  const query=new URLSearchParams(options),result=await api<GroupDraftPage>('/api/v1/me/group-invitation-drafts'+(query.size?'?'+query:''),{signal});
  if(!result||!Array.isArray(result.drafts)||!result.drafts.every(validGroupDraftListItem)||!(result.nextBefore===null||typeof result.nextBefore==='string'&&/^[1-9]\d*$/.test(result.nextBefore)))throw new Error('پاسخ پیش‌نویس‌های دعوت معتبر نیست.');return result;
 }
