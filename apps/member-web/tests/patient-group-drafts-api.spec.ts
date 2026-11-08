@@ -100,3 +100,63 @@ test('forged latest invitation summary is rejected and old private draft cards a
  await expect(page.getByRole('alert')).toContainText('پاسخ پیش‌نویس‌های دعوت معتبر نیست');
  await expect(page.locator('.group-draft-card')).toHaveCount(0);
 });
+
+
+test('owner searches private draft labels on the server before paging and can clear the filter',async({page})=>{
+ await page.addInitScript(()=>{window.taranomSession={getAccessToken:()=> 'synthetic-group-token'}});
+ const requests:string[]=[];
+ const rows=Array.from({length:47},(_,i)=>({
+  sequence:i+1,draftRef:'550e8400-e29b-41d4-a716-'+String(i+1).padStart(12,'0'),
+  requestId:'650e8400-e29b-41d4-a716-'+String(i+1).padStart(12,'0'),
+  method:'ExistingMember',recipientLabel:i<22?'گروه اختصاصی '+i:'پیش‌نویس دیگر '+i,
+  state:'Draft',createdAt:'2026-11-07T09:00:00Z',withdrawnAt:null,latestInvitation:null
+ }));
+ await page.route('**/api/v1/me/group-invitation-drafts**',route=>{
+  const u=new URL(route.request().url());expect(route.request().method()).toBe('GET');
+  expect(route.request().headers().authorization).toBe('Bearer synthetic-group-token');
+  requests.push(u.search);
+  const q=u.searchParams.get('q'),before=u.searchParams.get('before');
+  const filtered=rows.filter(x=>(!before||x.sequence<Number(before))&&(!q||x.recipientLabel.toLowerCase().includes(q.toLowerCase())))
+   .sort((a,b)=>b.sequence-a.sequence);
+  const drafts=filtered.slice(0,20).map(({sequence,...rest})=>rest);
+  return route.fulfill({json:{drafts,nextBefore:filtered.length>20?String(filtered[19].sequence):null}});
+ });
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/patient-app/group-members');
+ await expect(page.locator('.group-draft-card')).toHaveCount(20);
+ await expect(page.locator('.group-draft-card').first()).toContainText('پیش‌نویس دیگر');
+ const input=page.getByRole('searchbox',{name:'جست‌وجو در نام نمایشی پیش‌نویس'});
+ await input.fill('  گروه  ');expect(requests).toHaveLength(1);
+ await page.getByRole('button',{name:'جست‌وجو',exact:true}).click();
+ await expect(page.locator('.group-draft-card')).toHaveCount(20);
+ await expect(page.locator('.group-draft-card').first()).toContainText('گروه اختصاصی');
+ await expect(page.getByRole('status',{name:''}).filter({hasText:'فیلتر فعال'})).toContainText('گروه');
+ expect(requests.at(-1)).toBe('?q='+encodeURIComponent('گروه'));
+ await page.getByRole('button',{name:'پیش‌نویس‌های قدیمی‌تر'}).click();
+ await expect(page.locator('.group-draft-card')).toHaveCount(2);
+ expect(requests.at(-1)).toContain('q='+encodeURIComponent('گروه'));
+ expect(requests.at(-1)).toContain('before=');
+ await page.getByRole('button',{name:'تازه‌سازی پیش‌نویس‌ها'}).click();
+ await expect(page.locator('.group-draft-card')).toHaveCount(20);
+ expect(requests.at(-1)).toBe('?q='+encodeURIComponent('گروه'));
+ await input.fill('نامی که وجود ندارد');
+ await page.getByRole('button',{name:'جست‌وجو',exact:true}).click();
+ await expect(page.getByText('پیش‌نویسی با این نام نمایشی در حساب شما یافت نشد.')).toBeVisible();
+ await page.getByRole('button',{name:'پاک‌کردن جست‌وجو'}).click();
+ await expect(page.locator('.group-draft-card')).toHaveCount(20);
+ expect(requests.at(-1)).toBe('');
+ await expect(input).toHaveValue('');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+ await page.setViewportSize({width:320,height:740});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+ expect(await page.locator('html').getAttribute('dir')).toBe('rtl');
+});
+test('search with no session never sends private traffic; denial clears previous private cards',async({page})=>{
+ let calls=0;page.on('request',r=>{if(r.url().includes('/api/'))calls++});
+ await page.goto('/patient-app/group-members');
+ await expect(page.getByRole('alert')).toContainText('نشست ورود');
+ await page.getByRole('searchbox',{name:'جست‌وجو در نام نمایشی پیش‌نویس'}).fill('گروه');
+ await page.getByRole('button',{name:'جست‌وجو',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('نشست ورود');
+ expect(calls).toBe(0);
+});
