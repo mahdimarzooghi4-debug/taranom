@@ -29,3 +29,10 @@ Real PostgreSQL HTTP regression: many nonpending rows newer than one old pending
 Real Chromium: switching modes resets cursor without client-side fake filtering; an older pending link becomes visible/actionable; per-draft link and filter work; malformed/foreign responses, no-session/no traffic, denied refresh and 390/320px RTL layout; revocation ACK-loss reconciliation remains exact even when filtered.
 
 Exact-head Figma integration 2/2 and full regression 14/14 are necessary to record COMMENTED review. PR remains Draft/Open stacked on #292. No merge/Stage/formal QA Gate/Release/Production; nationwide launch is DENIED_BY_DEFAULT (17 domains and 19 external evidence categories still unresolved).
+
+## Exact-head integration evidence (not a release claim)
+
+- Feature candidate HEAD before this evidence-only commit: `2990af5a3f78ca61fbef71ed12f6c3ff2ad02660`.
+- [Figma Appointment Integration #42492971086](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42492971086): **SUCCESS 2/2** (real PostgreSQL HTTP contracts and Chromium member/center/admin suites, including owner Pending worklist).
+- The entire 14-job canonical mainline regression is required **on the new exact SHA** of this document commit. PR #293 was temporarily retargeted to `main` only to invoke the existing regression; restore the intended stacked base to #292 after both tests are fully green.
+- This document and CI cannot approve actual memberships, real identity, payments, medical services, release or Production.
