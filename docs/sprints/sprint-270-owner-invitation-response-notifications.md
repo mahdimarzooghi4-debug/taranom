@@ -29,3 +29,9 @@ Keep Draft/Open/Unmerged on the intended stacked base #295. No Ready for Review,
 - Earlier candidate `022befe032bba29095a38ae5b84126f4b92ee1e4` exposed an SQL string-boundary error in the owner notification feed; it was fixed directly in `959b8888f82c2a528edd84764e3ba8140b41ad01`. Then an additional revoked/expired/invalid response negative test was committed and the full 2-job integration passed.
 - This evidence-only commit changes the SHA. The new exact head must again pass both the Figma integration and the canonical **14/14** mainline regression before technical Code Review.
 - PR #296 is temporarily retargeted from stacked base #295 to `main` solely to invoke the existing canonical full regression, then must return to #295. No direct change to main, Stage, QA Gate, Release or Production.
+
+## Canonical full-matrix dispatch checkpoint
+
+- Before this documentation-only commit, the exact head `54d1a342aa6a3a0105d02df2dda7fd2369a7eae3` passed [Figma Appointment Integration #42502873701](https://github.com/mahdimarzooghi4-debug/taranom/actions/runs/42502873701): **2/2 SUCCESS**.
+- GitHub's retarget-to-main event did not initiate the canonical 14-job regression. This new commit is intentionally recorded while PR #296 is Draft/Open and based on `main` to trigger the existing mandatory `Taranom Mainline Full Regression` for its **new exact SHA**. Do not reuse a previous SHA's success.
+- After both 2/2 and 14/14 are green on that new SHA, restore PR #296's stacked base to #295 and add a COMMENTED technical review; do not merge or deploy.
