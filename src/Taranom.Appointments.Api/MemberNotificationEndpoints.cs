@@ -46,7 +46,7 @@ internal static class MemberNotificationEndpoints
             await using var command = new NpgsqlCommand("""
                 SELECT n.sequence_no,n.notification_ref,n.kind,s.request_id,
                        i.invitation_ref,i.state,n.created_at,n.read_at
-                """ + OwnerSource + """
+                """ + "\n" + OwnerSource + """
                   AND (@before IS NULL OR n.sequence_no<@before)
                   AND (@ref IS NULL OR n.notification_ref=@ref)
                 ORDER BY n.sequence_no DESC LIMIT 21
