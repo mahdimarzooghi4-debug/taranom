@@ -276,7 +276,7 @@ public sealed class MemberGroupInvitationApiHttpTests
             Assert.False(x.TryGetProperty("requestId", out _));
             Assert.False(x.TryGetProperty("recipient_issuer", out _));
         });
-        var accepted = Assert.Single(items.Where(x => x.GetProperty("state").GetString() == "Accepted"));
+        var accepted = Assert.Single(items, x => x.GetProperty("state").GetString() == "Accepted");
         Assert.Equal("Withdrawn", accepted.GetProperty("draftState").GetString());
         Assert.NotEqual(JsonValueKind.Null, accepted.GetProperty("respondedAt").ValueKind);
         var archivedRef = accepted.GetProperty("invitationRef").GetGuid();
