@@ -36,8 +36,10 @@ internal static class MemberGroupDraftEndpoints
             {
                 if (queryValues.Count != 1 || requestId.HasValue || draftRef.HasValue)
                     return Results.BadRequest();
-                search = queryValues[0]?.Trim();
-                if (search is null || search.Length < 2 || search.Length > 100 || search.Any(char.IsControl))
+                var raw = queryValues[0];
+                search = raw?.Trim();
+                if (raw is null || raw.Any(char.IsControl) ||
+                    search is null || search.Length < 2 || search.Length > 100)
                     return Results.BadRequest();
             }
             await using var connection = await db.OpenConnectionAsync(ct);
