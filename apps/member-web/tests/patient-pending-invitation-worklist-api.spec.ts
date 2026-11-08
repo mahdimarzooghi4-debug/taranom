@@ -77,7 +77,7 @@ test('draft card navigates into owner-only draft timeline, with independent Pend
   return route.fulfill({json:{
    drafts:[{
     draftRef:draftA,requestId:id(998),method:'ExistingMember',
-    recipientLabel:'نمونه غیرهویتی',state:'Draft',createdAt,withdrawnAt:null
+    recipientLabel:'نمونه غیرهویتی',state:'Draft',createdAt,withdrawnAt:null,latestInvitation:null
    }],nextBefore:null
   }});
  });
