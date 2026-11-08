@@ -45,6 +45,57 @@ internal static class MemberGroupInvitationEndpoints
             return Results.Ok(new { invitations, nextBefore = more ? last.ToString(System.Globalization.CultureInfo.InvariantCulture) : null });
         }).RequireAuthorization(policy);
 
+
+        // Owner's entire issuance ledger. Unlike recipient response history this
+        // reads through the draft's trusted issuer/subject, never the bearer token.
+        // Exact foreign refs are indistinguishable from unknown refs.
+        app.MapGet("/api/v1/me/group-invitation-activity", async (Guid? invitationRef, long? before,
+            HttpContext context, NpgsqlDataSource db, CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            var owner = Owner(context);
+            if (owner is null) return Results.Forbid();
+            var query = context.Request.Query;
+            if (invitationRef == Guid.Empty || before is <= 0 ||
+                (invitationRef.HasValue && before.HasValue) ||
+                query.Any(p => p.Value.Count != 1 ||
+                    p.Key is not ("invitationRef" or "before")))
+                return Results.BadRequest();
+            await using var connection = await db.OpenConnectionAsync(ct);
+            await using var command = new NpgsqlCommand(Select + " " + """
+                WHERE d.issuer=@issuer AND d.subject=@subject
+                  AND (@ref IS NULL OR i.invitation_ref=@ref)
+                  AND (@before IS NULL OR i.sequence_no<@before)
+                ORDER BY i.sequence_no DESC LIMIT 21
+                """, connection);
+            Bind(command, owner.Value);
+            command.Parameters.AddWithValue("ref", NpgsqlTypes.NpgsqlDbType.Uuid,
+                (object?)invitationRef ?? DBNull.Value);
+            command.Parameters.AddWithValue("before", NpgsqlTypes.NpgsqlDbType.Bigint,
+                (object?)before ?? DBNull.Value);
+            await using var r = await command.ExecuteReaderAsync(ct);
+            var invitations = new List<object>(); long last = 0; var more = false;
+            while (await r.ReadAsync(ct))
+            {
+                if (invitations.Count == 20) { more = true; break; }
+                var view = Read(r);
+                // The private label is precisely the owner's own planning input.
+                // Never project recipient_issuer/subject, token_hash or request UUID.
+                invitations.Add(new
+                {
+                    view.InvitationRef, DraftRef = r.GetGuid(10),
+                    RecipientLabel = r.GetString(11), DraftState = r.GetString(12),
+                    view.State, view.CreatedAt, view.ExpiresAt, view.RespondedAt
+                });
+                last = r.GetInt64(9);
+            }
+            return Results.Ok(new
+            {
+                invitations,
+                nextBefore = more ? last.ToString(System.Globalization.CultureInfo.InvariantCulture) : null
+            });
+        }).RequireAuthorization(policy);
+
         // The raw random secret is supplied by the browser and never stored or returned by this API.
         app.MapPost("/api/v1/me/group-invitation-drafts/{draftRef:guid}/invitations", async (
             Guid draftRef, GroupInvitationIssue input, HttpContext context, NpgsqlDataSource db, CancellationToken ct) =>
@@ -178,7 +229,8 @@ internal static class MemberGroupInvitationEndpoints
         SELECT i.invitation_ref,i.request_id,
         CASE WHEN i.state='Pending' AND d.state='Withdrawn' THEN 'Revoked'
              WHEN i.state='Pending' AND i.expires_at<=clock_timestamp() THEN 'Expired' ELSE i.state END,
-        i.created_at,i.expires_at,i.responded_at,i.token_hash,i.recipient_issuer,i.recipient_subject,i.sequence_no
+        i.created_at,i.expires_at,i.responded_at,i.token_hash,i.recipient_issuer,i.recipient_subject,i.sequence_no,
+        d.draft_ref,d.recipient_label,d.state
         FROM taranom_member_group_invitation i JOIN taranom_member_group_invite_draft d ON d.draft_ref=i.draft_ref
         """;
     private static GroupInvitationView Read(NpgsqlDataReader r) => new(r.GetGuid(0), r.GetGuid(1), r.GetString(2),
